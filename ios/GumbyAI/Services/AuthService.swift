@@ -93,34 +93,17 @@ class AuthService: ObservableObject {
             request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
             request.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization")
 
-            let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
-            var body: [String: Any] = [
+            let body: [String: Any] = [
                 "provider": provider,
                 "id_token": idToken,
-                "client_id": bundleId
+                "client_id": Bundle.main.bundleIdentifier ?? "com.ishaan.gumby"
             ]
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-            let jwtParts = idToken.split(separator: ".")
-            if jwtParts.count >= 2 {
-                var payload = String(jwtParts[1])
-                while payload.count % 4 != 0 { payload += "=" }
-                if let decoded = Data(base64Encoded: payload),
-                   let claims = try? JSONSerialization.jsonObject(with: decoded) as? [String: Any] {
-                    NSLog("[AUTH DEBUG] Apple ID token aud: %@", "\(claims["aud"] ?? "nil")")
-                    NSLog("[AUTH DEBUG] Apple ID token iss: %@", "\(claims["iss"] ?? "nil")")
-                    NSLog("[AUTH DEBUG] Apple ID token sub: %@", "\(claims["sub"] ?? "nil")")
-                }
-            }
-            NSLog("[AUTH DEBUG] Bundle ID (client_id): %@", bundleId)
-            NSLog("[AUTH DEBUG] Request URL: %@", "\(supabaseURL)/auth/v1/token?grant_type=id_token")
-
             let (data, response) = try await URLSession.shared.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-            guard (200...299).contains(statusCode) else {
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else {
                 let errorBody = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-                let rawResponse = String(data: data, encoding: .utf8) ?? "no body"
-                NSLog("[AUTH DEBUG] Supabase error (%d): %@", statusCode, rawResponse)
                 errorMessage = (errorBody?["error_description"] as? String)
                     ?? (errorBody?["msg"] as? String)
                     ?? "Authentication failed"
