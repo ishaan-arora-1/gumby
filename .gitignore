@@ -1,0 +1,14 @@
+# Backend
+backend/node_modules/
+backend/.env
+
+# iOS
+ios/GumbyAI.xcodeproj/xcuserdata/
+ios/GumbyAI.xcodeproj/project.xcworkspace/xcuserdata/
+ios/*.xcworkspace/xcuserdata/
+ios/DerivedData/
+ios/build/
+
+# macOS
+.DS_Store
+**/.DS_Store
