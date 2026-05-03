@@ -1,0 +1,26 @@
+import SwiftUI
+
+@main
+struct GumbyAIApp: App {
+    @StateObject private var authService = AuthService.shared
+    @StateObject private var sidebarVM = SidebarViewModel()
+    @StateObject private var chatVM = ChatViewModel()
+    @StateObject private var exploreVM = ExploreViewModel()
+    @StateObject private var calendarVM = CalendarViewModel()
+    @StateObject private var historyVM = HistoryViewModel()
+    @StateObject private var libraryVM = LibraryViewModel()
+    
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .environmentObject(authService)
+                .environmentObject(sidebarVM)
+                .environmentObject(chatVM)
+                .environmentObject(exploreVM)
+                .environmentObject(calendarVM)
+                .environmentObject(historyVM)
+                .environmentObject(libraryVM)
+                .preferredColorScheme(.dark)
+        }
+    }
+}
