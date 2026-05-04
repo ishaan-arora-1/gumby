@@ -6,6 +6,21 @@ enum AppConstants {
     static let textPrimary = Color.white
     static let textSecondary = Color(hex: "8A8A8A")
 
+    /// True black canvas for active conversation (matches reference chat UI).
+    static let chatCanvasBlack = Color(hex: "000000")
+    /// Landing / composer surfaces
+    static let chatComposerSurface = Color(hex: "262626")
+    static let chatComposerInner = Color(hex: "1C1C1C")
+    /// iOS secondary label tone from reference mocks
+    static let chatMutedLabel = Color(hex: "8E8E93")
+    static let chatPlaceholder = Color(hex: "A3A3A3")
+    /// Send circle + icon rail
+    static let chatSendCircle = Color(hex: "525252")
+    /// User bubble fill
+    static let chatUserBubble = Color(hex: "262626")
+    /// Modal / highlighted rows inside questions cards
+    static let chatElevatedSurface = Color(hex: "2C2C2C")
+
     static let gradientColors: [Color] = [
         Color(hex: "FF6B35"),
         Color(hex: "FF3CAC"),
@@ -20,6 +35,22 @@ enum AppConstants {
 
     static let cardCornerRadius: CGFloat = 16
     static let buttonCornerRadius: CGFloat = 12
+
+    // Login / auth flow (match onboarding mockups)
+    static let authScreenBackground = Color(hex: "121212")
+    /// Login social rows: flush with screen per reference; separation from border.
+    static let authSocialButtonFill = Color(hex: "121212")
+    static let authAccentBlue = Color(hex: "2563EB")
+    static let authLandingLogInButtonFill = Color(hex: "1A1A1A")
+    static let authLandingSecondaryText = Color(hex: "A1A1AA")
+    static let authLoginSecondaryText = Color(hex: "8E8E93")
+    static let authPrimaryCTAFill = Color(hex: "E5E5E5")
+    static let authPrimaryCTALabel = Color(hex: "121212")
+    static let authSocialButtonStroke = Color(hex: "2D2D2D")
+
+    /// Update to your production legal URLs.
+    static let termsOfServiceURL = URL(string: "https://gumby.ai/terms")!
+    static let privacyPolicyURL = URL(string: "https://gumby.ai/privacy")!
     static let sidebarWidthRatio: CGFloat = 0.8
     static let pageSize = 20
 

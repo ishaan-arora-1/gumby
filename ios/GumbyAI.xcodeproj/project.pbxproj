@@ -19,6 +19,7 @@
 		59C6CDD4CFEE8262ADFA3C4B /* SSEService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6647687A2E715D5F440EA2 /* SSEService.swift */; };
 		6D8DC7DE00FE54369B8A6BB6 /* LibrarySheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9FC0267D1F94F9EA78F407 /* LibrarySheetView.swift */; };
 		6FC25C9D4C83B6559D8EA263 /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = 571EC0C3971652212523B966 /* MessageBubble.swift */; };
+		73CBBF6C1388BEB0B050757A /* QuestionsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11B30E1041C4EF37EA31C37 /* QuestionsCard.swift */; };
 		770A231D2D133D8F2D052C37 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62E9FC71E251327AA978E683 /* LibraryViewModel.swift */; };
 		7DDEE956021A6B93AB537DE5 /* HistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066CACC6993AE463C467A491 /* HistoryViewModel.swift */; };
 		8720A3683920F946BB4D89B9 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18E5CDA325A4881BEF156230 /* SidebarView.swift */; };
@@ -72,6 +73,7 @@
 		8BB5E0CE2B0B49CD3A450E1B /* ChatMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMode.swift; sourceTree = "<group>"; };
 		8E9FC0267D1F94F9EA78F407 /* LibrarySheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySheetView.swift; sourceTree = "<group>"; };
 		959DB453AB2603D0492A7177 /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
+		B11B30E1041C4EF37EA31C37 /* QuestionsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestionsCard.swift; sourceTree = "<group>"; };
 		B1A303DBF13E2E28C56E66B5 /* GumbyAI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GumbyAI.entitlements; sourceTree = "<group>"; };
 		B4BC1E4E77453368813A0DD8 /* ModelCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCard.swift; sourceTree = "<group>"; };
 		C09339B675B7600AEC3CDAFC /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
@@ -159,6 +161,7 @@
 				571EC0C3971652212523B966 /* MessageBubble.swift */,
 				B4BC1E4E77453368813A0DD8 /* ModelCard.swift */,
 				126F2BF50F143D274251EB85 /* MoodBoardCard.swift */,
+				B11B30E1041C4EF37EA31C37 /* QuestionsCard.swift */,
 				2B7762F490F7BB425D3DFA08 /* SuggestionChip.swift */,
 			);
 			path = Components;
@@ -349,6 +352,7 @@
 				C2ED662E7F0EAB7D08270B61 /* MoodBoard.swift in Sources */,
 				BA1EB7DA81317312297AEAE6 /* MoodBoardCard.swift in Sources */,
 				B323DD756F4CEB933007E23C /* Post.swift in Sources */,
+				73CBBF6C1388BEB0B050757A /* QuestionsCard.swift in Sources */,
 				59C6CDD4CFEE8262ADFA3C4B /* SSEService.swift in Sources */,
 				94BBFFBBB8E808307EAAB5E7 /* SavedAsset.swift in Sources */,
 				8720A3683920F946BB4D89B9 /* SidebarView.swift in Sources */,

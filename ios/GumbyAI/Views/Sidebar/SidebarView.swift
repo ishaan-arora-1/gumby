@@ -10,6 +10,7 @@ enum NavigationDestination: Hashable {
 struct SidebarView: View {
     @EnvironmentObject var sidebarVM: SidebarViewModel
     @EnvironmentObject var authService: AuthService
+    @EnvironmentObject var chatVM: ChatViewModel
     @Binding var selectedDestination: NavigationDestination
     
     var body: some View {
@@ -86,10 +87,12 @@ struct SidebarView: View {
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundColor(AppConstants.textPrimary)
-                        
-                        Text(user.email)
-                            .font(.caption)
-                            .foregroundColor(AppConstants.textSecondary)
+
+                        if let email = user.email, !email.isEmpty {
+                            Text(email)
+                                .font(.caption)
+                                .foregroundColor(AppConstants.textSecondary)
+                        }
                     }
                 }
             }
@@ -99,6 +102,16 @@ struct SidebarView: View {
     
     private var menuItems: some View {
         VStack(spacing: 4) {
+            SidebarMenuItem(
+                icon: "square.and.pencil",
+                title: "New chat",
+                isSelected: false
+            ) {
+                chatVM.newConversation()
+                selectedDestination = .chat
+                sidebarVM.close()
+            }
+
             SidebarMenuItem(
                 icon: "bubble.left.and.bubble.right",
                 title: "Chat",
