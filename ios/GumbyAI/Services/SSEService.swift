@@ -7,6 +7,7 @@ struct SSEEvent {
     let messageId: String?
     let error: String?
     let questionsPayload: QuestionsPayload?
+    let imageURL: String?
 }
 
 class SSEService {
@@ -20,6 +21,7 @@ class SSEService {
         message: String,
         imageUrls: [String],
         mode: String,
+        aspectRatio: String,
         onEvent: @escaping (SSEEvent) -> Void,
         onComplete: @escaping () -> Void,
         onError: @escaping (Error) -> Void
@@ -41,7 +43,8 @@ class SSEService {
         var body: [String: Any] = [
             "message": message,
             "imageUrls": imageUrls,
-            "mode": mode
+            "mode": mode,
+            "aspectRatio": aspectRatio
         ]
         if let convId = conversationId {
             body["conversationId"] = convId
@@ -134,7 +137,8 @@ class SSEDelegate: NSObject, URLSessionDataDelegate {
             conversationId: json["conversationId"] as? String,
             messageId: json["messageId"] as? String,
             error: json["error"] as? String,
-            questionsPayload: payload
+            questionsPayload: payload,
+            imageURL: json["url"] as? String
         )
 
         onEvent(event)

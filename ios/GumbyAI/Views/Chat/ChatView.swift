@@ -2,13 +2,6 @@ import SwiftUI
 import PhotosUI
 
 struct ChatView: View {
-    private static let dividerDateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale.current
-        f.dateFormat = "d MMM 'at' h:mm a"
-        return f
-    }()
-
     @EnvironmentObject var chatVM: ChatViewModel
     @EnvironmentObject var sidebarVM: SidebarViewModel
     @EnvironmentObject var authService: AuthService
@@ -16,13 +9,6 @@ struct ChatView: View {
 
     private let landingPlaceholder = "Ask Gumby to create a presentation about..."
     private let conversationPlaceholder = "Ask Gumby..."
-
-    private let composerSuggestions: [String] = [
-        "Create a landing page",
-        "Plan a weekly content calendar",
-        "Brainstorm reel ideas",
-        "Write captions for Instagram"
-    ]
 
     private var useLandingChrome: Bool {
         chatVM.messages.isEmpty && !chatVM.isStreaming
@@ -104,7 +90,9 @@ struct ChatView: View {
                 }
                 Spacer()
                 if !useLandingChrome {
-                    headerCircleButton(icon: "play.fill", size: 14) {}
+                    headerCircleButton(icon: "square.and.pencil", size: 16) {
+                        chatVM.newConversation()
+                    }
                 }
             }
 
@@ -112,7 +100,7 @@ struct ChatView: View {
                 if useLandingChrome {
                     gumbyWordmarkCentered
                 } else {
-                    centerModeCapsuleMenu
+                    centerTitleMenu
                 }
             }
             .allowsHitTesting(true)
@@ -133,37 +121,22 @@ struct ChatView: View {
         }
     }
 
-    private var centerModeCapsuleMenu: some View {
-        Menu {
-            modePickerButtons
-            Divider()
-            Button {
-                showLibrary = true
-            } label: {
-                Label("Library", systemImage: "folder")
-            }
-            Divider()
-            Button(role: .none) {
-                chatVM.newConversation()
-            } label: {
-                Label("New conversation", systemImage: "square.and.pencil")
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Text(chatVM.currentMode.rawValue)
-                    .font(.system(size: 15, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 11, weight: .semibold))
-            }
+    private var conversationTitle: String {
+        let title = chatVM.conversationTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return title.isEmpty ? "New chat" : title
+    }
+
+    private var centerTitleMenu: some View {
+        Text(conversationTitle)
+            .font(.system(size: 15, weight: .semibold))
+            .lineLimit(1)
+            .truncationMode(.tail)
             .foregroundStyle(AppConstants.textPrimary)
             .frame(maxWidth: 220)
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
             .background(AppConstants.chatComposerInner.opacity(0.95))
             .clipShape(Capsule())
-        }
     }
 
     private func headerCircleButton(icon: String, size: CGFloat = 17, action: @escaping () -> Void) -> some View {
@@ -199,11 +172,6 @@ struct ChatView: View {
                 attachmentPreview
             }
 
-            if !useLandingChrome {
-                suggestionChipsRow
-                    .padding(.bottom, 10)
-            }
-
             if useLandingChrome {
                 landingComposer
             } else {
@@ -214,43 +182,18 @@ struct ChatView: View {
         .background(useLandingChrome ? Color.clear : AppConstants.chatCanvasBlack)
     }
 
-    private var suggestionChipsRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                ForEach(composerSuggestions, id: \.self) { title in
-                    Button {
-                        chatVM.inputText = title
-                    } label: {
-                        Text(title)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(AppConstants.textPrimary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(AppConstants.chatComposerSurface.opacity(0.95))
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-        }
-    }
-
     private var landingComposer: some View {
         VStack(alignment: .leading, spacing: 14) {
-            TextField("", text: $chatVM.inputText, axis: .vertical)
+            TextField(
+                "",
+                text: $chatVM.inputText,
+                prompt: Text(landingPlaceholder).foregroundStyle(AppConstants.chatPlaceholder),
+                axis: .vertical
+            )
                 .textFieldStyle(.plain)
                 .font(.system(size: 17))
                 .foregroundStyle(AppConstants.textPrimary)
                 .lineLimit(2...8)
-                .overlay(alignment: .leading) {
-                    if chatVM.inputText.isEmpty {
-                        Text(landingPlaceholder)
-                            .font(.system(size: 16))
-                            .foregroundStyle(AppConstants.chatPlaceholder)
-                            .allowsHitTesting(false)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
 
             landingComposerToolbar
         }
@@ -273,7 +216,7 @@ struct ChatView: View {
     }
 
     private var landingComposerToolbar: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             PhotosPicker(
                 selection: $chatVM.selectedPhotoItems,
                 maxSelectionCount: 5,
@@ -286,14 +229,18 @@ struct ChatView: View {
                 Task { await chatVM.loadSelectedPhotos() }
             }
 
+            Button {
+                showLibrary = true
+            } label: {
+                circleToolbarIcon(systemName: "photo.on.rectangle.angled")
+                    .foregroundStyle(AppConstants.chatPlaceholder)
+            }
+
             Spacer(minLength: 4)
 
-            buildModeCapsuleMenu
+            aspectRatioCapsuleMenu
 
-            Image(systemName: "mic.fill")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(AppConstants.chatPlaceholder)
-                .frame(width: 28, height: 28)
+            buildModeCapsuleMenu
 
             sendCircleButton
         }
@@ -301,20 +248,16 @@ struct ChatView: View {
 
     private var conversationComposer: some View {
         VStack(alignment: .leading, spacing: 14) {
-            TextField("", text: $chatVM.inputText, axis: .vertical)
+            TextField(
+                "",
+                text: $chatVM.inputText,
+                prompt: Text(conversationPlaceholder).foregroundStyle(AppConstants.chatPlaceholder),
+                axis: .vertical
+            )
                 .textFieldStyle(.plain)
                 .font(.system(size: 17))
                 .foregroundStyle(AppConstants.textPrimary)
                 .lineLimit(2...8)
-                .overlay(alignment: .leading) {
-                    if chatVM.inputText.isEmpty {
-                        Text(conversationPlaceholder)
-                            .font(.system(size: 16))
-                            .foregroundStyle(AppConstants.chatPlaceholder)
-                            .allowsHitTesting(false)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
 
             conversationComposerToolbar
         }
@@ -333,7 +276,7 @@ struct ChatView: View {
     }
 
     private var conversationComposerToolbar: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             PhotosPicker(
                 selection: $chatVM.selectedPhotoItems,
                 maxSelectionCount: 5,
@@ -346,30 +289,64 @@ struct ChatView: View {
                 Task { await chatVM.loadSelectedPhotos() }
             }
 
-            Menu {
-                Button {
-                    showLibrary = true
-                } label: {
-                    Label("Library", systemImage: "folder")
-                }
+            Button {
+                showLibrary = true
             } label: {
-                circleToolbarIcon(systemName: "ellipsis")
+                circleToolbarIcon(systemName: "photo.on.rectangle.angled")
                     .foregroundStyle(AppConstants.chatMutedLabel)
             }
 
-            Button(action: {}) {
-                circleToolbarIcon(systemName: "rectangle.split.2x1")
-                    .foregroundStyle(AppConstants.chatMutedLabel)
-            }
-
-            Image(systemName: "mic.fill")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(AppConstants.chatMutedLabel)
-                .frame(width: 28, height: 28)
+            aspectRatioCapsuleMenu
 
             Spacer(minLength: 0)
 
             sendCircleButton
+        }
+    }
+
+    private var aspectRatioCapsuleMenu: some View {
+        Menu {
+            ForEach(ImageAspect.allCases, id: \.self) { option in
+                Button {
+                    chatVM.imageAspect = option
+                } label: {
+                    HStack {
+                        Text(option.menuLabel)
+                        if chatVM.imageAspect == option {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            ZStack {
+                aspectRatioToolbarCapsuleLabel(aspect: Self.widestAspectForToolbarCapsule)
+                    .hidden()
+                    .accessibilityHidden(true)
+                aspectRatioToolbarCapsuleLabel(aspect: chatVM.imageAspect)
+            }
+            .foregroundStyle(AppConstants.chatPlaceholder)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .background(Color.white.opacity(0.06))
+            .clipShape(Capsule(style: .continuous))
+        }
+        .fixedSize()
+    }
+
+    private static var widestAspectForToolbarCapsule: ImageAspect {
+        ImageAspect.allCases.max(by: { $0.shortLabel.count < $1.shortLabel.count }) ?? .story
+    }
+
+    private func aspectRatioToolbarCapsuleLabel(aspect: ImageAspect) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: aspect.iconName)
+                .font(.system(size: 11, weight: .semibold))
+            Text(aspect.shortLabel)
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .monospacedDigit()
         }
     }
 
@@ -413,17 +390,33 @@ struct ChatView: View {
                 Label("Library", systemImage: "folder")
             }
         } label: {
-            HStack(spacing: 5) {
-                Text(chatVM.currentMode.rawValue)
-                    .font(.system(size: 14, weight: .medium))
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .bold))
+            ZStack {
+                buildModeToolbarCapsuleLabel(mode: Self.widestModeForToolbarCapsule)
+                    .hidden()
+                    .accessibilityHidden(true)
+                buildModeToolbarCapsuleLabel(mode: chatVM.currentMode)
             }
             .foregroundStyle(AppConstants.chatPlaceholder)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
             .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(Capsule(style: .continuous))
+        }
+        .fixedSize()
+    }
+
+    private static var widestModeForToolbarCapsule: ChatMode {
+        ChatMode.allCases.max(by: { $0.rawValue.count < $1.rawValue.count }) ?? .captions
+    }
+
+    private func buildModeToolbarCapsuleLabel(mode: ChatMode) -> some View {
+        HStack(spacing: 4) {
+            Text(mode.rawValue)
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .bold))
         }
     }
 
@@ -457,12 +450,12 @@ struct ChatView: View {
 
     private static func modeMenuSubtitle(_ mode: ChatMode) -> String {
         switch mode {
+        case .ideas:
+            return "Brainstorm content angles, campaigns, and hooks."
         case .captions:
             return "Craft strong captions & hashtags fast."
-        case .ideas:
-            return "Discuss before building concrete plans."
-        case .build:
-            return "Make changes directly across your content."
+        case .posts:
+            return "Generate finished Instagram-style ad images."
         }
     }
 
@@ -473,14 +466,6 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     ForEach(chatVM.messages) { message in
-                        if let cap = boundaryTimestamp(for: message) {
-                            Text(cap)
-                                .font(.system(size: 12))
-                                .foregroundStyle(AppConstants.chatMutedLabel)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 4)
-                        }
-
                         MessageBubble(
                             message: message,
                             localImages: chatVM.localImagesByMessageId[message.id],
@@ -506,8 +491,13 @@ struct ChatView: View {
                     }
 
                     if chatVM.isStreaming && !chatVM.isUploadingImages {
-                        StreamingBubble(text: chatVM.streamingText)
-                            .id("streamingRow")
+                        StreamingBubble(
+                            text: chatVM.streamingText,
+                            imageURLs: chatVM.streamingImageURLs,
+                            status: chatVM.streamingStatus,
+                            aspect: chatVM.imageAspect
+                        )
+                        .id("streamingRow")
                     }
 
                     if let error = chatVM.errorMessage {
@@ -544,18 +534,6 @@ struct ChatView: View {
                 }
             }
         }
-    }
-
-    /// Centered divider label when assistant follows user or vice versa.
-    private func boundaryTimestamp(for message: Message) -> String? {
-        guard let idx = chatVM.messages.firstIndex(where: { $0.id == message.id }), idx > 0 else {
-            return nil
-        }
-        let prev = chatVM.messages[idx - 1]
-        guard prev.role != message.role else { return nil }
-        let ref = message.createdAt ?? prev.createdAt
-        guard let ref else { return nil }
-        return Self.dividerDateFormatter.string(from: ref)
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool = true) {
