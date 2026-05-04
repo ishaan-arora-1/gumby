@@ -10,8 +10,11 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
     avatar_url TEXT,
+    preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 -- Conversations table
 CREATE TABLE IF NOT EXISTS conversations (

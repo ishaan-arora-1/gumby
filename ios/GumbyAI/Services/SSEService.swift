@@ -6,6 +6,7 @@ struct SSEEvent {
     let conversationId: String?
     let messageId: String?
     let error: String?
+    let questionsPayload: QuestionsPayload?
 }
 
 class SSEService {
@@ -120,12 +121,20 @@ class SSEDelegate: NSObject, URLSessionDataDelegate {
               let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
               let type = json["type"] as? String else { return }
 
+        var payload: QuestionsPayload? = nil
+        if type == "questions", let payloadDict = json["payload"] {
+            if let payloadData = try? JSONSerialization.data(withJSONObject: payloadDict) {
+                payload = try? JSONDecoder().decode(QuestionsPayload.self, from: payloadData)
+            }
+        }
+
         let event = SSEEvent(
             type: type,
             text: json["text"] as? String,
             conversationId: json["conversationId"] as? String,
             messageId: json["messageId"] as? String,
-            error: json["error"] as? String
+            error: json["error"] as? String,
+            questionsPayload: payload
         )
 
         onEvent(event)
