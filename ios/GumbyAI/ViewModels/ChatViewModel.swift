@@ -10,8 +10,12 @@ class ChatViewModel: ObservableObject {
     @Published var selectedPhotoItems: [PhotosPickerItem] = []
     @Published var isStreaming = false
     @Published var streamingText = ""
+    @Published var streamingImageURLs: [String] = []
+    @Published var streamingStatus: String?
     @Published var currentMode: ChatMode = .captions
+    @Published var imageAspect: ImageAspect = .post
     @Published var conversationId: String?
+    @Published var conversationTitle: String?
     @Published var errorMessage: String?
     @Published var isLoading = false
     @Published var isUploadingImages = false
@@ -34,12 +38,14 @@ class ChatViewModel: ObservableObject {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !selectedImages.isEmpty else { return }
 
+        let composedContent = text
+
         let messageId = UUID().uuidString
         let userMessage = Message(
             id: messageId,
             conversationID: conversationId ?? "",
             role: .user,
-            content: text,
+            content: composedContent,
             imageURLs: nil,
             createdAt: Date()
         )
@@ -49,7 +55,15 @@ class ChatViewModel: ObservableObject {
             localImagesByMessageId[messageId] = selectedImages
         }
 
-        let currentText = text
+        if conversationId == nil && (conversationTitle ?? "").isEmpty {
+            if !text.isEmpty {
+                conversationTitle = String(text.prefix(50))
+            } else if !selectedImages.isEmpty {
+                conversationTitle = "Image conversation"
+            }
+        }
+
+        let currentText = composedContent
         let currentImages = selectedImages
         let currentAssetURL = attachedAssetURL
 
@@ -61,6 +75,8 @@ class ChatViewModel: ObservableObject {
         canRetry = false
         isStreaming = true
         streamingText = ""
+        streamingImageURLs = []
+        streamingStatus = nil
 
         retryText = currentText
         retryImages = currentImages
@@ -95,7 +111,7 @@ class ChatViewModel: ObservableObject {
                         id: messageId,
                         conversationID: conversationId ?? "",
                         role: .user,
-                        content: currentText,
+                        content: composedContent,
                         imageURLs: imageUrls,
                         createdAt: messages[idx].createdAt
                     )
@@ -115,6 +131,8 @@ class ChatViewModel: ObservableObject {
         canRetry = false
         isStreaming = true
         streamingText = ""
+        streamingImageURLs = []
+        streamingStatus = nil
 
         if retryUploadNeeded && !retryImages.isEmpty {
             Task {
@@ -156,7 +174,8 @@ class ChatViewModel: ObservableObject {
             conversationId: conversationId,
             message: text,
             imageUrls: imageUrls,
-            mode: currentMode.rawValue.lowercased(),
+            mode: currentMode.apiValue,
+            aspectRatio: imageAspect.apiValue,
             onEvent: { [weak self] event in
                 Task { @MainActor in
                     self?.handleSSEEvent(event)
@@ -187,7 +206,15 @@ class ChatViewModel: ObservableObject {
             }
         case "chunk":
             if let text = event.text {
+                streamingStatus = nil
                 streamingText += text
+            }
+        case "image_status":
+            streamingStatus = event.text
+        case "image":
+            if let url = event.imageURL, !url.isEmpty {
+                streamingStatus = nil
+                streamingImageURLs.append(url)
             }
         case "questions":
             if let payload = event.questionsPayload {
@@ -214,12 +241,18 @@ class ChatViewModel: ObservableObject {
                     conversationID: conversationId ?? "",
                     role: .assistant,
                     content: streamingText,
-                    imageURLs: nil,
+                    imageURLs: streamingImageURLs.isEmpty ? nil : streamingImageURLs,
                     createdAt: Date()
                 )
                 messages.append(assistantMessage)
+                GeneratedImagesStore.shared.recordAssistantImageURLs(
+                    assistantMessage.imageURLs,
+                    createdAt: assistantMessage.createdAt ?? Date()
+                )
             }
             streamingText = ""
+            streamingImageURLs = []
+            streamingStatus = nil
             isStreaming = false
             canRetry = false
         case "error":
@@ -278,29 +311,37 @@ struct PreferenceItem: Codable {
 extension ChatViewModel {
 
     private func finishStreaming() {
-        if isStreaming && !streamingText.isEmpty {
+        if isStreaming && (!streamingText.isEmpty || !streamingImageURLs.isEmpty) {
             let assistantMessage = Message(
                 id: UUID().uuidString,
                 conversationID: conversationId ?? "",
                 role: .assistant,
                 content: streamingText,
-                imageURLs: nil,
+                imageURLs: streamingImageURLs.isEmpty ? nil : streamingImageURLs,
                 createdAt: Date()
             )
             messages.append(assistantMessage)
+            GeneratedImagesStore.shared.recordAssistantImageURLs(
+                assistantMessage.imageURLs,
+                createdAt: assistantMessage.createdAt ?? Date()
+            )
             streamingText = ""
+            streamingImageURLs = []
         }
+        streamingStatus = nil
         isStreaming = false
     }
 
-    func loadConversation(_ id: String) async {
+    func loadConversation(_ id: String, title: String? = nil) async {
         isLoading = true
         conversationId = id
+        if let title { conversationTitle = title }
 
         do {
             let response: APIResponse<[Message]> = try await apiService.get(path: "/chat/\(id)/messages")
             if let msgs = response.data {
                 messages = msgs
+                GeneratedImagesStore.shared.ingestMessages(msgs)
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -312,6 +353,7 @@ extension ChatViewModel {
     func newConversation() {
         messages = []
         conversationId = nil
+        conversationTitle = nil
         inputText = ""
         selectedImages = []
         selectedPhotoItems = []
@@ -350,17 +392,23 @@ extension ChatViewModel {
         sseService.cancel()
         isStreaming = false
         isUploadingImages = false
-        if !streamingText.isEmpty {
+        streamingStatus = nil
+        if !streamingText.isEmpty || !streamingImageURLs.isEmpty {
             let assistantMessage = Message(
                 id: UUID().uuidString,
                 conversationID: conversationId ?? "",
                 role: .assistant,
                 content: streamingText,
-                imageURLs: nil,
+                imageURLs: streamingImageURLs.isEmpty ? nil : streamingImageURLs,
                 createdAt: Date()
             )
             messages.append(assistantMessage)
+            GeneratedImagesStore.shared.recordAssistantImageURLs(
+                assistantMessage.imageURLs,
+                createdAt: assistantMessage.createdAt ?? Date()
+            )
             streamingText = ""
+            streamingImageURLs = []
         }
     }
 }
