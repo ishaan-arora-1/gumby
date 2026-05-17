@@ -3,6 +3,7 @@ import SwiftUI
 enum NavigationDestination: Hashable {
     case chat
     case explore
+    case ugc
     case calendar
     case posts
     case history
@@ -52,7 +53,7 @@ struct SidebarView: View {
 
                     VStack(spacing: 12) {
                         exploreButton(title: "Models") {
-                            selectedDestination = .explore
+                            selectedDestination = .ugc
                             sidebarVM.close()
                         }
                         exploreButton(title: "Calendar") {

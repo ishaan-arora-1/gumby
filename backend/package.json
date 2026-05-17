@@ -5,9 +5,13 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "migrate:ugc": "node scripts/apply-migration.js migrations/002_ugc.sql",
+    "gen:templates": "node scripts/generate-templates.js",
+    "fix:faststart": "node scripts/faststart-existing.js"
   },
   "dependencies": {
+    "@fal-ai/client": "^1.10.1",
     "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.45.0",
     "cors": "^2.8.5",
@@ -16,6 +20,7 @@
     "helmet": "^8.0.0",
     "morgan": "^1.10.0",
     "openai": "^6.35.0",
+    "pg": "^8.20.0",
     "redis": "^4.7.0",
     "uuid": "^10.0.0"
   },

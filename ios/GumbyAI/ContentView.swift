@@ -47,6 +47,8 @@ struct ContentView: View {
             ChatView()
         case .explore:
             ExploreView(selectedDestination: $selectedDestination)
+        case .ugc:
+            UGCView()
         case .calendar:
             CalendarView()
         case .posts:
@@ -66,4 +68,5 @@ struct ContentView: View {
         .environmentObject(CalendarViewModel())
         .environmentObject(HistoryViewModel())
         .environmentObject(LibraryViewModel())
+        .environmentObject(UGCViewModel())
 }
