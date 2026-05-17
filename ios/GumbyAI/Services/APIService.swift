@@ -26,7 +26,20 @@ class APIService {
 
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let isoWithFractional = ISO8601DateFormatter()
+        isoWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let isoNoFractional = ISO8601DateFormatter()
+        isoNoFractional.formatOptions = [.withInternetDateTime]
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+            if let d = isoWithFractional.date(from: raw) { return d }
+            if let d = isoNoFractional.date(from: raw) { return d }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unrecognized date format: \(raw)"
+            )
+        }
         return decoder
     }()
 
@@ -46,6 +59,13 @@ class APIService {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // UGC endpoints return signed URLs that rotate whenever templates are
+        // regenerated. Skip the local URLSession cache so the device always
+        // pulls the freshest catalog instead of replaying stale signed URLs.
+        if path.hasPrefix("/ugc") {
+            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        }
 
         if let token = getAuthToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

@@ -9,6 +9,7 @@ struct GumbyAIApp: App {
     @StateObject private var calendarVM = CalendarViewModel()
     @StateObject private var historyVM = HistoryViewModel()
     @StateObject private var libraryVM = LibraryViewModel()
+    @StateObject private var ugcVM = UGCViewModel()
     
     var body: some Scene {
         WindowGroup {
@@ -20,6 +21,7 @@ struct GumbyAIApp: App {
                 .environmentObject(calendarVM)
                 .environmentObject(historyVM)
                 .environmentObject(libraryVM)
+                .environmentObject(ugcVM)
                 .preferredColorScheme(.dark)
         }
     }
