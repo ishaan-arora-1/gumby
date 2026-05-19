@@ -27,6 +27,7 @@ const { spawn } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 const { fal } = require('@fal-ai/client');
 const supabase = require('../src/config/supabase');
+const { KLING_IMAGE_TO_VIDEO } = require('../src/config/falModels');
 
 if (!process.env.FAL_KEY) {
   console.error('FAL_KEY missing — set it in backend/.env');
@@ -253,12 +254,18 @@ async function generatePortrait(recipe) {
 }
 
 async function generateTalkingVideo(portraitUrl, recipe) {
-  console.log(`  [kling] animating ${recipe.actor_name} talking-to-camera…`);
-  const result = await fal.subscribe('fal-ai/kling-video/v2.5-turbo/pro/image-to-video', {
+  console.log(`  [kling v3] animating ${recipe.actor_name} talking-to-camera…`);
+  // Kling Video v3 Pro image-to-video — top-tier motion + facial fidelity.
+  // We deliberately disable native audio because every template gets dubbed
+  // later by ElevenLabs (and lip-synced via fal-ai/sync-lipsync) at the
+  // moment the end-user picks a script. Aspect ratio is inherited from the
+  // 9:16 Flux portrait we pass in via `start_image_url`.
+  const result = await fal.subscribe(KLING_IMAGE_TO_VIDEO, {
     input: {
-      image_url: portraitUrl,
+      start_image_url: portraitUrl,
       prompt: recipe.motion_prompt,
       duration: '5',
+      generate_audio: false,
       negative_prompt: 'blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed mouth, extra limbs, frozen still image',
       cfg_scale: 0.5,
     },

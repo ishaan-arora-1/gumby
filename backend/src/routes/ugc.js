@@ -6,6 +6,7 @@ const { getRedisClient } = require('../config/redis');
 const { v4: uuidv4 } = require('uuid');
 const authMiddleware = require('../middleware/auth');
 const { runUGCJob, VOICE_PRESETS } = require('../services/ugcPipeline');
+const { runCreatorJob } = require('../services/creatorPipeline');
 
 router.use(authMiddleware);
 
@@ -33,15 +34,36 @@ router.get('/templates', async (req, res) => {
     const cached = await redis.get(cacheKey);
     if (cached) return res.json(JSON.parse(cached));
 
-    let q = supabase
-      .from('ugc_templates')
-      .select('*', { count: 'exact' })
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true });
-
+    // Hidden user-generated creators (created via the chat's text-to-video
+    // composer) live in the same table so the /ugc/generate pipeline can
+    // reference them, but they must NOT appear in the public Models feed.
+    // We attempt the filter first and fall back to an unfiltered query if
+    // the column doesn't exist yet (i.e. migration 004 hasn't been applied),
+    // so the curated catalog keeps working in either case.
+    const buildQ = (withUserGenFilter) => {
+      let qb = supabase
+        .from('ugc_templates')
+        .select('*', { count: 'exact' })
+        .eq('is_active', true);
+      if (withUserGenFilter) {
+        qb = qb.or('is_user_generated.is.null,is_user_generated.eq.false');
+      }
+      return qb.order('sort_order', { ascending: true });
+    };
+    let q = buildQ(true);
     if (category) q = q.eq('category', category);
 
-    const { data: templates, error, count } = await q.range(offset, offset + limit - 1);
+    let { data: templates, error, count } = await q.range(offset, offset + limit - 1);
+    if (error && /is_user_generated/i.test(error.message || '')) {
+      // Migration 004 hasn't been applied yet — fall back to the legacy
+      // (pre-migration) query so the curated catalog keeps loading.
+      let fallback = buildQ(false);
+      if (category) fallback = fallback.eq('category', category);
+      const retry = await fallback.range(offset, offset + limit - 1);
+      templates = retry.data;
+      error = retry.error;
+      count = retry.count;
+    }
     if (error) throw error;
 
     const response = {
@@ -267,6 +289,220 @@ router.delete('/jobs/:id', async (req, res) => {
   } catch (err) {
     console.error('UGC job delete error:', err);
     return res.status(500).json({ success: false, error: 'Failed to delete job' });
+  }
+});
+
+// ---------- Standalone creator generation (text-to-video) ----------
+//
+// This is the chat's "describe your creator" path — the user types a prompt
+// like "early 20s girl in a sunlit bedroom showing off a hoodie" and we
+// generate a fresh on-camera persona via Kling 2.6 Pro text-to-video. The
+// produced clip can either stand on its own (option C in the funnel) or be
+// promoted into a hidden ugc_templates row that feeds the standard
+// ElevenLabs TTS + sync-lipsync pipeline (option B).
+
+const MAX_CREATOR_DURATION_S = 10; // Kling 2.6 enum is "5" | "10"
+const MIN_PROMPT_LEN = 6;
+
+router.post('/creator/generate', async (req, res) => {
+  const userId = req.user.id;
+  const {
+    prompt,
+    aspectRatio,
+    durationSeconds,
+  } = req.body || {};
+
+  const cleanPrompt = (typeof prompt === 'string' ? prompt : '').trim();
+  if (cleanPrompt.length < MIN_PROMPT_LEN) {
+    return res.status(400).json({
+      success: false,
+      error: 'Describe the creator in a few more words (at least 6 characters).',
+    });
+  }
+
+  // Whitelist the aspect ratio to values Kling 2.6 accepts.
+  const aspect = ['9:16', '16:9', '1:1'].includes(aspectRatio) ? aspectRatio : '9:16';
+  const duration = Number(durationSeconds) === 10 ? 10 : 5;
+
+  try {
+    const job = {
+      id: uuidv4(),
+      user_id: userId,
+      prompt: cleanPrompt,
+      aspect_ratio: aspect,
+      duration_seconds: duration,
+      status: 'queued',
+      progress: 0,
+    };
+    const { data: inserted, error: insErr } = await supabase
+      .from('ugc_creator_jobs')
+      .insert(job)
+      .select()
+      .single();
+    if (insErr) {
+      if (/ugc_creator_jobs/i.test(insErr.message || '') &&
+          /does not exist|schema cache/i.test(insErr.message || '')) {
+        return res.status(503).json({
+          success: false,
+          error: 'Creator generation needs the latest migration applied. Paste backend/migrations/004_ugc_creator_jobs.sql into the Supabase SQL editor.',
+        });
+      }
+      throw insErr;
+    }
+
+    setImmediate(() => {
+      runCreatorJob(inserted).catch((e) =>
+        console.error('Background runCreatorJob error:', e)
+      );
+    });
+
+    return res.status(202).json({ success: true, data: inserted });
+  } catch (err) {
+    console.error('UGC creator generate error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to start creator generation',
+    });
+  }
+});
+
+router.get('/creator/jobs/:id', async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const { data, error } = await supabase
+      .from('ugc_creator_jobs')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('user_id', userId)
+      .single();
+    if (error || !data) {
+      return res.status(404).json({ success: false, error: 'Creator job not found' });
+    }
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('UGC creator job fetch error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to fetch creator job' });
+  }
+});
+
+router.get('/creator/jobs', async (req, res) => {
+  const userId = req.user.id;
+  const page = parseInt(req.query.page) || 1;
+  const limit = 20;
+  const offset = (page - 1) * limit;
+  try {
+    const { data, error, count } = await supabase
+      .from('ugc_creator_jobs')
+      .select('*', { count: 'exact' })
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    return res.json({
+      success: true,
+      data: data || [],
+      page,
+      total_pages: Math.ceil((count || 0) / limit),
+      total_count: count || 0,
+    });
+  } catch (err) {
+    console.error('UGC creator jobs list error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to fetch creator jobs' });
+  }
+});
+
+router.delete('/creator/jobs/:id', async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const { error } = await supabase
+      .from('ugc_creator_jobs')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('user_id', userId);
+    if (error) throw error;
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('UGC creator job delete error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to delete creator job' });
+  }
+});
+
+/**
+ * Promotes a completed user-generated creator clip into a hidden
+ * ugc_templates row so the existing /ugc/script and /ugc/generate endpoints
+ * can treat it like any curated template. The row is `is_active=false` and
+ * `is_user_generated=true` so it never shows up in the public Models feed.
+ *
+ * Idempotent: if the creator job has already been promoted, returns the
+ * existing template.
+ */
+router.post('/creator/jobs/:id/promote-to-template', async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const { data: job, error: jobErr } = await supabase
+      .from('ugc_creator_jobs')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('user_id', userId)
+      .single();
+    if (jobErr || !job) {
+      return res.status(404).json({ success: false, error: 'Creator job not found' });
+    }
+    if (job.status !== 'completed' || !job.video_url) {
+      return res.status(400).json({
+        success: false,
+        error: 'Creator video is not ready yet',
+      });
+    }
+    if (job.template_id) {
+      const { data: existing } = await supabase
+        .from('ugc_templates')
+        .select('*')
+        .eq('id', job.template_id)
+        .single();
+      if (existing) return res.json({ success: true, data: existing });
+    }
+
+    const sampleScript = (req.body?.sampleScript || '').toString().trim()
+      || 'Honestly, I have been obsessed with this and I had to tell you about it.';
+    const actorName = (req.body?.actorName || '').toString().trim() || 'Your creator';
+
+    const tpl = {
+      id: uuidv4(),
+      name: actorName === 'Your creator' ? 'Custom creator' : actorName,
+      actor_name: actorName,
+      actor_avatar_url: job.thumbnail_url || null,
+      description: job.prompt.slice(0, 240),
+      setting: 'Generated from your prompt',
+      video_url: job.video_url,
+      thumbnail_url: job.thumbnail_url || job.video_url,
+      sample_script: sampleScript,
+      voice_id: 'Rachel',
+      aspect_ratio: job.aspect_ratio || '9:16',
+      duration_seconds: job.duration_seconds || 5,
+      tags: ['custom'],
+      category: 'custom',
+      sort_order: 999,
+      is_active: false,
+      is_user_generated: true,
+      owner_user_id: userId,
+    };
+    const { data: inserted, error: insErr } = await supabase
+      .from('ugc_templates')
+      .insert(tpl)
+      .select()
+      .single();
+    if (insErr) throw insErr;
+
+    await supabase
+      .from('ugc_creator_jobs')
+      .update({ template_id: inserted.id })
+      .eq('id', job.id);
+
+    return res.json({ success: true, data: inserted });
+  } catch (err) {
+    console.error('UGC creator promote error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to promote creator' });
   }
 });
 

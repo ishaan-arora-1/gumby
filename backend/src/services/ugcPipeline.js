@@ -1,11 +1,12 @@
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../config/supabase');
 const { fal, isFalEnabled } = require('../config/fal');
+const { ELEVENLABS_TTS, SYNC_LIPSYNC } = require('../config/falModels');
 
 const UGC_BUCKET = 'ugc-videos';
 
-const TTS_MODEL = 'fal-ai/elevenlabs/tts/multilingual-v2';
-const LIPSYNC_MODEL = 'fal-ai/sync-lipsync/v2';
+const TTS_MODEL = ELEVENLABS_TTS;
+const LIPSYNC_MODEL = SYNC_LIPSYNC;
 
 // ElevenLabs preset voices we expose to the client. Voice IDs are the
 // ElevenLabs library names that fal accepts directly.
