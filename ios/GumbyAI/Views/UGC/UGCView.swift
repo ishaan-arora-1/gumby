@@ -2,11 +2,16 @@ import SwiftUI
 
 /// Top-level Models / UGC screen — TikTok-style vertical feed of AI-actor
 /// templates plus a "My Videos" tab for generated jobs.
+///
+/// Tapping the "Use" button on any template now hands off to the AI Chat tab,
+/// which runs the full UGC creation funnel (product → script → voice →
+/// ElevenLabs TTS → Kling lip-sync). The old bottom-sheet generation form
+/// has been retired in favor of that guided experience.
 struct UGCView: View {
     @EnvironmentObject var sidebarVM: SidebarViewModel
     @EnvironmentObject var ugcVM: UGCViewModel
-
-    @State private var generationTarget: UGCTemplate?
+    @EnvironmentObject var chatVM: ChatViewModel
+    @Binding var selectedDestination: NavigationDestination
 
     var body: some View {
         ZStack {
@@ -25,10 +30,6 @@ struct UGCView: View {
             await ugcVM.loadTemplates(force: true)
             await ugcVM.loadVoices()
             await ugcVM.loadJobs()
-        }
-        .sheet(item: $generationTarget) { template in
-            UGCGenerateSheet(template: template)
-                .environmentObject(ugcVM)
         }
     }
 
@@ -77,16 +78,29 @@ struct UGCView: View {
         switch ugcVM.selectedTab {
         case .templates:
             UGCTemplatesFeed(
-                onGenerate: { template in generationTarget = template }
+                onGenerate: { template in
+                    handoffToChat(with: template)
+                }
             )
         case .myVideos:
             UGCMyVideosView()
         }
     }
+
+    private func handoffToChat(with template: UGCTemplate) {
+        // Reset the chat to a clean state, drop the user just past template
+        // selection, and navigate. This keeps the funnel feeling like one
+        // continuous experience whether the user enters through the feed or
+        // the chat tab directly.
+        chatVM.newConversation()
+        chatVM.pickTemplate(template)
+        selectedDestination = .chat
+    }
 }
 
 #Preview {
-    UGCView()
+    UGCView(selectedDestination: .constant(.ugc))
         .environmentObject(SidebarViewModel())
         .environmentObject(UGCViewModel())
+        .environmentObject(ChatViewModel())
 }

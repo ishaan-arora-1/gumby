@@ -10,6 +10,7 @@
 		1044B71DD818180882DCA91F /* UGCViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8C1B7A601D5E43731A8363F /* UGCViewModel.swift */; };
 		10BB90C3E435912ED1C0AC47 /* ExploreModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BB0EFDDD0A109806615386E /* ExploreModel.swift */; };
 		1CA117CEF4DFECD33E2327D0 /* GumbyAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4FC942717BF451E7E63936 /* GumbyAIApp.swift */; };
+		219CE888BD3EF1F30E648106 /* UGCChatStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = 338678292C25E6F3C300A453 /* UGCChatStep.swift */; };
 		242C00803187219F86146340 /* CalendarViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E092D9BD1A60A50EA3C2538 /* CalendarViewModel.swift */; };
 		2B246C20145CE0D2B11B52E7 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 440E91AFA494511C85FDD620 /* ChatView.swift */; };
 		2B9F9B448A70F7800D9AD75B /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E85FEFFD6A23FF4D0F258C7 /* AuthService.swift */; };
@@ -22,6 +23,7 @@
 		53F6D7C9C665CCDA49882894 /* ModelCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4BC1E4E77453368813A0DD8 /* ModelCard.swift */; };
 		59C6CDD4CFEE8262ADFA3C4B /* SSEService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6647687A2E715D5F440EA2 /* SSEService.swift */; };
 		5C2BA615EEA4E064BEBE7BCB /* UGCTemplatesFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61D9BF666BFF21E44438827 /* UGCTemplatesFeed.swift */; };
+		5CC81F1A081E16FE3D000224 /* UGCChatCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3E74BE2FEF7C0F19D4B7EDB /* UGCChatCards.swift */; };
 		6B8087D494DFBD72C153FAA0 /* UGCView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4531B869782BEAE63FD9391B /* UGCView.swift */; };
 		6D8DC7DE00FE54369B8A6BB6 /* LibrarySheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9FC0267D1F94F9EA78F407 /* LibrarySheetView.swift */; };
 		6FC25C9D4C83B6559D8EA263 /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = 571EC0C3971652212523B966 /* MessageBubble.swift */; };
@@ -33,8 +35,8 @@
 		8F39586620A51D51EF7B8EBC /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3421C3D432FFEC9401B1053D /* HistoryView.swift */; };
 		92474E67BCC0F826E1F3BCDE /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = D18AF1078C57AF091CBD82DD /* KeychainHelper.swift */; };
 		94BBFFBBB8E808307EAAB5E7 /* SavedAsset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C39A51F75B689665FBA8360 /* SavedAsset.swift */; };
+		9E07701790B037CD56955986 /* UGCCreatorJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D09A4B99DE204F54DEFAF42 /* UGCCreatorJob.swift */; };
 		9E268DDED4A01ECB7CC9B5DC /* PostsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6ACAB05A4A7BCDD389879D2 /* PostsView.swift */; };
-		A2597668F14D8B491B09AB4B /* UGCGenerateSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6DF75D72F08E45B9032F216 /* UGCGenerateSheet.swift */; };
 		A29E4E60DC1A879A4A25ED70 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56250E82A2630B6EE055EDD8 /* AuthView.swift */; };
 		A55EC1CAC770E7F7DA0E52D9 /* RemoteImagePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FEA85E04CB3D11535BF320E /* RemoteImagePreview.swift */; };
 		A6158A4D899B0182C9C24E45 /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3114C00A186FD87DB2F25482 /* Conversation.swift */; };
@@ -71,10 +73,12 @@
 		2558987DC923669B848A5BE0 /* ImageUploadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUploadService.swift; sourceTree = "<group>"; };
 		2B7762F490F7BB425D3DFA08 /* SuggestionChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionChip.swift; sourceTree = "<group>"; };
 		3114C00A186FD87DB2F25482 /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
+		338678292C25E6F3C300A453 /* UGCChatStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCChatStep.swift; sourceTree = "<group>"; };
 		3421C3D432FFEC9401B1053D /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		3431D0747F2A18B493F345E2 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		398C4C0EEEB163EE0C37B2B7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3AAE9C2588BE8C217586CEB1 /* GeneratedImagesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedImagesStore.swift; sourceTree = "<group>"; };
+		3D09A4B99DE204F54DEFAF42 /* UGCCreatorJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCCreatorJob.swift; sourceTree = "<group>"; };
 		440E91AFA494511C85FDD620 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		4531B869782BEAE63FD9391B /* UGCView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCView.swift; sourceTree = "<group>"; };
 		4A2DCF5E5A1710A795552781 /* Post.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Post.swift; sourceTree = "<group>"; };
@@ -94,11 +98,11 @@
 		A185C3375CD6065433434E3F /* UGCJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCJob.swift; sourceTree = "<group>"; };
 		B11B30E1041C4EF37EA31C37 /* QuestionsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestionsCard.swift; sourceTree = "<group>"; };
 		B1A303DBF13E2E28C56E66B5 /* GumbyAI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GumbyAI.entitlements; sourceTree = "<group>"; };
+		B3E74BE2FEF7C0F19D4B7EDB /* UGCChatCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCChatCards.swift; sourceTree = "<group>"; };
 		B4BC1E4E77453368813A0DD8 /* ModelCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCard.swift; sourceTree = "<group>"; };
 		C09339B675B7600AEC3CDAFC /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
 		C0A4AB37C72BACEF26BABD1B /* GumbyAI.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GumbyAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C61D9BF666BFF21E44438827 /* UGCTemplatesFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCTemplatesFeed.swift; sourceTree = "<group>"; };
-		C6DF75D72F08E45B9032F216 /* UGCGenerateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCGenerateSheet.swift; sourceTree = "<group>"; };
 		CD9275348378EB0E86328112 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D18AF1078C57AF091CBD82DD /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		D8C1B7A601D5E43731A8363F /* UGCViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCViewModel.swift; sourceTree = "<group>"; };
@@ -216,6 +220,8 @@
 				FBEF17698BEFA3AC4AAD357A /* MoodBoard.swift */,
 				4A2DCF5E5A1710A795552781 /* Post.swift */,
 				0C39A51F75B689665FBA8360 /* SavedAsset.swift */,
+				338678292C25E6F3C300A453 /* UGCChatStep.swift */,
+				3D09A4B99DE204F54DEFAF42 /* UGCCreatorJob.swift */,
 				A185C3375CD6065433434E3F /* UGCJob.swift */,
 				1AB9D873D860C587B1DEAACF /* UGCTemplate.swift */,
 				3431D0747F2A18B493F345E2 /* User.swift */,
@@ -234,7 +240,6 @@
 		A8715EB6B22BD9FFCDD3CEA9 /* UGC */ = {
 			isa = PBXGroup;
 			children = (
-				C6DF75D72F08E45B9032F216 /* UGCGenerateSheet.swift */,
 				EAA930662A81E1CC581D1992 /* UGCMyVideosView.swift */,
 				C61D9BF666BFF21E44438827 /* UGCTemplatesFeed.swift */,
 				4531B869782BEAE63FD9391B /* UGCView.swift */,
@@ -270,6 +275,7 @@
 			isa = PBXGroup;
 			children = (
 				440E91AFA494511C85FDD620 /* ChatView.swift */,
+				B3E74BE2FEF7C0F19D4B7EDB /* UGCChatCards.swift */,
 			);
 			path = Chat;
 			sourceTree = "<group>";
@@ -414,7 +420,9 @@
 				8720A3683920F946BB4D89B9 /* SidebarView.swift in Sources */,
 				BDBB3249AF208C37DD9BE5F9 /* SidebarViewModel.swift in Sources */,
 				D07CCDC33414A192D05D4ED6 /* SuggestionChip.swift in Sources */,
-				A2597668F14D8B491B09AB4B /* UGCGenerateSheet.swift in Sources */,
+				5CC81F1A081E16FE3D000224 /* UGCChatCards.swift in Sources */,
+				219CE888BD3EF1F30E648106 /* UGCChatStep.swift in Sources */,
+				9E07701790B037CD56955986 /* UGCCreatorJob.swift in Sources */,
 				4849CD5F37E043CACB031CC5 /* UGCJob.swift in Sources */,
 				38BA2916EECAC0B11BC58767 /* UGCMyVideosView.swift in Sources */,
 				3B68C13C408A1B4B8880FBD8 /* UGCService.swift in Sources */,

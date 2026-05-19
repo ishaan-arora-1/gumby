@@ -99,6 +99,66 @@ final class UGCService {
         try await api.delete(path: "/ugc/jobs/\(id)")
     }
 
+    // MARK: - Standalone creator generation (text-to-video)
+
+    struct CreatorRequest {
+        let prompt: String
+        let aspectRatio: String
+        let durationSeconds: Int
+    }
+
+    /// Kicks off a standalone creator generation job. Returns the queued
+    /// `UGCCreatorJob` row — poll `fetchCreatorJob` until status is terminal.
+    func startCreatorGeneration(_ req: CreatorRequest) async throws -> UGCCreatorJob {
+        let body: [String: Any] = [
+            "prompt": req.prompt,
+            "aspectRatio": req.aspectRatio,
+            "durationSeconds": req.durationSeconds,
+        ]
+        let resp: APIResponse<UGCCreatorJob> = try await api.post(
+            path: "/ugc/creator/generate", body: body
+        )
+        guard let job = resp.data else { throw APIError.noData }
+        return job
+    }
+
+    func fetchCreatorJob(id: String) async throws -> UGCCreatorJob {
+        let resp: APIResponse<UGCCreatorJob> = try await api.get(
+            path: "/ugc/creator/jobs/\(id)"
+        )
+        guard let job = resp.data else { throw APIError.noData }
+        return job
+    }
+
+    func fetchCreatorJobs(page: Int = 1) async throws -> [UGCCreatorJob] {
+        let resp: PaginatedResponse<UGCCreatorJob> = try await api.get(
+            path: "/ugc/creator/jobs?page=\(page)"
+        )
+        return resp.data
+    }
+
+    func deleteCreatorJob(id: String) async throws {
+        try await api.delete(path: "/ugc/creator/jobs/\(id)")
+    }
+
+    /// Promotes a finished creator clip into a hidden `UGCTemplate` row that
+    /// the standard /ugc/generate pipeline can lip-sync over. Idempotent.
+    func promoteCreatorToTemplate(
+        jobId: String,
+        actorName: String? = nil,
+        sampleScript: String? = nil
+    ) async throws -> UGCTemplate {
+        var body: [String: Any] = [:]
+        if let n = actorName, !n.isEmpty { body["actorName"] = n }
+        if let s = sampleScript, !s.isEmpty { body["sampleScript"] = s }
+        let resp: APIResponse<UGCTemplate> = try await api.post(
+            path: "/ugc/creator/jobs/\(jobId)/promote-to-template",
+            body: body
+        )
+        guard let tpl = resp.data else { throw APIError.noData }
+        return tpl
+    }
+
     // MARK: - Product image upload
 
     /// Uploads a product image to the backend (which stores it in the

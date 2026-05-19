@@ -1,0 +1,204 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawn } = require('child_process');
+const { v4: uuidv4 } = require('uuid');
+const supabase = require('../config/supabase');
+const { fal, isFalEnabled } = require('../config/fal');
+const { KLING_TEXT_TO_VIDEO } = require('../config/falModels');
+
+const UGC_BUCKET = 'ugc-videos';
+
+/**
+ * Standalone "creator" generation — the user types a single text prompt
+ * describing the on-camera persona they want, and we turn it into a 5-15
+ * second silent talking-head clip via Kling 2.6 Pro text-to-video.
+ *
+ * The resulting clip can either stand on its own (option C in the chat flow)
+ * or be promoted into a hidden ugc_templates row that feeds straight into the
+ * normal ElevenLabs TTS → sync-lipsync pipeline (option B). All of that
+ * routing happens in `routes/ugc.js`; this file owns nothing but the
+ * generation + mirror.
+ */
+
+async function updateJob(jobId, patch) {
+  const { error } = await supabase
+    .from('ugc_creator_jobs')
+    .update(patch)
+    .eq('id', jobId);
+  if (error) {
+    console.error(`[creator:${jobId}] updateJob error:`, error.message);
+  }
+}
+
+async function downloadBuffer(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Download failed (${r.status}) for ${url}`);
+  const ct = r.headers.get('content-type') || '';
+  return { buffer: Buffer.from(await r.arrayBuffer()), contentType: ct };
+}
+
+function runFfmpeg(args) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg exited ${code}\n${stderr.slice(-1500)}`));
+    });
+  });
+}
+
+/**
+ * Best-effort faststart remux + first-frame poster extraction. If ffmpeg
+ * isn't available on this host, we still return the raw bytes — iOS will
+ * play the clip after a slightly longer initial buffer.
+ */
+async function postProcessMP4(inputBuffer) {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'creator-pp-'));
+  const inPath = path.join(tmpDir, 'in.mp4');
+  const fsPath = path.join(tmpDir, 'out.mp4');
+  const posterPath = path.join(tmpDir, 'poster.jpg');
+  fs.writeFileSync(inPath, inputBuffer);
+
+  let videoBuffer = inputBuffer;
+  let posterBuffer = null;
+  try {
+    await runFfmpeg(['-y', '-i', inPath, '-c', 'copy', '-movflags', '+faststart', fsPath]);
+    videoBuffer = fs.readFileSync(fsPath);
+  } catch (e) {
+    console.warn('[creator] ffmpeg faststart skipped:', e?.message || e);
+  }
+  try {
+    await runFfmpeg([
+      '-y', '-ss', '0.6', '-i', inPath, '-frames:v', '1',
+      '-vf', "scale='min(1080,iw)':-2:flags=lanczos",
+      '-q:v', '4', posterPath,
+    ]);
+    posterBuffer = fs.readFileSync(posterPath);
+  } catch (e) {
+    console.warn('[creator] ffmpeg poster skipped:', e?.message || e);
+  }
+
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  return { videoBuffer, posterBuffer };
+}
+
+async function uploadToBucket(buffer, ext, contentType, keyPrefix) {
+  const key = `${keyPrefix}/${uuidv4()}.${ext}`;
+  const { error } = await supabase.storage.from(UGC_BUCKET).upload(key, buffer, {
+    contentType,
+    upsert: false,
+  });
+  if (error) throw error;
+  const { data: signed, error: signErr } = await supabase.storage
+    .from(UGC_BUCKET)
+    .createSignedUrl(key, 60 * 60 * 24 * 365 * 10);
+  if (signErr) throw signErr;
+  return signed.signedUrl;
+}
+
+async function generateTextToVideo(prompt, durationSeconds, aspectRatio) {
+  // Kling 2.6 Pro text-to-video. Audio off — we layer ElevenLabs TTS via
+  // sync-lipsync only if the user promotes this creator into a full ad.
+  // `duration` is an enum ("5" | "10"), so we clamp.
+  const duration = String(durationSeconds === 10 ? 10 : 5);
+  const result = await fal.subscribe(KLING_TEXT_TO_VIDEO, {
+    input: {
+      prompt,
+      duration,
+      aspect_ratio: aspectRatio || '9:16',
+      generate_audio: false,
+      negative_prompt: 'blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed mouth, extra limbs, frozen still image',
+      cfg_scale: 0.5,
+    },
+    logs: false,
+  });
+  const url = result?.data?.video?.url || result?.video?.url;
+  if (!url) throw new Error('Kling 2.6 returned no video url');
+  return url;
+}
+
+/**
+ * Background pipeline. Caller wraps this in `setImmediate` so the HTTP
+ * response returns the queued job row immediately. Errors are captured into
+ * the job row so the client polling /ugc/creator/jobs/:id can surface them.
+ */
+async function runCreatorJob(job) {
+  const jobId = job.id;
+  console.log(`[creator:${jobId}] starting`);
+  await updateJob(jobId, {
+    status: 'generating',
+    progress: 10,
+    started_at: new Date().toISOString(),
+  });
+
+  try {
+    if (!isFalEnabled()) {
+      // Mock mode — bounce a static creator video back so local dev works
+      // without the FAL_KEY. We point at one of the seeded templates so the
+      // chat flow can still be exercised end-to-end.
+      console.warn(`[creator:${jobId}] FAL_KEY missing — MOCK mode`);
+      await new Promise((r) => setTimeout(r, 1500));
+      await updateJob(jobId, { progress: 60 });
+      await new Promise((r) => setTimeout(r, 1500));
+      const { data: anyTemplate } = await supabase
+        .from('ugc_templates')
+        .select('video_url, thumbnail_url')
+        .eq('is_active', true)
+        .limit(1)
+        .single();
+      await updateJob(jobId, {
+        status: 'completed',
+        progress: 100,
+        video_url: anyTemplate?.video_url || null,
+        thumbnail_url: anyTemplate?.thumbnail_url || null,
+        completed_at: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // ---- Step 1: Kling 2.6 text-to-video ----
+    const tempUrl = await generateTextToVideo(
+      job.prompt,
+      job.duration_seconds,
+      job.aspect_ratio
+    );
+    await updateJob(jobId, { progress: 70 });
+    console.log(`[creator:${jobId}] kling produced url, mirroring…`);
+
+    // ---- Step 2: mirror + faststart + poster ----
+    const { buffer: rawBuf } = await downloadBuffer(tempUrl);
+    const { videoBuffer, posterBuffer } = await postProcessMP4(rawBuf);
+
+    const videoUrl = await uploadToBucket(
+      videoBuffer, 'mp4', 'video/mp4', `creators/${job.user_id}/video`
+    );
+    let posterUrl = null;
+    if (posterBuffer) {
+      posterUrl = await uploadToBucket(
+        posterBuffer, 'jpg', 'image/jpeg', `creators/${job.user_id}/poster`
+      );
+    }
+    await updateJob(jobId, {
+      status: 'completed',
+      progress: 100,
+      video_url: videoUrl,
+      thumbnail_url: posterUrl,
+      completed_at: new Date().toISOString(),
+    });
+    console.log(`[creator:${jobId}] DONE → ${videoUrl}`);
+  } catch (err) {
+    console.error(`[creator:${jobId}] pipeline failed:`, err);
+    const errMsg = err?.message || String(err);
+    await updateJob(jobId, {
+      status: 'failed',
+      error: errMsg.slice(0, 500),
+      completed_at: new Date().toISOString(),
+    });
+  }
+}
+
+module.exports = { runCreatorJob };
