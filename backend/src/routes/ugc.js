@@ -5,7 +5,7 @@ const { openai } = require('../config/openai');
 const { getRedisClient } = require('../config/redis');
 const { v4: uuidv4 } = require('uuid');
 const authMiddleware = require('../middleware/auth');
-const { runUGCJob, VOICE_PRESETS } = require('../services/ugcPipeline');
+const { runUGCJob, VOICE_PRESETS, generateVoicePreview } = require('../services/ugcPipeline');
 const { runCreatorJob } = require('../services/creatorPipeline');
 
 router.use(authMiddleware);
@@ -102,7 +102,31 @@ router.get('/templates/:id', async (req, res) => {
 // ---------- Voices ----------
 
 router.get('/voices', (req, res) => {
-  return res.json({ success: true, data: VOICE_PRESETS });
+  // Strip the internal `sample` line — the iOS app only needs id/label/gender.
+  const data = VOICE_PRESETS.map(({ id, label, gender }) => ({ id, label, gender }));
+  return res.json({ success: true, data });
+});
+
+/**
+ * Returns a signed URL to a short MP3 sample for the requested voice. The
+ * sample is generated lazily on first call and cached in Supabase Storage,
+ * so the second tap onwards is effectively free.
+ */
+router.get('/voices/:id/preview', async (req, res) => {
+  const id = req.params.id;
+  if (!VOICE_PRESETS.some((v) => v.id === id)) {
+    return res.status(404).json({ success: false, error: 'Unknown voice' });
+  }
+  try {
+    const url = await generateVoicePreview(id);
+    return res.json({ success: true, data: { url } });
+  } catch (err) {
+    console.error('Voice preview error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to generate preview',
+    });
+  }
 });
 
 // ---------- AI script writer ----------
@@ -113,6 +137,7 @@ router.post('/script', async (req, res) => {
     productDescription,
     template,
     tone,
+    targetSeconds: requestedSeconds,
   } = req.body || {};
 
   if (!productName) {
@@ -123,7 +148,14 @@ router.post('/script', async (req, res) => {
   const tplActor = template?.actor_name || 'a creator';
   const tplSetting = template?.setting || '';
   const tplSampleScript = template?.sample_script || '';
-  const targetSeconds = template?.duration_seconds || 14;
+  // Target a ~22s voice-over so the lip-sync video is long enough to host
+  // 3 × 5s b-roll cuts via the rich-intercut path (threshold ≈ 21s). This
+  // is what keeps the voiceover playing continuously *over* the b-roll
+  // instead of falling to the append fallback (which pads silence).
+  // Client can override via `targetSeconds` if they want a shorter or
+  // longer ad. Template's `duration_seconds` is the CREATOR clip length,
+  // not the voice-over length, so we don't read it here anymore.
+  const targetSeconds = Math.min(45, Math.max(8, Number(requestedSeconds) || 22));
   const wordTarget = Math.max(20, Math.round(targetSeconds * 2.4));
 
   const sys = [
@@ -158,6 +190,85 @@ router.post('/script', async (req, res) => {
   } catch (err) {
     console.error('UGC script error:', err);
     return res.status(500).json({ success: false, error: 'Failed to generate script' });
+  }
+});
+
+// ---------- Product B-roll shot suggestions ----------
+
+/**
+ * Auto-draft 2-3 shot ideas for the user's product B-roll. Given the
+ * script + product info + creator description, GPT outputs visual shot
+ * descriptions like "Holding the bag in both hands, smiling at camera"
+ * that we then feed to Kling Elements. The user can edit/replace these
+ * before kicking off generation.
+ */
+router.post('/shots/suggest', async (req, res) => {
+  const {
+    productName = '',
+    productDescription = '',
+    productTone = '',
+    creatorDescription = '',
+    script = '',
+    shotCount: rawCount,
+  } = req.body || {};
+
+  const shotCount = Math.min(3, Math.max(2, parseInt(rawCount, 10) || 3));
+
+  const sys = [
+    "You're a UGC ad director planning B-roll shots for a short vertical ad.",
+    "You will return ONLY a JSON object with a 'shots' array — no prose, no markdown.",
+    "Each shot must be one short sentence (max 22 words) describing a single concrete visual where the creator physically interacts with the product.",
+    "Shots should escalate from intro (showing the product) to active use to finishing moment.",
+    "NO camera jargon, NO music notes, NO transitions. Just what's happening on screen.",
+    "Avoid mentioning brand names other than the product.",
+  ].join(' ');
+
+  const userPrompt = [
+    `Creator: ${creatorDescription || 'an early-20s lifestyle creator on camera'}`,
+    `Product: ${productName}`,
+    productDescription ? `What it does: ${productDescription}` : '',
+    productTone ? `Tone: ${productTone}` : '',
+    script ? `Voice-over script (so shots match the words):\n"${script.slice(0, 1200)}"` : '',
+    `Return JSON: {"shots":[{"description":"..."}, ...]} with exactly ${shotCount} shots.`,
+  ].filter(Boolean).join('\n');
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.7,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: sys },
+        { role: 'user', content: userPrompt },
+      ],
+    });
+    const raw = completion.choices?.[0]?.message?.content || '{}';
+    let parsed = {};
+    try { parsed = JSON.parse(raw); } catch { parsed = {}; }
+    const shots = Array.isArray(parsed?.shots) ? parsed.shots : [];
+    const cleaned = shots
+      .map((s) => ({
+        description: typeof s?.description === 'string'
+          ? s.description.trim()
+          : (typeof s === 'string' ? s.trim() : ''),
+      }))
+      .filter((s) => s.description.length > 0)
+      .slice(0, shotCount);
+
+    // Defensive fallback so the UI never sees an empty array.
+    if (cleaned.length === 0) {
+      const fallback = [
+        { description: `Holding the ${productName || 'product'} in their hand, smiling at camera in their bedroom.` },
+        { description: `Close-up of the ${productName || 'product'}: gently turning it to show the label.` },
+        { description: `Using the ${productName || 'product'} for the first time on camera, reacting naturally.` },
+      ].slice(0, shotCount);
+      return res.json({ success: true, data: { shots: fallback, fallback: true } });
+    }
+
+    return res.json({ success: true, data: { shots: cleaned } });
+  } catch (err) {
+    console.error('UGC shots/suggest error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to suggest shots' });
   }
 });
 
@@ -210,12 +321,61 @@ router.post('/generate', async (req, res) => {
       progress: 0,
     };
 
-    const { data: inserted, error: insErr } = await supabase
-      .from('ugc_jobs')
-      .insert(job)
-      .select()
-      .single();
-    if (insErr) throw insErr;
+    // Optional product shot plan — drives the Kling Elements B-roll +
+    // intercut step. Defensive parse so we never insert garbage even if the
+    // client misbehaves; clamp to 3 shots max (one minute total max ad len).
+    const rawShots = Array.isArray(req.body?.shotPlan) ? req.body.shotPlan : [];
+    const shotPlan = rawShots
+      .map((s) => ({
+        description: typeof s?.description === 'string' ? s.description.trim() : '',
+        duration_seconds: Number.isFinite(Number(s?.durationSeconds))
+          ? Math.min(10, Math.max(5, Math.round(Number(s.durationSeconds))))
+          : 5,
+      }))
+      .filter((s) => s.description.length > 0 && s.description.length <= 400)
+      .slice(0, 3);
+    if (shotPlan.length > 0) {
+      job.shot_plan = shotPlan;
+    }
+    // Diagnostic: easy to grep for, so we can confirm at a glance which
+    // ingredients each generation actually received (this was useful when
+    // a video came out lip-sync-only and we needed to know whether the
+    // client even sent shots/product image).
+    console.log(
+      `[ugc:new] user=${userId.slice(0,8)} tpl=${templateId.slice(0,8)} ` +
+      `product_image=${productImageUrl ? 'yes' : 'no'} ` +
+      `shots=${shotPlan.length} ` +
+      `voice=${job.voice_id}`
+    );
+
+    let inserted;
+    try {
+      const { data, error: insErr } = await supabase
+        .from('ugc_jobs')
+        .insert(job)
+        .select()
+        .single();
+      if (insErr) throw insErr;
+      inserted = data;
+    } catch (insErr) {
+      // Pre-migration fallback — if the `shot_plan` column isn't there yet,
+      // strip the shot plan and retry. The pipeline will still run, just
+      // without B-roll.
+      const msg = insErr?.message || '';
+      if (job.shot_plan && /shot_plan|broll_urls|creator_reference_image_url/i.test(msg)) {
+        console.warn('UGC generate: shot_plan column missing, retrying without it. Please apply migrations/005_product_shots.sql');
+        delete job.shot_plan;
+        const { data, error: retryErr } = await supabase
+          .from('ugc_jobs')
+          .insert(job)
+          .select()
+          .single();
+        if (retryErr) throw retryErr;
+        inserted = data;
+      } else {
+        throw insErr;
+      }
+    }
 
     // Fire-and-forget the pipeline. Errors are captured into the job row.
     setImmediate(() => {
@@ -408,6 +568,40 @@ router.get('/creator/jobs', async (req, res) => {
   } catch (err) {
     console.error('UGC creator jobs list error:', err);
     return res.status(500).json({ success: false, error: 'Failed to fetch creator jobs' });
+  }
+});
+
+/**
+ * The user's reusable creator "Library" — every completed creator clip they
+ * have ever generated, sorted newest-first. This is the source of truth for
+ * the "Library" tab on the Models screen and the Library toggle on the chat
+ * welcome screen, so they can re-pick a previously generated model instead
+ * of regenerating one each time.
+ */
+router.get('/library', async (req, res) => {
+  const userId = req.user.id;
+  const page = parseInt(req.query.page) || 1;
+  const limit = 50;
+  const offset = (page - 1) * limit;
+  try {
+    const { data, error, count } = await supabase
+      .from('ugc_creator_jobs')
+      .select('*', { count: 'exact' })
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    return res.json({
+      success: true,
+      data: data || [],
+      page,
+      total_pages: Math.ceil((count || 0) / limit),
+      total_count: count || 0,
+    });
+  } catch (err) {
+    console.error('UGC library list error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to fetch library' });
   }
 });
 

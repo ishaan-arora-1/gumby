@@ -100,25 +100,70 @@ async function uploadToBucket(buffer, ext, contentType, keyPrefix) {
   return signed.signedUrl;
 }
 
+/**
+ * Formats a fal.ai ValidationError into a human-readable string. The library
+ * stores the FastAPI-style detail array on `err.body.detail`, which we
+ * unpack so backend logs (and the user-facing job error) describe the actual
+ * problem instead of a generic "Unprocessable Entity".
+ */
+function describeFalError(err) {
+  const status = err?.status;
+  const detail = err?.body?.detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => d?.msg || d?.message || (d?.loc ? `${d.loc.join('.')}: ${d.type}` : null))
+      .filter(Boolean);
+    if (msgs.length) return `${status || 'fal error'}: ${msgs.join('; ')}`;
+  }
+  if (typeof detail === 'string') return `${status || 'fal error'}: ${detail}`;
+  return err?.message || 'Kling generation failed';
+}
+
 async function generateTextToVideo(prompt, durationSeconds, aspectRatio) {
   // Kling 2.6 Pro text-to-video. Audio off — we layer ElevenLabs TTS via
   // sync-lipsync only if the user promotes this creator into a full ad.
   // `duration` is an enum ("5" | "10"), so we clamp.
   const duration = String(durationSeconds === 10 ? 10 : 5);
-  const result = await fal.subscribe(KLING_TEXT_TO_VIDEO, {
-    input: {
-      prompt,
-      duration,
-      aspect_ratio: aspectRatio || '9:16',
-      generate_audio: false,
-      negative_prompt: 'blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed mouth, extra limbs, frozen still image',
-      cfg_scale: 0.5,
-    },
-    logs: false,
-  });
-  const url = result?.data?.video?.url || result?.video?.url;
-  if (!url) throw new Error('Kling 2.6 returned no video url');
-  return url;
+  const input = {
+    prompt,
+    duration,
+    aspect_ratio: aspectRatio || '9:16',
+    generate_audio: false,
+    negative_prompt: 'blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed mouth, extra limbs, frozen still image',
+    cfg_scale: 0.5,
+  };
+
+  // fal's queue occasionally returns 422 for transient reasons even when the
+  // input shape is valid (we've reproduced the exact same input succeeding
+  // seconds after a 422). Retry once with backoff before giving up so a flaky
+  // moderation pass doesn't ruin the user's first impression.
+  const maxAttempts = 2;
+  let lastErr;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const result = await fal.subscribe(KLING_TEXT_TO_VIDEO, { input, logs: false });
+      const url = result?.data?.video?.url || result?.video?.url;
+      if (!url) throw new Error('Kling 2.6 returned no video url');
+      return url;
+    } catch (err) {
+      lastErr = err;
+      // Log the full validation detail so we can see the *actual* reason
+      // (the default `util.inspect` truncation hides it as `[Object]`).
+      console.error(
+        `[creator] fal attempt ${attempt}/${maxAttempts} failed:`,
+        describeFalError(err),
+        JSON.stringify(err?.body || {}).slice(0, 600)
+      );
+      // Only retry on transient validation / rate-limit conditions.
+      const retryable = err?.status === 422 || err?.status === 429 || err?.status >= 500;
+      if (!retryable || attempt === maxAttempts) break;
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
+  }
+  const friendly = describeFalError(lastErr);
+  const wrapped = new Error(friendly);
+  wrapped.cause = lastErr;
+  throw wrapped;
 }
 
 /**
