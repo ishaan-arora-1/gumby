@@ -28,6 +28,13 @@ module.exports = {
   // dub them at use-time.
   KLING_TEXT_TO_VIDEO: 'fal-ai/kling-video/v2.6/pro/text-to-video',
 
+  // Kling 1.6 Elements — multi-reference image-to-video (up to 4 images +
+  // prompt). We use this to synthesize B-roll where the *exact* user-uploaded
+  // product and the previously-generated creator both appear together, so the
+  // final UGC ad cuts between talking-head footage and authentic product
+  // handling shots rather than just slapping the product as an overlay.
+  KLING_ELEMENTS: 'fal-ai/kling-video/v1.6/standard/elements',
+
   // ElevenLabs multilingual TTS exposed via fal.ai. Voice IDs are the
   // ElevenLabs library names (Rachel, Bella, Adam, ...).
   ELEVENLABS_TTS: 'fal-ai/elevenlabs/tts/multilingual-v2',
