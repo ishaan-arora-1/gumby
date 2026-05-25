@@ -120,16 +120,31 @@ function describeFalError(err) {
 }
 
 async function generateTextToVideo(prompt, durationSeconds, aspectRatio) {
-  // Kling 2.6 Pro text-to-video. Audio off — we layer ElevenLabs TTS via
-  // sync-lipsync only if the user promotes this creator into a full ad.
+  // Kling 3.0 Pro text-to-video. Audio off — we layer ElevenLabs TTS via
+  // the scene pipeline if the user promotes this creator into a full ad.
   // `duration` is an enum ("5" | "10"), so we clamp.
   const duration = String(durationSeconds === 10 ? 10 : 5);
+
+  // Steer Kling away from glamour-ad casting *without* asking for
+  // imperfections. The previous version explicitly invited
+  // "imperfections welcome" / "ordinary face" / "average appearance"
+  // which pushed the model toward wrinkled / older-looking subjects.
+  // What we actually want: a normal attractive adult — like the kind of
+  // person who'd film a real UGC clip on their phone. Healthy, relatable,
+  // not styled by a beauty agency.
+  const realnessSuffix =
+    ' The person is a naturally good-looking everyday adult — relatable, approachable, healthy, the kind of person you would actually see filming UGC on their phone. NOT a professional model, NOT a fashion ad, NOT a beauty campaign. Casual everyday clothing, candid natural expression, shot like a vertical phone video.';
+  const composedPrompt = `${prompt.trim()} ${realnessSuffix}`.slice(0, 1500);
+
   const input = {
-    prompt,
+    prompt: composedPrompt,
     duration,
     aspect_ratio: aspectRatio || '9:16',
     generate_audio: false,
-    negative_prompt: 'blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed mouth, extra limbs, frozen still image',
+    // Negative prompt does the *no-glamour-ad* steering, plus explicit
+    // anti-aging terms so realism guidance doesn't get misinterpreted
+    // as "make them old / wrinkled".
+    negative_prompt: 'professional model, supermodel, fashion model, magazine cover, glamour shot, beauty advertisement, runway, studio lighting, plastic skin, cgi, doll-like, old, elderly, aged, wrinkled, wrinkles, weathered face, gaunt, sickly, unhealthy, blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed mouth, extra limbs, frozen still image',
     cfg_scale: 0.5,
   };
 

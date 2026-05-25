@@ -2,21 +2,19 @@ import Foundation
 
 /// State machine for the UGC chat funnel.
 ///
-/// The chat supports three branching flows that converge in the same lip-sync
-/// pipeline (or, in option C, stop early):
+/// The chat supports three branching flows that converge in the studio:
 ///
-///   A. Models tab "Use" → chat opens already on `productEntry` with a curated
+///   A. Models tab "Use" → chat opens already on `studio` with a curated
 ///      template selected.
-///   B. Chat composer → user types a prompt → `generatingCreator` (Kling 2.6
-///      text-to-video) → `creatorReady` → "Make a full ad" → `productEntry`
-///      → … → `complete`.
+///   B. Chat composer → user types a prompt → `generatingCreator` (Kling 3.0
+///      text-to-video) → `creatorReady` → "Make a full ad" → `studio`.
 ///   C. Chat composer → user types a prompt → `generatingCreator` →
 ///      `creatorReady` → "Just save this clip" → `standaloneComplete`.
 ///
-/// We keep a linear `rawValue` ordering so the "summary stack" rendering can
-/// detect "everything before the active step" via `step >= …`. The
-/// `standaloneComplete` terminal sits at the end and is explicitly excluded
-/// from the lip-sync summary stack via `isLipsyncBranch`.
+/// Note: the old step-by-step lipsync funnel (productEntry → scriptDraft →
+/// productShots → voicePicker → generating → complete) is gone. Everything
+/// the user fills in lives on the `studio` card now, and the final pipeline
+/// is a single Kling 3.0 Pro call with built-in audio + lip-sync.
 enum UGCChatStep: Int, Comparable, Codable {
     // Branch root — composer with prompt input + "browse creators" affordance.
     case welcome = 0
@@ -25,33 +23,22 @@ enum UGCChatStep: Int, Comparable, Codable {
     // Text-to-video pipeline (B/C only).
     case generatingCreator = 2
     case creatorReady = 3
-    // Shared lip-sync funnel (used by A, and by B after promotion).
-    case productEntry = 4
-    case scriptDraft = 5
-    case voicePicker = 6
-    case generating = 7
-    case complete = 8
-    // Parallel terminal — user opted out of the lip-sync funnel.
-    case standaloneComplete = 9
+    // Combined studio screen — single card with every input.
+    case studio = 4
+    // Parallel terminal — user opted out of the full ad funnel.
+    case standaloneComplete = 5
 
     static func < (lhs: UGCChatStep, rhs: UGCChatStep) -> Bool {
         lhs.rawValue < rhs.rawValue
     }
 
-    /// True for any step inside the shared lip-sync funnel. Used by the chat
-    /// renderer to decide whether to show the "Product → Script → Voice"
-    /// summary stack.
-    var isLipsyncBranch: Bool {
-        switch self {
-        case .productEntry, .scriptDraft, .voicePicker, .generating, .complete:
-            return true
-        default:
-            return false
-        }
+    /// True when the studio view should be shown.
+    var isStudioBranch: Bool {
+        self == .studio
     }
 
-    /// True when the funnel has reached one of the two terminal states.
+    /// True when the funnel has reached one of the terminal states.
     var isTerminal: Bool {
-        self == .complete || self == .standaloneComplete
+        self == .standaloneComplete
     }
 }

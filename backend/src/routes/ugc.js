@@ -5,7 +5,7 @@ const { openai } = require('../config/openai');
 const { getRedisClient } = require('../config/redis');
 const { v4: uuidv4 } = require('uuid');
 const authMiddleware = require('../middleware/auth');
-const { runUGCJob, VOICE_PRESETS, generateVoicePreview } = require('../services/ugcPipeline');
+const { runUGCJob } = require('../services/ugcPipeline');
 const { runCreatorJob } = require('../services/creatorPipeline');
 
 router.use(authMiddleware);
@@ -99,36 +99,6 @@ router.get('/templates/:id', async (req, res) => {
   }
 });
 
-// ---------- Voices ----------
-
-router.get('/voices', (req, res) => {
-  // Strip the internal `sample` line — the iOS app only needs id/label/gender.
-  const data = VOICE_PRESETS.map(({ id, label, gender }) => ({ id, label, gender }));
-  return res.json({ success: true, data });
-});
-
-/**
- * Returns a signed URL to a short MP3 sample for the requested voice. The
- * sample is generated lazily on first call and cached in Supabase Storage,
- * so the second tap onwards is effectively free.
- */
-router.get('/voices/:id/preview', async (req, res) => {
-  const id = req.params.id;
-  if (!VOICE_PRESETS.some((v) => v.id === id)) {
-    return res.status(404).json({ success: false, error: 'Unknown voice' });
-  }
-  try {
-    const url = await generateVoicePreview(id);
-    return res.json({ success: true, data: { url } });
-  } catch (err) {
-    console.error('Voice preview error:', err);
-    return res.status(500).json({
-      success: false,
-      error: err?.message || 'Failed to generate preview',
-    });
-  }
-});
-
 // ---------- AI script writer ----------
 
 router.post('/script', async (req, res) => {
@@ -140,41 +110,60 @@ router.post('/script', async (req, res) => {
     targetSeconds: requestedSeconds,
   } = req.body || {};
 
-  if (!productName) {
-    return res.status(400).json({ success: false, error: 'productName required' });
-  }
-
   const tplName = template?.name || 'casual UGC';
   const tplActor = template?.actor_name || 'a creator';
   const tplSetting = template?.setting || '';
   const tplSampleScript = template?.sample_script || '';
-  // Target a ~22s voice-over so the lip-sync video is long enough to host
-  // 3 × 5s b-roll cuts via the rich-intercut path (threshold ≈ 21s). This
-  // is what keeps the voiceover playing continuously *over* the b-roll
-  // instead of falling to the append fallback (which pads silence).
-  // Client can override via `targetSeconds` if they want a shorter or
-  // longer ad. Template's `duration_seconds` is the CREATOR clip length,
-  // not the voice-over length, so we don't read it here anymore.
-  const targetSeconds = Math.min(45, Math.max(8, Number(requestedSeconds) || 22));
+  const hasProduct = productName && productName.trim().length > 0;
+  // Target the voice-over length to match the video duration the user
+  // selected (5/10/15s). Client sends this as `targetSeconds`. Defaults
+  // to 10s for the standard 2-scene pipeline.
+  const targetSeconds = Math.min(45, Math.max(5, Number(requestedSeconds) || 10));
   const wordTarget = Math.max(20, Math.round(targetSeconds * 2.4));
 
+  // We are NOT writing ad copy. We are writing what a real person would
+  // actually say into their phone camera while filming a casual video for
+  // their followers. The previous prompt drifted into ad-copy territory
+  // ("check this out", "here's what it does") which reads as obviously
+  // AI-written. The rewrite below forces a personal-story angle:
+  // creator talks about *their own* experience, not the product's
+  // features.
   const sys = [
-    "You are a top-tier UGC ad copywriter who writes scripts that sound like real, unscripted creator videos.",
-    "Output ONE script ONLY — plain text, no headings, no quotes, no stage directions, no parentheses.",
-    "Sound natural, conversational, contraction-heavy. Use hooks, casual filler ('honestly', 'okay so', 'real talk'), and a soft CTA at the end.",
-    "Do NOT use emojis. Do NOT use hashtags. Do NOT use brackets. Do NOT mention scripts/AI/ads.",
-    "First sentence must be a strong hook (under 8 words).",
-    `Length target: about ${wordTarget} words (${targetSeconds}s spoken).`,
-  ].join(' ');
+    "You write what a real person would say into their phone camera — NOT ad copy, NOT marketing copy, NOT a product pitch.",
+    "Imagine a friend casually telling their followers about something they discovered. They are not selling — they are sharing.",
+    "Output ONE script ONLY. Plain text. No headings, no quotes, no stage directions, no parentheses, no labels, no asterisks.",
+    "",
+    "VOICE RULES (these matter — break any of these and the output sounds AI-written):",
+    "- First-person personal experience. Lead with what happened to YOU, how YOU feel, what YOU noticed. Examples: 'I recently got something I'm kind of obsessed with…', 'Okay so I've been using this for a few weeks and…', 'I genuinely did not expect to like this as much as I do…'.",
+    "- Conversational, mid-sentence energy. Use contractions everywhere (I've, I'm, that's, don't, kinda, gonna). Use casual filler the way humans actually do: 'honestly', 'like', 'okay so', 'real talk', 'kind of', 'lowkey', 'I mean'. Don't overdo it — one or two per script.",
+    "- Specific over generic. Mention a tiny concrete detail (a moment, a feeling, a side-effect, a place you used it). Generic adjectives like 'amazing', 'incredible', 'life-changing', 'game-changer' are BANNED.",
+    "- No marketing verbs. NEVER use 'check this out', 'you have to try', 'introducing', 'this product', 'this brand', 'features', 'benefits', 'shop now', 'link in bio', 'get yours', 'sponsored', 'partnership'. NEVER address the audience as 'guys' more than once.",
+    "- No corporate transitions. NEVER use 'but here's the thing', 'spoiler alert', 'plot twist'.",
+    "- The 'CTA' should be a soft personal nudge a friend would say, not ad copy. Good: 'if you've been on the fence I'd just try it', 'do with that what you will', 'felt rude not to share'. Bad: 'click the link', 'shop now', 'don't miss out'.",
+    "- Sound mid-thought. It is fine — preferred, even — to start with 'so', 'okay', 'I', or a fragment.",
+    "- Vary sentence length. Some short. Some medium. Avoid three same-length sentences in a row.",
+    "- No emojis, no hashtags, no brackets, no asterisks. Never mention scripts, AI, ads, or video.",
+    "",
+    `Length target: about ${wordTarget} words (~${targetSeconds}s spoken). Slightly under is better than slightly over.`,
+  ].join('\n');
 
-  const userPrompt = [
-    `Template: "${tplName}" — performed by ${tplActor} in ${tplSetting}.`,
-    tplSampleScript ? `Tone reference (the actor's existing vibe): "${tplSampleScript}"` : '',
-    `Product: ${productName}`,
-    productDescription ? `What it is: ${productDescription}` : '',
-    tone ? `Brand tone: ${tone}` : '',
-    'Write the new spoken script, in first-person, that this creator would say about the product. Match the original vibe but talk about the product naturally and end with a soft CTA.',
-  ].filter(Boolean).join('\n');
+  const userPrompt = hasProduct
+    ? [
+        `Creator vibe: ${tplActor} filming casually in ${tplSetting}.`,
+        tplSampleScript ? `Creator's normal voice (just a tone reference, do NOT copy): "${tplSampleScript}"` : '',
+        `What they're talking about: ${productName}`,
+        productDescription ? `Context (for YOU, do not parrot this back — translate it into a personal moment): ${productDescription}` : '',
+        tone ? `Tone the brand is going for: ${tone}` : '',
+        '',
+        'Write what this person would actually say into their phone. They are sharing a personal experience with something they like — they are not pitching it. Lead with their own moment ("I recently…", "I\'ve been…", "Okay so I…"). Talk about how it fits into their life, not what the product is or does. End with a casual personal nudge, never an ad CTA.',
+      ].filter(Boolean).join('\n')
+    : [
+        `Creator vibe: ${tplActor} filming casually in ${tplSetting}.`,
+        tplSampleScript ? `Creator's normal voice (just a tone reference, do NOT copy): "${tplSampleScript}"` : '',
+        tone ? `Tone: ${tone}` : '',
+        '',
+        'Write what this person would actually say to their followers — a casual personal moment, a small story, an opinion, or something they\'ve been thinking about. First-person. Specific, not generic. Ends on a real human thought, not a CTA. No product placement.',
+      ].filter(Boolean).join('\n');
 
   try {
     const completion = await openai.chat.completions.create({
@@ -193,82 +182,68 @@ router.post('/script', async (req, res) => {
   }
 });
 
-// ---------- Product B-roll shot suggestions ----------
+// ---------- Parse prompt (direct mode) ----------
 
-/**
- * Auto-draft 2-3 shot ideas for the user's product B-roll. Given the
- * script + product info + creator description, GPT outputs visual shot
- * descriptions like "Holding the bag in both hands, smiling at camera"
- * that we then feed to Kling Elements. The user can edit/replace these
- * before kicking off generation.
- */
-router.post('/shots/suggest', async (req, res) => {
-  const {
-    productName = '',
-    productDescription = '',
-    productTone = '',
-    creatorDescription = '',
-    script = '',
-    shotCount: rawCount,
-  } = req.body || {};
-
-  const shotCount = Math.min(3, Math.max(2, parseInt(rawCount, 10) || 3));
-
-  const sys = [
-    "You're a UGC ad director planning B-roll shots for a short vertical ad.",
-    "You will return ONLY a JSON object with a 'shots' array — no prose, no markdown.",
-    "Each shot must be one short sentence (max 22 words) describing a single concrete visual where the creator physically interacts with the product.",
-    "Shots should escalate from intro (showing the product) to active use to finishing moment.",
-    "NO camera jargon, NO music notes, NO transitions. Just what's happening on screen.",
-    "Avoid mentioning brand names other than the product.",
-  ].join(' ');
-
-  const userPrompt = [
-    `Creator: ${creatorDescription || 'an early-20s lifestyle creator on camera'}`,
-    `Product: ${productName}`,
-    productDescription ? `What it does: ${productDescription}` : '',
-    productTone ? `Tone: ${productTone}` : '',
-    script ? `Voice-over script (so shots match the words):\n"${script.slice(0, 1200)}"` : '',
-    `Return JSON: {"shots":[{"description":"..."}, ...]} with exactly ${shotCount} shots.`,
-  ].filter(Boolean).join('\n');
+router.post('/parse-prompt', async (req, res) => {
+  const { prompt } = req.body || {};
+  if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 6) {
+    return res.status(400).json({ success: false, error: 'Prompt is too short' });
+  }
 
   try {
+    // The parser extracts three independent pieces of context from the
+    // free-form prompt: the creator, the product, AND the on-camera action
+    // (videoDescription). videoDescription is what we feed straight to
+    // Kling 3.0 Pro as the action prompt, so it has to be vivid and
+    // specific. If the user didn't describe the action in their prompt,
+    // we synthesize a sensible default — the user can still edit it in
+    // the Studio card before generating.
+    const systemPrompt = [
+      'You are a UGC video assistant. The user will give you a free-form prompt describing a video they want to create.',
+      'The video may or may not involve a product. Extract structured fields from their prompt and return ONLY a JSON object — no prose, no markdown.',
+      '',
+      'Fields to extract:',
+      '- creatorDescription: Physical appearance + setting of the person in the video (e.g. "20-year-old athletic man in a modern gym"). If not specified, infer a reasonable creator. 1-2 sentences max.',
+      '- productName: The product being advertised. Use empty string "" if no product is mentioned or the video is not about a product.',
+      '- productDescription: What the product does / key selling points. Empty string if no product.',
+      '- videoDescription: A concrete description of what the creator should DO on camera — the action, movement, body language, and interactions. Should describe one continuous shot (no scene cuts). If the user did not specify the action, infer a natural action that matches the creator and product. Be vivid and specific. 1-3 sentences.',
+      '- suggestedDuration: 5 or 10 seconds. Default 10. Use 5 only for very simple single-beat concepts.',
+      '- includeProduct: boolean — true if the user mentioned a specific product to feature, false otherwise.',
+      '',
+      'Return: {"creatorDescription":"...","productName":"...","productDescription":"...","videoDescription":"...","suggestedDuration":10,"includeProduct":true}',
+    ].join('\n');
+
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      temperature: 0.7,
+      temperature: 0.3,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: sys },
-        { role: 'user', content: userPrompt },
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt.trim() },
       ],
     });
+
     const raw = completion.choices?.[0]?.message?.content || '{}';
-    let parsed = {};
-    try { parsed = JSON.parse(raw); } catch { parsed = {}; }
-    const shots = Array.isArray(parsed?.shots) ? parsed.shots : [];
-    const cleaned = shots
-      .map((s) => ({
-        description: typeof s?.description === 'string'
-          ? s.description.trim()
-          : (typeof s === 'string' ? s.trim() : ''),
-      }))
-      .filter((s) => s.description.length > 0)
-      .slice(0, shotCount);
+    const parsed = JSON.parse(raw);
 
-    // Defensive fallback so the UI never sees an empty array.
-    if (cleaned.length === 0) {
-      const fallback = [
-        { description: `Holding the ${productName || 'product'} in their hand, smiling at camera in their bedroom.` },
-        { description: `Close-up of the ${productName || 'product'}: gently turning it to show the label.` },
-        { description: `Using the ${productName || 'product'} for the first time on camera, reacting naturally.` },
-      ].slice(0, shotCount);
-      return res.json({ success: true, data: { shots: fallback, fallback: true } });
-    }
+    // Kling 3.0 Pro only renders 5s or 10s — collapse 15s requests down so
+    // we don't promise the user something we can't deliver in one shot.
+    const rawDur = Number(parsed.suggestedDuration);
+    const suggestedDuration = rawDur >= 8 ? 10 : 5;
 
-    return res.json({ success: true, data: { shots: cleaned } });
+    const result = {
+      creatorDescription: (parsed.creatorDescription || '').slice(0, 500),
+      productName: (parsed.productName || '').slice(0, 200),
+      productDescription: (parsed.productDescription || '').slice(0, 500),
+      videoDescription: (parsed.videoDescription || '').slice(0, 1000),
+      suggestedDuration,
+      includeProduct: parsed.includeProduct !== false && (parsed.productName || '').trim().length > 0,
+    };
+
+    return res.json({ success: true, data: result });
   } catch (err) {
-    console.error('UGC shots/suggest error:', err);
-    return res.status(500).json({ success: false, error: 'Failed to suggest shots' });
+    console.error('UGC parse-prompt error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to parse prompt' });
   }
 });
 
@@ -278,32 +253,59 @@ router.post('/generate', async (req, res) => {
   const userId = req.user.id;
   const {
     templateId,
+    creatorDescription,
     productName,
     productDescription,
     productImageUrl,
+    inspirationImageUrl,
     script,
-    voiceId,
+    videoDescription,
+    videoDuration,
   } = req.body || {};
 
-  if (!templateId || !script || !script.trim()) {
-    return res.status(400).json({ success: false, error: 'templateId and script are required' });
+  // Either a templateId or a creatorDescription is required (direct mode)
+  const isDirectMode = !templateId && typeof creatorDescription === 'string' && creatorDescription.trim().length > 0;
+  if (!templateId && !isDirectMode) {
+    return res.status(400).json({ success: false, error: 'templateId or creatorDescription is required' });
+  }
+  if (!script || !script.trim()) {
+    return res.status(400).json({ success: false, error: 'script is required' });
   }
 
   try {
-    const { data: template, error: tplErr } = await supabase
-      .from('ugc_templates')
-      .select('*')
-      .eq('id', templateId)
-      .single();
-    if (tplErr || !template) {
-      return res.status(404).json({ success: false, error: 'Template not found' });
+    let template = null;
+    if (templateId) {
+      const { data: tplData, error: tplErr } = await supabase
+        .from('ugc_templates')
+        .select('*')
+        .eq('id', templateId)
+        .single();
+      if (tplErr || !tplData) {
+        return res.status(404).json({ success: false, error: 'Template not found' });
+      }
+      template = tplData;
     }
 
     const job = {
       id: uuidv4(),
       user_id: userId,
-      template_id: templateId,
-      template_snapshot: {
+      template_id: templateId || null,
+      product_name: productName || '',
+      product_image_url: productImageUrl || null,
+      product_description: productDescription || '',
+      // Optional inspiration photo. When present, the pipeline runs the
+      // image through Flux Kontext Pro to produce a creator-in-scene
+      // still that seeds the Kling 3.0 Pro video generation.
+      inspiration_image_url: typeof inspirationImageUrl === 'string' && inspirationImageUrl.length
+        ? inspirationImageUrl
+        : null,
+      script: script.trim(),
+      status: 'queued',
+      progress: 0,
+    };
+
+    if (template) {
+      job.template_snapshot = {
         name: template.name,
         actor_name: template.actor_name,
         setting: template.setting,
@@ -311,41 +313,40 @@ router.post('/generate', async (req, res) => {
         thumbnail_url: template.thumbnail_url,
         aspect_ratio: template.aspect_ratio,
         duration_seconds: template.duration_seconds,
-      },
-      product_name: productName || '',
-      product_image_url: productImageUrl || null,
-      product_description: productDescription || '',
-      script: script.trim(),
-      voice_id: voiceId || template.voice_id || 'Rachel',
-      status: 'queued',
-      progress: 0,
-    };
-
-    // Optional product shot plan — drives the Kling Elements B-roll +
-    // intercut step. Defensive parse so we never insert garbage even if the
-    // client misbehaves; clamp to 3 shots max (one minute total max ad len).
-    const rawShots = Array.isArray(req.body?.shotPlan) ? req.body.shotPlan : [];
-    const shotPlan = rawShots
-      .map((s) => ({
-        description: typeof s?.description === 'string' ? s.description.trim() : '',
-        duration_seconds: Number.isFinite(Number(s?.durationSeconds))
-          ? Math.min(10, Math.max(5, Math.round(Number(s.durationSeconds))))
-          : 5,
-      }))
-      .filter((s) => s.description.length > 0 && s.description.length <= 400)
-      .slice(0, 3);
-    if (shotPlan.length > 0) {
-      job.shot_plan = shotPlan;
+      };
+    } else {
+      // Direct mode: store creator description in the snapshot so the
+      // pipeline can use it for text-to-video scene generation.
+      job.template_snapshot = {
+        name: 'Direct prompt',
+        actor_name: creatorDescription.trim(),
+        setting: null,
+        video_url: null,
+        thumbnail_url: null,
+        aspect_ratio: '9:16',
+        duration_seconds: null,
+      };
     }
-    // Diagnostic: easy to grep for, so we can confirm at a glance which
-    // ingredients each generation actually received (this was useful when
-    // a video came out lip-sync-only and we needed to know whether the
-    // client even sent shots/product image).
+
+    // Single-shot pipeline: the user's video description + duration are
+    // passed straight to Kling 3.0 Pro. No GPT scene decomposition, no
+    // intercut B-roll — one prompt, one video generation call.
+    const cleanVideoDesc = typeof videoDescription === 'string' ? videoDescription.trim() : '';
+    if (cleanVideoDesc) {
+      job.video_description = cleanVideoDesc.slice(0, 1000);
+    }
+    // Kling 3.0 Pro accepts only `"5"` or `"10"` for duration. We collapse
+    // anything else (including legacy 15s requests from older clients) to
+    // the nearest supported value.
+    const rawDuration = Number(videoDuration);
+    job.video_duration = rawDuration >= 8 ? 10 : (rawDuration > 0 ? 5 : 10);
+
     console.log(
-      `[ugc:new] user=${userId.slice(0,8)} tpl=${templateId.slice(0,8)} ` +
+      `[ugc:new] user=${userId.slice(0,8)} tpl=${templateId ? templateId.slice(0,8) : 'direct'} ` +
+      `mode=single-shot${isDirectMode ? ' (direct)' : ''} ` +
+      `inspiration=${job.inspiration_image_url ? 'yes' : 'no'} ` +
       `product_image=${productImageUrl ? 'yes' : 'no'} ` +
-      `shots=${shotPlan.length} ` +
-      `voice=${job.voice_id}`
+      `video_dur=${job.video_duration || 'n/a'}`
     );
 
     let inserted;
@@ -358,13 +359,20 @@ router.post('/generate', async (req, res) => {
       if (insErr) throw insErr;
       inserted = data;
     } catch (insErr) {
-      // Pre-migration fallback — if the `shot_plan` column isn't there yet,
-      // strip the shot plan and retry. The pipeline will still run, just
-      // without B-roll.
+      // Pre-migration fallback — if new columns aren't there yet, strip
+      // them and retry. The pipeline will still run with whatever it has.
       const msg = insErr?.message || '';
-      if (job.shot_plan && /shot_plan|broll_urls|creator_reference_image_url/i.test(msg)) {
-        console.warn('UGC generate: shot_plan column missing, retrying without it. Please apply migrations/005_product_shots.sql');
-        delete job.shot_plan;
+      if (/not-null.*template_id|template_id.*not.null/i.test(msg) && isDirectMode) {
+        return res.status(400).json({
+          success: false,
+          error: 'Direct mode requires migration 007. Run: npm run migrate:nullable-template',
+        });
+      }
+      if (/shot_plan|broll_urls|creator_reference_image_url|creator_scene_image_url|inspiration_image_url|video_description|video_duration/i.test(msg)) {
+        console.warn('UGC generate: missing columns, retrying without new fields. Please apply latest migrations.');
+        delete job.video_description;
+        delete job.video_duration;
+        delete job.inspiration_image_url;
         const { data, error: retryErr } = await supabase
           .from('ugc_jobs')
           .insert(job)
@@ -461,7 +469,7 @@ router.delete('/jobs/:id', async (req, res) => {
 // promoted into a hidden ugc_templates row that feeds the standard
 // ElevenLabs TTS + sync-lipsync pipeline (option B).
 
-const MAX_CREATOR_DURATION_S = 10; // Kling 2.6 enum is "5" | "10"
+const MAX_CREATOR_DURATION_S = 10; // Kling 3.0 enum is "5" | "10"
 const MIN_PROMPT_LEN = 6;
 
 router.post('/creator/generate', async (req, res) => {
@@ -671,7 +679,6 @@ router.post('/creator/jobs/:id/promote-to-template', async (req, res) => {
       video_url: job.video_url,
       thumbnail_url: job.thumbnail_url || job.video_url,
       sample_script: sampleScript,
-      voice_id: 'Rachel',
       aspect_ratio: job.aspect_ratio || '9:16',
       duration_seconds: job.duration_seconds || 5,
       tags: ['custom'],
@@ -700,7 +707,30 @@ router.post('/creator/jobs/:id/promote-to-template', async (req, res) => {
   }
 });
 
-// ---------- Product image upload (signed URL passthrough) ----------
+// ---------- Image uploads (signed URL passthrough) ----------
+
+/**
+ * Upload helper used by both product images and inspiration images. Stores
+ * the bytes under a user-scoped path in the ugc-videos bucket and returns
+ * a long-lived signed URL the iOS client can pass straight into a
+ * subsequent /ugc/generate request.
+ */
+async function uploadImageBase64({ kind, userId, contentType, base64 }) {
+  const buf = Buffer.from(base64, 'base64');
+  const ext = (contentType || '').includes('jpeg') ? 'jpg'
+            : (contentType || '').includes('webp') ? 'webp'
+            : 'png';
+  const subdir = kind === 'inspiration' ? 'inspirations' : 'products';
+  const objectPath = `${subdir}/${userId}/${uuidv4()}.${ext}`;
+  const { error: upErr } = await supabase.storage
+    .from('ugc-videos')
+    .upload(objectPath, buf, { contentType: contentType || 'image/png', upsert: false });
+  if (upErr) throw upErr;
+  const { data: signed } = await supabase.storage
+    .from('ugc-videos')
+    .createSignedUrl(objectPath, 60 * 60 * 24 * 365);
+  return signed?.signedUrl || null;
+}
 
 router.post('/upload-product-image', async (req, res) => {
   const { contentType, base64 } = req.body || {};
@@ -708,21 +738,40 @@ router.post('/upload-product-image', async (req, res) => {
     return res.status(400).json({ success: false, error: 'base64 image required' });
   }
   try {
-    const buf = Buffer.from(base64, 'base64');
-    const ext = (contentType || '').includes('jpeg') ? 'jpg'
-              : (contentType || '').includes('webp') ? 'webp'
-              : 'png';
-    const path = `products/${req.user.id}/${uuidv4()}.${ext}`;
-    const { error: upErr } = await supabase.storage
-      .from('ugc-videos')
-      .upload(path, buf, { contentType: contentType || 'image/png', upsert: false });
-    if (upErr) throw upErr;
-    const { data: signed } = await supabase.storage
-      .from('ugc-videos')
-      .createSignedUrl(path, 60 * 60 * 24 * 365);
-    return res.json({ success: true, data: { url: signed?.signedUrl } });
+    const url = await uploadImageBase64({
+      kind: 'product',
+      userId: req.user.id,
+      contentType,
+      base64,
+    });
+    return res.json({ success: true, data: { url } });
   } catch (err) {
     console.error('UGC product image upload error:', err);
+    return res.status(500).json({ success: false, error: 'Upload failed' });
+  }
+});
+
+/**
+ * Same shape as /upload-product-image, separate path so the bucket layout
+ * makes the intent obvious and so we can attach different access policies
+ * later if needed. The returned signed URL is what the iOS client passes
+ * to /ugc/generate as `inspirationImageUrl`.
+ */
+router.post('/upload-inspiration-image', async (req, res) => {
+  const { contentType, base64 } = req.body || {};
+  if (!base64) {
+    return res.status(400).json({ success: false, error: 'base64 image required' });
+  }
+  try {
+    const url = await uploadImageBase64({
+      kind: 'inspiration',
+      userId: req.user.id,
+      contentType,
+      base64,
+    });
+    return res.json({ success: true, data: { url } });
+  } catch (err) {
+    console.error('UGC inspiration image upload error:', err);
     return res.status(500).json({ success: false, error: 'Upload failed' });
   }
 });

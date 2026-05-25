@@ -49,10 +49,6 @@ struct ContentView: View {
             ExploreView(selectedDestination: $selectedDestination)
         case .ugc:
             UGCView(selectedDestination: $selectedDestination)
-        case .calendar:
-            CalendarView()
-        case .posts:
-            PostsView()
         case .history:
             HistoryView(selectedDestination: $selectedDestination)
         }

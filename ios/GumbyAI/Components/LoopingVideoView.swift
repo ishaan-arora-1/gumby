@@ -31,6 +31,7 @@ struct LoopingVideoView: View {
             Color.black
 
             PlayerLayerView(controller: controller, aspectFill: aspectFill)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea()
 
             switch controller.state {
@@ -99,7 +100,9 @@ final class PlayerController: ObservableObject {
     private var looper: AVPlayerLooper?
     private var statusObservation: NSKeyValueObservation?
     private var loadedRangesObservation: NSKeyValueObservation?
+    private var timeControlObservation: NSKeyValueObservation?
     private var failureObserver: NSObjectProtocol?
+    private var endOfPlaybackObserver: NSObjectProtocol?
     private var attachedURL: URL?
 
     init() {
@@ -113,7 +116,10 @@ final class PlayerController: ObservableObject {
         tearDown()
         attachedURL = url
 
-        let asset = AVURLAsset(url: url)
+        // Reuse a preloaded AVURLAsset when available so the moov atom /
+        // track metadata don't have to be re-fetched here on the critical
+        // path. See VideoPreloader for the warmup strategy.
+        let asset = VideoPreloader.shared.asset(for: url)
         let item = AVPlayerItem(asset: asset)
         item.preferredForwardBufferDuration = 2.0
 
@@ -136,9 +142,26 @@ final class PlayerController: ObservableObject {
                     print("[LoopingVideoView] failed:", msg, "url=", url.absoluteString.prefix(120))
                     self.state = .failed(msg)
                 case .unknown:
-                    self.state = .loading
+                    // Don't downgrade state if we've already flipped to .ready via
+                    // timeControlStatus — sometimes the KVO fires .initial=.unknown
+                    // *after* playback has already started.
+                    if self.state != .ready { self.state = .loading }
                 @unknown default:
-                    self.state = .loading
+                    if self.state != .ready { self.state = .loading }
+                }
+            }
+        }
+
+        // Belt-and-suspenders: the AVPlayerItem.status KVO is occasionally flaky
+        // on iOS 26 (we've seen it stay at .unknown even while the AVPlayer is
+        // actively rendering frames). Observing AVPlayer.timeControlStatus lets
+        // us clear the loading spinner the instant playback actually begins,
+        // regardless of what the item-status KVO reports.
+        timeControlObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
+            Task { @MainActor in
+                guard let self else { return }
+                if player.timeControlStatus == .playing {
+                    self.state = .ready
                 }
             }
         }
@@ -152,6 +175,36 @@ final class PlayerController: ObservableObject {
             let msg = err?.localizedDescription ?? "Failed to play to end"
             print("[LoopingVideoView] FailedToPlayToEnd:", msg)
             Task { @MainActor in self?.state = .failed(msg) }
+        }
+
+        // Belt-and-suspenders manual loop. AVPlayerLooper *should* keep the
+        // clip cycling on its own — but in practice we've seen it stop
+        // after a single playthrough on some iOS versions / asset shapes
+        // (probably a race with the preloader handing back a partially
+        // ready AVURLAsset). Observing `.AVPlayerItemDidPlayToEndTime`
+        // and explicitly seeking to zero + resuming guarantees the loop
+        // regardless of whether the looper is working. When the looper
+        // *is* working, this notification fires on the templateItem (not
+        // the active duplicate), so the seek is harmless.
+        //
+        // The observer is registered on `nil` object so it catches the
+        // end notification for whichever AVPlayerItem the looper is
+        // currently playing (the looper rotates between duplicates of
+        // the template item, and we don't get a handle on them).
+        endOfPlaybackObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                // Only act on this player's items, not other LoopingVideoViews.
+                guard let current = self.player.currentItem else { return }
+                current.seek(to: .zero, completionHandler: nil)
+                if self.player.timeControlStatus != .playing {
+                    self.player.play()
+                }
+            }
         }
 
         if isActive {
@@ -170,9 +223,15 @@ final class PlayerController: ObservableObject {
         statusObservation = nil
         loadedRangesObservation?.invalidate()
         loadedRangesObservation = nil
+        timeControlObservation?.invalidate()
+        timeControlObservation = nil
         if let observer = failureObserver {
             NotificationCenter.default.removeObserver(observer)
             failureObserver = nil
+        }
+        if let observer = endOfPlaybackObserver {
+            NotificationCenter.default.removeObserver(observer)
+            endOfPlaybackObserver = nil
         }
         player.pause()
         looper?.disableLooping()
@@ -184,7 +243,11 @@ final class PlayerController: ObservableObject {
     deinit {
         statusObservation?.invalidate()
         loadedRangesObservation?.invalidate()
+        timeControlObservation?.invalidate()
         if let observer = failureObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = endOfPlaybackObserver {
             NotificationCenter.default.removeObserver(observer)
         }
     }

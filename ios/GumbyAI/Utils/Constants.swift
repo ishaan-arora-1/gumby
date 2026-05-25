@@ -54,7 +54,7 @@ enum AppConstants {
     static let sidebarWidthRatio: CGFloat = 0.8
     static let pageSize = 20
 
-    static let baseURL = "http://localhost:3000/api"
+    static let baseURL = "http://192.168.1.35:3000/api"
 
     static let supabaseURL = "https://zsmwvjrvuucuablyibko.supabase.co"
     static let supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzbXd2anJ2dXVjdWFibHlpYmtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MDAzNjQsImV4cCI6MjA5MzM3NjM2NH0.5F6QCXWf6bP7zfB9DpHYq0y6RfKiEzEhiEF6YTBDUXc"

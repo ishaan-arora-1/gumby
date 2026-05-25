@@ -4,8 +4,6 @@ enum NavigationDestination: Hashable {
     case chat
     case explore
     case ugc
-    case calendar
-    case posts
     case history
 }
 
@@ -42,102 +40,142 @@ struct SidebarView: View {
         VStack(alignment: .leading, spacing: 0) {
             topBar
                 .padding(.horizontal, 18)
-                .padding(.top, 8)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("explore")
-                        .font(.system(size: 30, weight: .heavy))
-                        .foregroundStyle(AppConstants.textPrimary)
-                        .padding(.top, 12)
-
-                    VStack(spacing: 12) {
-                        exploreButton(title: "Models") {
-                            selectedDestination = .ugc
-                            sidebarVM.close()
-                        }
-                        exploreButton(title: "Calendar") {
-                            selectedDestination = .calendar
-                            sidebarVM.close()
-                        }
-                        exploreButton(title: "Posts") {
-                            selectedDestination = .posts
-                            sidebarVM.close()
-                        }
-                    }
+                    modelsButton
+                        .padding(.top, 8)
 
                     historyList
                         .padding(.top, 8)
                 }
                 .padding(.horizontal, 18)
-                .padding(.bottom, 16)
+                .padding(.bottom, 72)
             }
-
-            footerBar
-                .padding(.horizontal, 14)
-                .padding(.bottom, 14)
-                .padding(.top, 6)
         }
         .frame(maxHeight: .infinity)
         .background(AppConstants.chatCanvasBlack)
+        .overlay(alignment: .bottomTrailing) {
+            newChatButton
+                .padding(.trailing, 18)
+                .padding(.bottom, 18)
+        }
     }
 
-    // MARK: - Top bar
+    // MARK: - Top bar (ChatGPT-style)
 
     private var topBar: some View {
-        HStack(spacing: 10) {
-            Button(action: {}) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(AppConstants.textPrimary)
-                    .frame(width: 38, height: 38)
-                    .background(Circle().fill(AppConstants.chatComposerInner))
-            }
+        HStack(alignment: .center, spacing: 12) {
+            Image("LogoCombined")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 38)
+                .accessibilityLabel("Create UGC")
 
-            Menu {
-                Button("Created by me") {}
-                Button("Shared with me") {}
-            } label: {
-                HStack(spacing: 6) {
-                    Text("Created by me")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(AppConstants.textPrimary)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
+            Spacer(minLength: 8)
+
+            HStack(spacing: 14) {
+                Button(action: {}) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 17, weight: .medium))
                         .foregroundStyle(AppConstants.textPrimary)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(AppConstants.chatComposerInner)
-                .clipShape(Capsule())
-            }
+                .buttonStyle(.plain)
 
-            Spacer()
+                Menu {
+                    Button(role: .destructive) {
+                        authService.signOut()
+                        sidebarVM.close()
+                    } label: {
+                        Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                } label: {
+                    profileAvatar
+                        .frame(width: 32, height: 32)
+                }
+            }
+            .padding(.leading, 14)
+            .padding(.trailing, 8)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(AppConstants.chatComposerInner)
+            )
         }
     }
 
-    // MARK: - Explore buttons
+    // MARK: - New chat floater (bottom right)
 
-    private func exploreButton(title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 18, weight: .heavy))
-                    .foregroundStyle(.white)
-                Spacer()
-                Image(systemName: "arrow.right")
+    private var newChatButton: some View {
+        Button {
+            chatVM.newConversation()
+            selectedDestination = .chat
+            sidebarVM.close()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("New chat")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
             }
+            .foregroundStyle(.white)
             .padding(.horizontal, 18)
-            .padding(.vertical, 16)
-            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(SidebarStyle.modelsBlue)
+                Capsule(style: .continuous)
+                    .fill(AppConstants.authAccentBlue)
             )
+            .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Models
+
+    private var modelsButton: some View {
+        Button {
+                selectedDestination = .ugc
+                sidebarVM.close()
+            } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(AppConstants.chatComposerInner)
+                            .frame(width: 40, height: 40)
+                        Image(systemName: "person.crop.rectangle.stack")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(AppConstants.accentGradient)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Models")
+                            .font(.gumby(16, weight: .medium))
+                            .foregroundStyle(AppConstants.textPrimary)
+                        Text("Browse AI creators")
+                            .font(.gumby(13, weight: .regular))
+                            .foregroundStyle(AppConstants.chatMutedLabel)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppConstants.chatMutedLabel)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: AppConstants.buttonCornerRadius, style: .continuous)
+                        .fill(AppConstants.chatComposerSurface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppConstants.buttonCornerRadius, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
     }
 
     // MARK: - History
@@ -179,103 +217,50 @@ struct SidebarView: View {
         }
     }
 
-    // MARK: - Footer
-
-    private var footerBar: some View {
-        HStack(spacing: 10) {
-            Menu {
-                Button {
-                    chatVM.newConversation()
-                    selectedDestination = .chat
-                    sidebarVM.close()
-                } label: {
-                    Label("New chat", systemImage: "square.and.pencil")
-                }
-                Divider()
-                Button(role: .destructive) {
-                    authService.signOut()
-                    sidebarVM.close()
-                } label: {
-                    Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    workspaceAvatar
-                    Text(workspaceName)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppConstants.textPrimary)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 8)
-                .background(
-                    Capsule().fill(AppConstants.chatComposerInner)
-                )
-            }
-
-            ZStack(alignment: .topTrailing) {
-                profileAvatar
-                    .frame(width: 40, height: 40)
-                    .clipShape(Circle())
-
-                Circle()
-                    .fill(Color(red: 1.0, green: 0.27, blue: 0.27))
-                    .frame(width: 10, height: 10)
-                    .overlay(Circle().stroke(AppConstants.chatCanvasBlack, lineWidth: 2))
-                    .offset(x: 1, y: -1)
-            }
-        }
-    }
-
-    private var workspaceName: String {
-        let first = authService.currentUser?.name.split(separator: " ").first.map(String.init) ?? "My"
-        return "\(first)'s Gumby"
-    }
-
     private var workspaceInitial: String {
         let name = authService.currentUser?.name ?? "M"
         return String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased()
     }
 
-    private var workspaceAvatar: some View {
-        Circle()
-            .fill(LinearGradient(
-                colors: [Color(red: 0.93, green: 0.18, blue: 0.55), Color(red: 0.78, green: 0.29, blue: 0.93)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ))
-            .frame(width: 28, height: 28)
-            .overlay(
-                Text(workspaceInitial)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
-            )
+    @ViewBuilder
+    private var profileAvatar: some View {
+        monochromeAvatar(size: 32, fontSize: 13)
     }
 
     @ViewBuilder
-    private var profileAvatar: some View {
+    private func monochromeAvatar(size: CGFloat, fontSize: CGFloat) -> some View {
         if let avatarURL = authService.currentUser?.avatarURL,
            let url = URL(string: avatarURL) {
-            AsyncImage(url: url) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                Circle().fill(AppConstants.chatComposerInner)
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .saturation(0)
+                default:
+                    avatarPlaceholder(size: size, fontSize: fontSize)
+                }
             }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
         } else {
-            Circle()
-                .fill(AppConstants.accentGradient)
-                .overlay(
-                    Text(workspaceInitial)
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                )
+            avatarPlaceholder(size: size, fontSize: fontSize)
         }
     }
-}
 
-private enum SidebarStyle {
-    static let modelsBlue = Color(red: 0.16, green: 0.27, blue: 0.55)
+    private func avatarPlaceholder(size: CGFloat, fontSize: CGFloat) -> some View {
+        Circle()
+            .fill(Color(white: 0.22))
+            .frame(width: size, height: size)
+            .overlay(
+                Text(workspaceInitial)
+                    .font(.system(size: fontSize, weight: .semibold))
+                    .foregroundStyle(Color(white: 0.92))
+            )
+            .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+    }
 }
 
 private struct HistoryRow: View {

@@ -3,16 +3,41 @@ import UIKit
 
 @MainActor
 final class UGCViewModel: ObservableObject {
+    /// The Models screen has three sections:
+    ///   • Explore  — the curated 6 templates
+    ///   • Library  — every creator the user has personally generated
+    ///   • My Videos — completed final UGC ads
+    /// Library lets users reuse a previously generated creator without
+    /// regenerating one — tap "Use" and you land straight on product entry.
     enum Tab: String, CaseIterable, Hashable {
-        case templates = "Templates"
+        case explore = "Explore"
+        case library = "Library"
         case myVideos = "My Videos"
+
+        var iconName: String {
+            switch self {
+            case .explore: "person.crop.rectangle.stack"
+            case .library: "sparkles"
+            case .myVideos: "play.rectangle.fill"
+            }
+        }
+    }
+
+    /// Explore + Library tabs can show the TikTok-style feed or Pinterest grid.
+    enum FeedLayout: Hashable {
+        case feed
+        case grid
     }
 
     // Catalog
     @Published var templates: [UGCTemplate] = []
-    @Published var voices: [UGCVoicePreset] = []
     @Published var isLoadingTemplates = false
     @Published var templatesError: String?
+
+    // Library
+    @Published var library: [UGCCreatorJob] = []
+    @Published var isLoadingLibrary = false
+    @Published var libraryError: String?
 
     // Jobs
     @Published var jobs: [UGCJob] = []
@@ -20,7 +45,8 @@ final class UGCViewModel: ObservableObject {
     @Published var jobsError: String?
 
     // UI
-    @Published var selectedTab: Tab = .templates
+    @Published var selectedTab: Tab = .explore
+    @Published var feedLayout: FeedLayout = .feed
     @Published var feedIndex: Int = 0
     @Published var lastJustCreatedJob: UGCJob?
 
@@ -35,19 +61,25 @@ final class UGCViewModel: ObservableObject {
         defer { isLoadingTemplates = false }
         do {
             templates = try await service.fetchTemplates(page: 1)
+            VideoPreloader.shared.preload(urlStrings: templates.map { $0.videoURL })
             templatesError = nil
         } catch {
             templatesError = error.localizedDescription
         }
     }
 
-    func loadVoices() async {
-        guard voices.isEmpty else { return }
+    // MARK: - Library
+
+    func loadLibrary(force: Bool = false) async {
+        if !force, !library.isEmpty { return }
+        isLoadingLibrary = true
+        defer { isLoadingLibrary = false }
         do {
-            voices = try await service.fetchVoices()
+            library = try await service.fetchLibrary()
+            VideoPreloader.shared.preload(urlStrings: library.map { $0.videoURL })
+            libraryError = nil
         } catch {
-            // silently fall back; voice preset is optional UX sugar
-            print("voices load failed:", error)
+            libraryError = error.localizedDescription
         }
     }
 
@@ -80,8 +112,7 @@ final class UGCViewModel: ObservableObject {
         productName: String,
         productDescription: String,
         productImage: UIImage?,
-        script: String,
-        voiceId: String
+        script: String
     ) async throws -> UGCJob {
         var imageURL: String? = nil
         if let img = productImage {
@@ -90,11 +121,14 @@ final class UGCViewModel: ObservableObject {
         let job = try await service.startGeneration(
             UGCService.GenerateRequest(
                 templateId: template.id,
+                creatorDescription: nil,
                 productName: productName,
                 productDescription: productDescription,
                 productImageURL: imageURL,
+                inspirationImageURL: nil,
                 script: script,
-                voiceId: voiceId
+                videoDescription: "",
+                videoDuration: 10
             )
         )
         // Optimistic insert; real status will get reconciled by polling.

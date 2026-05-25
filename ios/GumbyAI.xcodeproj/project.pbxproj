@@ -9,12 +9,19 @@
 /* Begin PBXBuildFile section */
 		1044B71DD818180882DCA91F /* UGCViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8C1B7A601D5E43731A8363F /* UGCViewModel.swift */; };
 		10BB90C3E435912ED1C0AC47 /* ExploreModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BB0EFDDD0A109806615386E /* ExploreModel.swift */; };
+		1C760142EE279CE84D7CCD23 /* VideoPreloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80858C0A487F51C97DD1FC51 /* VideoPreloader.swift */; };
 		1CA117CEF4DFECD33E2327D0 /* GumbyAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4FC942717BF451E7E63936 /* GumbyAIApp.swift */; };
 		219CE888BD3EF1F30E648106 /* UGCChatStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = 338678292C25E6F3C300A453 /* UGCChatStep.swift */; };
 		242C00803187219F86146340 /* CalendarViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E092D9BD1A60A50EA3C2538 /* CalendarViewModel.swift */; };
+		2779B94547DBBAE276DE0EAF /* UGCLibraryFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = C53AB83C867D22F265D5A352 /* UGCLibraryFeed.swift */; };
+		2AE18D6CB1463B0D74B90584 /* GumbyFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0750F76BD0AA61D78F9D6258 /* GumbyFont.swift */; };
 		2B246C20145CE0D2B11B52E7 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 440E91AFA494511C85FDD620 /* ChatView.swift */; };
 		2B9F9B448A70F7800D9AD75B /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E85FEFFD6A23FF4D0F258C7 /* AuthService.swift */; };
+		34995B5DD49A4B6F7823C3D3 /* UGCStudioCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3BE7EC1F928FDA40A5DB4ED /* UGCStudioCard.swift */; };
+		34D691774AD966B2AFE0049E /* Inter-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 08F85FB706CEE00AD05D4EAC /* Inter-Medium.ttf */; };
 		38BA2916EECAC0B11BC58767 /* UGCMyVideosView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAA930662A81E1CC581D1992 /* UGCMyVideosView.swift */; };
+		3B13075D310CE44800598959 /* UGCStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74601F935F6130491A09CCFC /* UGCStudioView.swift */; };
+		3B4DDE0BB1022D96948CC683 /* UGCTemplatesGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68CB199C8A83C5AD8B113128 /* UGCTemplatesGrid.swift */; };
 		3B68C13C408A1B4B8880FBD8 /* UGCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A38374DAEC0E93F48539A18 /* UGCService.swift */; };
 		418E13255C25F0C3A925D087 /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78CC595D4EF5EFE0FEC1553F /* APIService.swift */; };
 		440329F1BB496C312961A721 /* ImageUploadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2558987DC923669B848A5BE0 /* ImageUploadService.swift */; };
@@ -27,14 +34,18 @@
 		6B8087D494DFBD72C153FAA0 /* UGCView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4531B869782BEAE63FD9391B /* UGCView.swift */; };
 		6D8DC7DE00FE54369B8A6BB6 /* LibrarySheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9FC0267D1F94F9EA78F407 /* LibrarySheetView.swift */; };
 		6FC25C9D4C83B6559D8EA263 /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = 571EC0C3971652212523B966 /* MessageBubble.swift */; };
+		6FC802B04573BB954AD284CB /* UGCDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = D294B2858F4F9FD3115E332A /* UGCDraft.swift */; };
 		73CBBF6C1388BEB0B050757A /* QuestionsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11B30E1041C4EF37EA31C37 /* QuestionsCard.swift */; };
 		770A231D2D133D8F2D052C37 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62E9FC71E251327AA978E683 /* LibraryViewModel.swift */; };
 		7DDEE956021A6B93AB537DE5 /* HistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066CACC6993AE463C467A491 /* HistoryViewModel.swift */; };
 		8720A3683920F946BB4D89B9 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18E5CDA325A4881BEF156230 /* SidebarView.swift */; };
+		8B2FAFFBEFB381DE713D5D6C /* UGCLibraryGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2EBE4CD02090E411655CFFE /* UGCLibraryGrid.swift */; };
 		8E8D1298F7F6D12AC108F464 /* ChatMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB5E0CE2B0B49CD3A450E1B /* ChatMode.swift */; };
 		8F39586620A51D51EF7B8EBC /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3421C3D432FFEC9401B1053D /* HistoryView.swift */; };
 		92474E67BCC0F826E1F3BCDE /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = D18AF1078C57AF091CBD82DD /* KeychainHelper.swift */; };
+		934BA970BCAFEAB91DAC9338 /* ReelActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D67D0AF6460EA88BDF747FE /* ReelActionButton.swift */; };
 		94BBFFBBB8E808307EAAB5E7 /* SavedAsset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C39A51F75B689665FBA8360 /* SavedAsset.swift */; };
+		95DD3C59B9FA29EB825545EC /* Inter-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = D0404521E61659D80650E9EE /* Inter-Regular.ttf */; };
 		9E07701790B037CD56955986 /* UGCCreatorJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D09A4B99DE204F54DEFAF42 /* UGCCreatorJob.swift */; };
 		9E268DDED4A01ECB7CC9B5DC /* PostsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6ACAB05A4A7BCDD389879D2 /* PostsView.swift */; };
 		A29E4E60DC1A879A4A25ED70 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56250E82A2630B6EE055EDD8 /* AuthView.swift */; };
@@ -43,6 +54,7 @@
 		A8BB61D975BE39DAB817B590 /* LoopingVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748673CD393FB66300E3AEAB /* LoopingVideoView.swift */; };
 		AF1F531638B9CD613E95082E /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12212E910084482550AF6BF7 /* ChatViewModel.swift */; };
 		B323DD756F4CEB933007E23C /* Post.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2DCF5E5A1710A795552781 /* Post.swift */; };
+		B526D85A47C03657CA6C5CFF /* Inter-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C56959688962B981A78D419E /* Inter-SemiBold.ttf */; };
 		B61F75B379A2D999A03D2672 /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 959DB453AB2603D0492A7177 /* CalendarView.swift */; };
 		B94B676742ACF627B3111C26 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 243C6684EE4A6F1E6DE70E2D /* ContentView.swift */; };
 		BA1EB7DA81317312297AEAE6 /* MoodBoardCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 126F2BF50F143D274251EB85 /* MoodBoardCard.swift */; };
@@ -51,6 +63,7 @@
 		BE944382C8B93CACD6242387 /* ExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F5B2DDC773CA2CEE5452F4 /* ExploreView.swift */; };
 		C2ED662E7F0EAB7D08270B61 /* MoodBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBEF17698BEFA3AC4AAD357A /* MoodBoard.swift */; };
 		C314E1E99CBF292BBD15C1CD /* GeneratedImagesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AAE9C2588BE8C217586CEB1 /* GeneratedImagesStore.swift */; };
+		C37418BE90898A763B38DEB8 /* Inter-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C315094353468AE658194B67 /* Inter-Bold.ttf */; };
 		CF0826A194E22A2802BEFE89 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CD9275348378EB0E86328112 /* Assets.xcassets */; };
 		D07CCDC33414A192D05D4ED6 /* SuggestionChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B7762F490F7BB425D3DFA08 /* SuggestionChip.swift */; };
 		E1404E138D70709D17334C03 /* APIResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AC9B477DDC5B01DCFB15CC7 /* APIResponse.swift */; };
@@ -61,6 +74,8 @@
 
 /* Begin PBXFileReference section */
 		066CACC6993AE463C467A491 /* HistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewModel.swift; sourceTree = "<group>"; };
+		0750F76BD0AA61D78F9D6258 /* GumbyFont.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GumbyFont.swift; sourceTree = "<group>"; };
+		08F85FB706CEE00AD05D4EAC /* Inter-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Inter-Medium.ttf"; sourceTree = "<group>"; };
 		0C39A51F75B689665FBA8360 /* SavedAsset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedAsset.swift; sourceTree = "<group>"; };
 		0E092D9BD1A60A50EA3C2538 /* CalendarViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarViewModel.swift; sourceTree = "<group>"; };
 		0FEA85E04CB3D11535BF320E /* RemoteImagePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteImagePreview.swift; sourceTree = "<group>"; };
@@ -86,25 +101,36 @@
 		56250E82A2630B6EE055EDD8 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		571EC0C3971652212523B966 /* MessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubble.swift; sourceTree = "<group>"; };
 		5AC9B477DDC5B01DCFB15CC7 /* APIResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIResponse.swift; sourceTree = "<group>"; };
+		5D67D0AF6460EA88BDF747FE /* ReelActionButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReelActionButton.swift; sourceTree = "<group>"; };
 		5E85FEFFD6A23FF4D0F258C7 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		62E9FC71E251327AA978E683 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
+		68CB199C8A83C5AD8B113128 /* UGCTemplatesGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCTemplatesGrid.swift; sourceTree = "<group>"; };
+		74601F935F6130491A09CCFC /* UGCStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCStudioView.swift; sourceTree = "<group>"; };
 		748673CD393FB66300E3AEAB /* LoopingVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopingVideoView.swift; sourceTree = "<group>"; };
 		78CC595D4EF5EFE0FEC1553F /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
 		7A38374DAEC0E93F48539A18 /* UGCService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCService.swift; sourceTree = "<group>"; };
 		7E49937BF5F6698066552D8C /* SidebarViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarViewModel.swift; sourceTree = "<group>"; };
+		80858C0A487F51C97DD1FC51 /* VideoPreloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPreloader.swift; sourceTree = "<group>"; };
 		8BB5E0CE2B0B49CD3A450E1B /* ChatMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMode.swift; sourceTree = "<group>"; };
 		8E9FC0267D1F94F9EA78F407 /* LibrarySheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySheetView.swift; sourceTree = "<group>"; };
 		959DB453AB2603D0492A7177 /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
 		A185C3375CD6065433434E3F /* UGCJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCJob.swift; sourceTree = "<group>"; };
 		B11B30E1041C4EF37EA31C37 /* QuestionsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestionsCard.swift; sourceTree = "<group>"; };
 		B1A303DBF13E2E28C56E66B5 /* GumbyAI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GumbyAI.entitlements; sourceTree = "<group>"; };
+		B3BE7EC1F928FDA40A5DB4ED /* UGCStudioCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCStudioCard.swift; sourceTree = "<group>"; };
 		B3E74BE2FEF7C0F19D4B7EDB /* UGCChatCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCChatCards.swift; sourceTree = "<group>"; };
 		B4BC1E4E77453368813A0DD8 /* ModelCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCard.swift; sourceTree = "<group>"; };
 		C09339B675B7600AEC3CDAFC /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
 		C0A4AB37C72BACEF26BABD1B /* GumbyAI.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GumbyAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C315094353468AE658194B67 /* Inter-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Inter-Bold.ttf"; sourceTree = "<group>"; };
+		C53AB83C867D22F265D5A352 /* UGCLibraryFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCLibraryFeed.swift; sourceTree = "<group>"; };
+		C56959688962B981A78D419E /* Inter-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Inter-SemiBold.ttf"; sourceTree = "<group>"; };
 		C61D9BF666BFF21E44438827 /* UGCTemplatesFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCTemplatesFeed.swift; sourceTree = "<group>"; };
 		CD9275348378EB0E86328112 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D0404521E61659D80650E9EE /* Inter-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Inter-Regular.ttf"; sourceTree = "<group>"; };
 		D18AF1078C57AF091CBD82DD /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
+		D294B2858F4F9FD3115E332A /* UGCDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCDraft.swift; sourceTree = "<group>"; };
+		D2EBE4CD02090E411655CFFE /* UGCLibraryGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCLibraryGrid.swift; sourceTree = "<group>"; };
 		D8C1B7A601D5E43731A8363F /* UGCViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCViewModel.swift; sourceTree = "<group>"; };
 		E4F5B2DDC773CA2CEE5452F4 /* ExploreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
 		EA4FC942717BF451E7E63936 /* GumbyAIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GumbyAIApp.swift; sourceTree = "<group>"; };
@@ -149,6 +175,7 @@
 				2558987DC923669B848A5BE0 /* ImageUploadService.swift */,
 				EB6647687A2E715D5F440EA2 /* SSEService.swift */,
 				7A38374DAEC0E93F48539A18 /* UGCService.swift */,
+				80858C0A487F51C97DD1FC51 /* VideoPreloader.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -173,6 +200,7 @@
 			isa = PBXGroup;
 			children = (
 				6392599ABA67FF5D5DE21FCE /* Components */,
+				97226A1DB01C2BF762D66CA2 /* Fonts */,
 				65D80E01096ECFB6DC24A39B /* Models */,
 				2E980FEF33AAA7D2001FB3C7 /* Services */,
 				EA181BFC53472BBE456C4EE8 /* Utils */,
@@ -195,6 +223,7 @@
 				B4BC1E4E77453368813A0DD8 /* ModelCard.swift */,
 				126F2BF50F143D274251EB85 /* MoodBoardCard.swift */,
 				B11B30E1041C4EF37EA31C37 /* QuestionsCard.swift */,
+				5D67D0AF6460EA88BDF747FE /* ReelActionButton.swift */,
 				0FEA85E04CB3D11535BF320E /* RemoteImagePreview.swift */,
 				2B7762F490F7BB425D3DFA08 /* SuggestionChip.swift */,
 			);
@@ -222,11 +251,23 @@
 				0C39A51F75B689665FBA8360 /* SavedAsset.swift */,
 				338678292C25E6F3C300A453 /* UGCChatStep.swift */,
 				3D09A4B99DE204F54DEFAF42 /* UGCCreatorJob.swift */,
+				D294B2858F4F9FD3115E332A /* UGCDraft.swift */,
 				A185C3375CD6065433434E3F /* UGCJob.swift */,
 				1AB9D873D860C587B1DEAACF /* UGCTemplate.swift */,
 				3431D0747F2A18B493F345E2 /* User.swift */,
 			);
 			path = Models;
+			sourceTree = "<group>";
+		};
+		97226A1DB01C2BF762D66CA2 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				C315094353468AE658194B67 /* Inter-Bold.ttf */,
+				08F85FB706CEE00AD05D4EAC /* Inter-Medium.ttf */,
+				D0404521E61659D80650E9EE /* Inter-Regular.ttf */,
+				C56959688962B981A78D419E /* Inter-SemiBold.ttf */,
+			);
+			path = Fonts;
 			sourceTree = "<group>";
 		};
 		A2E91915266284E71B789F65 /* Sidebar */ = {
@@ -240,8 +281,11 @@
 		A8715EB6B22BD9FFCDD3CEA9 /* UGC */ = {
 			isa = PBXGroup;
 			children = (
+				C53AB83C867D22F265D5A352 /* UGCLibraryFeed.swift */,
+				D2EBE4CD02090E411655CFFE /* UGCLibraryGrid.swift */,
 				EAA930662A81E1CC581D1992 /* UGCMyVideosView.swift */,
 				C61D9BF666BFF21E44438827 /* UGCTemplatesFeed.swift */,
+				68CB199C8A83C5AD8B113128 /* UGCTemplatesGrid.swift */,
 				4531B869782BEAE63FD9391B /* UGCView.swift */,
 			);
 			path = UGC;
@@ -276,6 +320,8 @@
 			children = (
 				440E91AFA494511C85FDD620 /* ChatView.swift */,
 				B3E74BE2FEF7C0F19D4B7EDB /* UGCChatCards.swift */,
+				B3BE7EC1F928FDA40A5DB4ED /* UGCStudioCard.swift */,
+				74601F935F6130491A09CCFC /* UGCStudioView.swift */,
 			);
 			path = Chat;
 			sourceTree = "<group>";
@@ -284,6 +330,7 @@
 			isa = PBXGroup;
 			children = (
 				145484090FFA9D4B8A99D9C4 /* Constants.swift */,
+				0750F76BD0AA61D78F9D6258 /* GumbyFont.swift */,
 				D18AF1078C57AF091CBD82DD /* KeychainHelper.swift */,
 			);
 			path = Utils;
@@ -372,6 +419,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				CF0826A194E22A2802BEFE89 /* Assets.xcassets in Resources */,
+				C37418BE90898A763B38DEB8 /* Inter-Bold.ttf in Resources */,
+				34D691774AD966B2AFE0049E /* Inter-Medium.ttf in Resources */,
+				95DD3C59B9FA29EB825545EC /* Inter-Regular.ttf in Resources */,
+				B526D85A47C03657CA6C5CFF /* Inter-SemiBold.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -399,6 +450,7 @@
 				505AC3D3B36C30D21F83CBB0 /* ExploreViewModel.swift in Sources */,
 				C314E1E99CBF292BBD15C1CD /* GeneratedImagesStore.swift in Sources */,
 				1CA117CEF4DFECD33E2327D0 /* GumbyAIApp.swift in Sources */,
+				2AE18D6CB1463B0D74B90584 /* GumbyFont.swift in Sources */,
 				8F39586620A51D51EF7B8EBC /* HistoryView.swift in Sources */,
 				7DDEE956021A6B93AB537DE5 /* HistoryViewModel.swift in Sources */,
 				440329F1BB496C312961A721 /* ImageUploadService.swift in Sources */,
@@ -414,6 +466,7 @@
 				B323DD756F4CEB933007E23C /* Post.swift in Sources */,
 				9E268DDED4A01ECB7CC9B5DC /* PostsView.swift in Sources */,
 				73CBBF6C1388BEB0B050757A /* QuestionsCard.swift in Sources */,
+				934BA970BCAFEAB91DAC9338 /* ReelActionButton.swift in Sources */,
 				A55EC1CAC770E7F7DA0E52D9 /* RemoteImagePreview.swift in Sources */,
 				59C6CDD4CFEE8262ADFA3C4B /* SSEService.swift in Sources */,
 				94BBFFBBB8E808307EAAB5E7 /* SavedAsset.swift in Sources */,
@@ -423,14 +476,21 @@
 				5CC81F1A081E16FE3D000224 /* UGCChatCards.swift in Sources */,
 				219CE888BD3EF1F30E648106 /* UGCChatStep.swift in Sources */,
 				9E07701790B037CD56955986 /* UGCCreatorJob.swift in Sources */,
+				6FC802B04573BB954AD284CB /* UGCDraft.swift in Sources */,
 				4849CD5F37E043CACB031CC5 /* UGCJob.swift in Sources */,
+				2779B94547DBBAE276DE0EAF /* UGCLibraryFeed.swift in Sources */,
+				8B2FAFFBEFB381DE713D5D6C /* UGCLibraryGrid.swift in Sources */,
 				38BA2916EECAC0B11BC58767 /* UGCMyVideosView.swift in Sources */,
 				3B68C13C408A1B4B8880FBD8 /* UGCService.swift in Sources */,
+				34995B5DD49A4B6F7823C3D3 /* UGCStudioCard.swift in Sources */,
+				3B13075D310CE44800598959 /* UGCStudioView.swift in Sources */,
 				E60E69A3229DB5D43C7974ED /* UGCTemplate.swift in Sources */,
 				5C2BA615EEA4E064BEBE7BCB /* UGCTemplatesFeed.swift in Sources */,
+				3B4DDE0BB1022D96948CC683 /* UGCTemplatesGrid.swift in Sources */,
 				6B8087D494DFBD72C153FAA0 /* UGCView.swift in Sources */,
 				1044B71DD818180882DCA91F /* UGCViewModel.swift in Sources */,
 				BCC22CB127474C7899DAF1C8 /* User.swift in Sources */,
+				1C760142EE279CE84D7CCD23 /* VideoPreloader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

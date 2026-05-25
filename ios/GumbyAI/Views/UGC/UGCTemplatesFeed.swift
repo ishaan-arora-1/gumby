@@ -103,6 +103,7 @@ struct UGCFeedCard: View {
     let template: UGCTemplate
     let isActive: Bool
     let muted: Bool
+    var edgeToEdge: Bool = false
     let onToggleMute: () -> Void
     let onGenerate: () -> Void
 
@@ -112,107 +113,78 @@ struct UGCFeedCard: View {
 
             if let videoURL = URL(string: template.videoURL) {
                 LoopingVideoView(url: videoURL, isActive: isActive, muted: muted, aspectFill: true)
-                    .ignoresSafeArea()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea(edges: edgeToEdge ? .all : [])
             } else {
                 AsyncImage(url: URL(string: template.thumbnailURL)) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
                     Color.black
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea(edges: edgeToEdge ? .all : [])
             }
 
-            // Bottom-left content + tags + setting
+            // Creator + title only
             VStack {
                 Spacer()
                 HStack(alignment: .bottom) {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 10) {
                             avatar
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(template.actorName)
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.white)
-                                Text(template.setting)
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.white.opacity(0.75))
-                            }
+                            Text(template.actorName)
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
                         }
 
                         Text(template.name)
-                            .font(.system(size: 22, weight: .heavy))
+                            .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.white)
                             .lineLimit(2)
-
-                        Text(template.description)
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.85))
-                            .lineLimit(3)
-
-                        if let tags = template.tags, !tags.isEmpty {
-                            HStack(spacing: 6) {
-                                ForEach(tags.prefix(3), id: \.self) { tag in
-                                    Text("#\(tag)")
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundColor(.white.opacity(0.85))
-                                }
-                            }
-                        }
                     }
                     .padding(.trailing, 64)
 
                     Spacer()
                 }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 28)
+                .padding(.bottom, edgeToEdge ? 20 : 28)
             }
 
             // Right-side action rail
             VStack(spacing: 18) {
                 Spacer()
-                Button(action: onToggleMute) {
-                    Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
-                        .background(Circle().fill(.ultraThinMaterial))
+                ReelActionButton(
+                    systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                    action: onToggleMute
+                )
+                ReelActionButton(systemName: "wand.and.stars", style: .mono, action: onGenerate)
+                if !edgeToEdge {
+                    Spacer().frame(height: 64)
                 }
-                Button(action: onGenerate) {
-                    VStack(spacing: 6) {
-                        ZStack {
-                            Circle()
-                                .fill(AppConstants.accentGradient)
-                                .frame(width: 56, height: 56)
-                            Image(systemName: "wand.and.stars")
-                                .font(.system(size: 22, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                        Text("Use")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
-                }
-                Spacer().frame(height: 64)
             }
+            .padding(.bottom, edgeToEdge ? 12 : 0)
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.trailing, 12)
 
-            // Soft top + bottom gradients for legibility
+            // Soft gradients for legibility
             VStack {
                 LinearGradient(
-                    colors: [Color.black.opacity(0.6), .clear],
+                    colors: [Color.black.opacity(0.5), .clear],
                     startPoint: .top, endPoint: .bottom
                 )
-                .frame(height: 90)
+                .frame(height: 80)
                 Spacer()
                 LinearGradient(
-                    colors: [.clear, Color.black.opacity(0.7)],
+                    colors: [.clear, Color.black.opacity(0.65)],
                     startPoint: .top, endPoint: .bottom
                 )
-                .frame(height: 220)
+                .frame(height: edgeToEdge ? 160 : 200)
             }
-            .ignoresSafeArea()
+            .ignoresSafeArea(edges: edgeToEdge ? .all : [])
             .allowsHitTesting(false)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
     }
 
     private var avatar: some View {

@@ -23,13 +23,6 @@ final class UGCService {
         return data
     }
 
-    // MARK: - Voices
-
-    func fetchVoices() async throws -> [UGCVoicePreset] {
-        let resp: APIResponse<[UGCVoicePreset]> = try await api.get(path: "/ugc/voices")
-        return resp.data ?? []
-    }
-
     // MARK: - AI script
 
     struct ScriptRequest {
@@ -37,6 +30,9 @@ final class UGCService {
         let productDescription: String
         let template: UGCTemplate
         let tone: String
+        /// How many seconds of spoken voice-over to target. Defaults to 10
+        /// — Kling 3.0 Pro renders 5s or 10s clips.
+        var targetSeconds: Int = 10
     }
 
     func generateScript(_ req: ScriptRequest) async throws -> String {
@@ -44,6 +40,7 @@ final class UGCService {
             "productName": req.productName,
             "productDescription": req.productDescription,
             "tone": req.tone,
+            "targetSeconds": req.targetSeconds,
             "template": [
                 "name": req.template.name,
                 "actor_name": req.template.actorName,
@@ -57,26 +54,62 @@ final class UGCService {
         return resp.data?.script ?? ""
     }
 
+    // MARK: - Prompt parsing (direct mode)
+
+    struct ParsedPrompt: Codable {
+        let creatorDescription: String
+        let productName: String
+        let productDescription: String
+        let videoDescription: String
+        let suggestedDuration: Int
+        let includeProduct: Bool
+    }
+
+    func parsePrompt(_ prompt: String) async throws -> ParsedPrompt {
+        let body: [String: Any] = ["prompt": prompt]
+        let resp: APIResponse<ParsedPrompt> = try await api.post(path: "/ugc/parse-prompt", body: body)
+        guard let data = resp.data else { throw APIError.noData }
+        return data
+    }
+
     // MARK: - Generation
 
     struct GenerateRequest {
-        let templateId: String
+        /// Template ID — nil in direct mode (user describes creator inline).
+        let templateId: String?
+        /// Creator appearance description — used only in direct mode when
+        /// templateId is nil.
+        let creatorDescription: String?
         let productName: String
         let productDescription: String
         let productImageURL: String?
+        /// Optional inspiration photo describing the *scene* the user wants.
+        /// The backend reimagines this image with a new model (Nano Banana
+        /// Pro) and uses the result as the seed frame for the Kling 3.0 Pro
+        /// image-to-video call.
+        let inspirationImageURL: String?
         let script: String
-        let voiceId: String
+        /// Full video description — passed straight to Kling 3.0 Pro as the
+        /// action prompt. Single-shot generation, audio + lip-sync inline.
+        let videoDescription: String
+        /// Target video duration: 5 or 10 seconds (Kling 3.0 Pro enum).
+        let videoDuration: Int
     }
 
     func startGeneration(_ req: GenerateRequest) async throws -> UGCJob {
         var body: [String: Any] = [
-            "templateId": req.templateId,
             "productName": req.productName,
             "productDescription": req.productDescription,
             "script": req.script,
-            "voiceId": req.voiceId,
+            "videoDuration": req.videoDuration,
         ]
+        if let id = req.templateId { body["templateId"] = id }
+        if let desc = req.creatorDescription, !desc.isEmpty { body["creatorDescription"] = desc }
         if let url = req.productImageURL { body["productImageUrl"] = url }
+        if let url = req.inspirationImageURL, !url.isEmpty { body["inspirationImageUrl"] = url }
+        if !req.videoDescription.isEmpty {
+            body["videoDescription"] = req.videoDescription
+        }
         let resp: APIResponse<UGCJob> = try await api.post(path: "/ugc/generate", body: body)
         guard let job = resp.data else { throw APIError.noData }
         return job
@@ -107,8 +140,6 @@ final class UGCService {
         let durationSeconds: Int
     }
 
-    /// Kicks off a standalone creator generation job. Returns the queued
-    /// `UGCCreatorJob` row — poll `fetchCreatorJob` until status is terminal.
     func startCreatorGeneration(_ req: CreatorRequest) async throws -> UGCCreatorJob {
         let body: [String: Any] = [
             "prompt": req.prompt,
@@ -137,12 +168,17 @@ final class UGCService {
         return resp.data
     }
 
+    func fetchLibrary(page: Int = 1) async throws -> [UGCCreatorJob] {
+        let resp: PaginatedResponse<UGCCreatorJob> = try await api.get(
+            path: "/ugc/library?page=\(page)"
+        )
+        return resp.data
+    }
+
     func deleteCreatorJob(id: String) async throws {
         try await api.delete(path: "/ugc/creator/jobs/\(id)")
     }
 
-    /// Promotes a finished creator clip into a hidden `UGCTemplate` row that
-    /// the standard /ugc/generate pipeline can lip-sync over. Idempotent.
     func promoteCreatorToTemplate(
         jobId: String,
         actorName: String? = nil,
@@ -159,11 +195,17 @@ final class UGCService {
         return tpl
     }
 
-    // MARK: - Product image upload
+    // MARK: - Image uploads
 
-    /// Uploads a product image to the backend (which stores it in the
-    /// ugc-videos bucket and returns a long-lived signed URL).
     func uploadProductImage(_ image: UIImage) async throws -> String {
+        try await uploadImage(image, path: "/ugc/upload-product-image")
+    }
+
+    func uploadInspirationImage(_ image: UIImage) async throws -> String {
+        try await uploadImage(image, path: "/ugc/upload-inspiration-image")
+    }
+
+    private func uploadImage(_ image: UIImage, path: String) async throws -> String {
         guard let data = image.jpegData(compressionQuality: 0.85) else {
             throw APIError.custom("Failed to compress image")
         }
@@ -172,7 +214,7 @@ final class UGCService {
             "base64": data.base64EncodedString(),
         ]
         struct UploadResp: Codable { let url: String? }
-        let resp: APIResponse<UploadResp> = try await api.post(path: "/ugc/upload-product-image", body: body)
+        let resp: APIResponse<UploadResp> = try await api.post(path: path, body: body)
         guard let url = resp.data?.url else { throw APIError.noData }
         return url
     }
