@@ -8,6 +8,7 @@
     "dev": "nodemon src/index.js",
     "migrate:ugc": "node scripts/apply-migration.js migrations/002_ugc.sql",
     "migrate:ugc-creator-jobs": "node scripts/apply-migration.js migrations/004_ugc_creator_jobs.sql",
+    "migrate:nullable-template": "node scripts/apply-migration.js migrations/007_nullable_template_id.sql",
     "seed:templates:urls": "node scripts/seed-templates-from-urls.js",
     "gen:templates": "node scripts/generate-templates.js",
     "gen:templates:text": "node scripts/generate-templates-from-text.js",

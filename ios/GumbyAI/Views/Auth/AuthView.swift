@@ -40,7 +40,7 @@ private struct AuthWelcomeView: View {
 
     var body: some View {
         ZStack {
-            Image("LoginBackground")
+            Image("ChatBackground")
                 .resizable()
                 .scaledToFill()
                 .ignoresSafeArea()
@@ -49,12 +49,11 @@ private struct AuthWelcomeView: View {
                 Spacer()
                     .frame(height: 56)
 
-                HStack(spacing: 10) {
-                    AuthBrandLogoPlaceholder(size: 36)
-                    Text("Gumby")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(.white)
-                }
+                Image("LogoCombined")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 34)
+                    .accessibilityLabel("Create UGC")
 
                 Spacer()
 
@@ -161,9 +160,13 @@ private struct AuthLoginView: View {
                     .padding(.leading, 4)
                     .padding(.top, 4)
 
-                    AuthBrandLogoPlaceholder(size: 40)
+                    Image("LogoMark")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 88)
                         .frame(maxWidth: .infinity)
                         .padding(.top, 8)
+                        .accessibilityLabel("Create UGC")
 
                     Text("Log in")
                         .font(.system(size: 32, weight: .bold))

@@ -1,45 +1,39 @@
 /**
- * Central registry of the fal.ai model endpoints we use across Gumby's
- * pipelines. Versions are pinned here so we can bump them in exactly one
- * place when fal ships a new generation of any of the underlying models.
+ * Central registry of the fal.ai model endpoints we use across "Create UGC"'s
+ * pipeline. The full ad flow is now exactly two API calls:
  *
- * Currently in use:
- *   - KLING_IMAGE_TO_VIDEO       — animate a still portrait into a 5s talking
- *                                  clip (used by `scripts/generate-templates.js`)
- *   - KLING_TEXT_TO_VIDEO        — generate a 5s talking-head clip purely from
- *                                  a text prompt (used by
- *                                  `scripts/generate-templates-from-text.js`)
- *   - ELEVENLABS_TTS             — convert a user-approved script into speech
- *                                  (used by `services/ugcPipeline.js`)
- *   - SYNC_LIPSYNC               — overlay the TTS audio onto the chosen
- *                                  template video so the actor's mouth lines
- *                                  up with the new script
- *                                  (used by `services/ugcPipeline.js`)
+ *   1. IMAGE_SUBJECT_SWAP  — Nano Banana Pro takes the user's inspiration
+ *                            photo (and optionally the product photo) and
+ *                            synthesizes a single still where a brand-new
+ *                            model occupies the same scene, optionally
+ *                            holding the user's product pixel-perfectly.
+ *   2. KLING_IMAGE_TO_VIDEO — Kling 3.0 Pro turns that still into the final
+ *                            video, with `generate_audio: true` so the model
+ *                            speaks the script aloud and lip-syncs to it. No
+ *                            separate TTS, no separate lip-sync step.
+ *
+ *   KLING_TEXT_TO_VIDEO    — Fallback only, used when the user provides no
+ *                            inspiration image and no template (pure prompt).
  */
 
 module.exports = {
-  // Kling Video v3 Pro — top-tier image-to-video. Inherits aspect from the
-  // input image. We disable native audio because the lip-sync step layers
-  // ElevenLabs TTS on top.
+  // Kling Video v3 Pro — image-to-video with built-in audio + lip-sync.
+  // We always pass `generate_audio: true` and embed the script in the prompt
+  // so Kling renders the speaking model in one shot.
   KLING_IMAGE_TO_VIDEO: 'fal-ai/kling-video/v3/pro/image-to-video',
 
-  // Kling Video 2.6 Pro — cinematic text-to-video with explicit
-  // duration/aspect controls. Same audio rule: keep clips silent so we can
-  // dub them at use-time.
-  KLING_TEXT_TO_VIDEO: 'fal-ai/kling-video/v2.6/pro/text-to-video',
+  // Kling Video v3 Pro — text-to-video fallback when there's no seed image.
+  KLING_TEXT_TO_VIDEO: 'fal-ai/kling-video/v3/pro/text-to-video',
 
-  // Kling 1.6 Elements — multi-reference image-to-video (up to 4 images +
-  // prompt). We use this to synthesize B-roll where the *exact* user-uploaded
-  // product and the previously-generated creator both appear together, so the
-  // final UGC ad cuts between talking-head footage and authentic product
-  // handling shots rather than just slapping the product as an overlay.
-  KLING_ELEMENTS: 'fal-ai/kling-video/v1.6/standard/elements',
+  // Nano Banana Pro (Google Gemini 3 Pro Image) — semantic image EDITING.
+  // Used whenever we have at least one input image (inspiration photo,
+  // product photo, or both). Replaces the person in the scene with the
+  // described creator while preserving environment + product.
+  IMAGE_SUBJECT_SWAP: 'fal-ai/nano-banana-pro/edit',
 
-  // ElevenLabs multilingual TTS exposed via fal.ai. Voice IDs are the
-  // ElevenLabs library names (Rachel, Bella, Adam, ...).
-  ELEVENLABS_TTS: 'fal-ai/elevenlabs/tts/multilingual-v2',
-
-  // Generic audio→video lip-sync. Takes a video URL and an audio URL and
-  // produces a new video where the actor's mouth tracks the audio.
-  SYNC_LIPSYNC: 'fal-ai/sync-lipsync/v2',
+  // Nano Banana Pro — text-to-image GENERATION. Used when the user gave
+  // us neither an inspiration photo nor a product photo: we synthesize
+  // a fresh creator-in-scene still purely from the prompt so Kling
+  // image-to-video still has a seed frame to work from.
+  IMAGE_GENERATE: 'fal-ai/nano-banana-pro',
 };

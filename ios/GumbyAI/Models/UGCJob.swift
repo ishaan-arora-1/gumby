@@ -2,17 +2,34 @@ import Foundation
 
 enum UGCJobStatus: String, Codable {
     case queued
+    // Single-shot pipeline statuses
+    case planning
+    case preparing
+    case renderingScene    = "rendering_scene"      // Nano Banana subject swap / product integration
+    case generatingVideo   = "generating_video"     // Kling 3.0 Pro single-shot generation (audio + lip-sync inline)
+    case finalizing
+    // Legacy statuses kept for decoding old job rows
     case tts
     case lipsync
-    case finalizing
+    case generatingScenes  = "generating_scenes"
+    case stitching
+    case broll
+    // Terminal
     case completed
     case failed
 
     var displayLabel: String {
         switch self {
         case .queued: return "Queued"
+        case .planning: return "Planning"
+        case .preparing: return "Preparing"
+        case .renderingScene: return "Building scene"
+        case .generatingVideo: return "Generating video"
+        case .generatingScenes: return "Generating scenes"
+        case .stitching: return "Stitching video"
         case .tts: return "Voicing"
         case .lipsync: return "Lip-syncing"
+        case .broll: return "B-roll"
         case .finalizing: return "Finalizing"
         case .completed: return "Ready"
         case .failed: return "Failed"
@@ -25,7 +42,7 @@ enum UGCJobStatus: String, Codable {
 struct UGCJob: Codable, Identifiable, Hashable {
     let id: String
     let userId: String
-    let templateId: String
+    let templateId: String?
     let templateSnapshot: TemplateSnapshot?
 
     let productName: String
@@ -33,13 +50,11 @@ struct UGCJob: Codable, Identifiable, Hashable {
     let productDescription: String
 
     let script: String
-    let voiceId: String
 
     let status: UGCJobStatus
     let progress: Int
     let error: String?
 
-    let audioURL: String?
     let outputVideoURL: String?
     let outputThumbnailURL: String?
 
@@ -56,9 +71,7 @@ struct UGCJob: Codable, Identifiable, Hashable {
         case productImageURL = "product_image_url"
         case productDescription = "product_description"
         case script
-        case voiceId = "voice_id"
         case status, progress, error
-        case audioURL = "audio_url"
         case outputVideoURL = "output_video_url"
         case outputThumbnailURL = "output_thumbnail_url"
         case startedAt = "started_at"

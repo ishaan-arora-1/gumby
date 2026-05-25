@@ -31,8 +31,3 @@ struct UGCTemplate: Codable, Identifiable, Hashable {
     }
 }
 
-struct UGCVoicePreset: Codable, Identifiable, Hashable {
-    let id: String
-    let label: String
-    let gender: String
-}
