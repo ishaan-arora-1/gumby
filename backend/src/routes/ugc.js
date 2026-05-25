@@ -8,6 +8,39 @@ const authMiddleware = require('../middleware/auth');
 const { runUGCJob } = require('../services/ugcPipeline');
 const { runCreatorJob } = require('../services/creatorPipeline');
 
+// ---------- Public ----------
+// Public endpoint for the marketing site — returns a small set of active
+// templates with no auth required. Safe because the rows are public-facing
+// curated content (the same data we show to authenticated users).
+router.get('/featured', async (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=60');
+  const limit = Math.min(parseInt(req.query.limit) || 8, 20);
+  try {
+    const { data, error } = await supabase
+      .from('ugc_templates')
+      .select('id, name, actor_name, description, video_url, thumbnail_url, category, tags')
+      .eq('is_active', true)
+      .or('is_user_generated.is.null,is_user_generated.eq.false')
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .limit(limit);
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch (err) {
+    // Fallback: try without the user-gen filter for older schemas
+    try {
+      const { data } = await supabase
+        .from('ugc_templates')
+        .select('id, name, actor_name, description, video_url, thumbnail_url, category, tags')
+        .eq('is_active', true)
+        .limit(limit);
+      res.json({ success: true, data: data || [] });
+    } catch (e) {
+      console.error('featured templates error:', e);
+      res.json({ success: true, data: [] });
+    }
+  }
+});
+
 router.use(authMiddleware);
 
 // ---------- Templates ----------
