@@ -114,6 +114,31 @@ class AuthService: ObservableObject {
         isLoading = false
     }
 
+    /// Entry point for the "Continue with Google" button: presents the
+    /// GoogleSignIn UI, then exchanges the ID token with Supabase.
+    func startSignInWithGoogle() {
+        errorMessage = nil
+        Task {
+            isLoading = true
+            defer { isLoading = false }
+            do {
+                let idToken = try await GoogleSignInService.signIn()
+                await signInWithSupabase(
+                    provider: AuthProvider.google.rawValue,
+                    idToken: idToken,
+                    fullName: nil
+                )
+            } catch {
+                let nsError = error as NSError
+                // -5 == kGIDSignInErrorCodeCanceled
+                if nsError.domain == "com.google.GIDSignIn", nsError.code == -5 {
+                    return
+                }
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     func handleGitHubSignIn(idToken: String) async {
         isLoading = true
         errorMessage = nil
@@ -194,10 +219,19 @@ class AuthService: ObservableObject {
             request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
             request.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization")
 
+            let clientID: String = {
+                switch provider {
+                case AuthProvider.google.rawValue:
+                    return AppConstants.googleClientID
+                default:
+                    return Bundle.main.bundleIdentifier ?? "com.ishaan.gumby"
+                }
+            }()
+
             let body: [String: Any] = [
                 "provider": provider,
                 "id_token": idToken,
-                "client_id": Bundle.main.bundleIdentifier ?? "com.ishaan.gumby"
+                "client_id": clientID,
             ]
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
@@ -379,6 +413,35 @@ class AuthService: ObservableObject {
         _token = nil
         KeychainHelper.shared.delete(key: "auth_token")
         KeychainHelper.shared.delete(key: "refresh_token")
+        GoogleSignInService.signOut()
+    }
+
+    /// Permanently delete the signed-in user's account and all their data.
+    /// Required by App Store Review Guideline 5.1.1(v).
+    func deleteAccount() async -> Bool {
+        guard let token = _token ?? KeychainHelper.shared.read(key: "auth_token") else {
+            errorMessage = "You must be signed in to delete your account."
+            return false
+        }
+
+        let url = URL(string: "\(AppConstants.baseURL)/auth/account")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let errObj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                errorMessage = (errObj?["error"] as? String) ?? "Could not delete account."
+                return false
+            }
+            signOut()
+            return true
+        } catch {
+            errorMessage = "Could not reach the server: \(error.localizedDescription)"
+            return false
+        }
     }
 }
 

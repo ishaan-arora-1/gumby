@@ -96,3 +96,98 @@ video { -webkit-user-select: none; user-select: none; }
 /* Hide horizontal scrollbar for marquees */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ===========================================================
+   BLINK LANDING — fonts + keyframes shared by the lander
+   =========================================================== */
+.font-display-blink { font-family: var(--font-archivo), 'Archivo', system-ui, sans-serif; }
+.font-body-blink    { font-family: var(--font-sora),    'Sora',    system-ui, sans-serif; }
+
+.blink-accent-text {
+  background: linear-gradient(100deg, #4d82ff, #2563ff 45%, #ff2e3f);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 4px 26px rgba(37, 99, 255, 0.4));
+}
+
+/* Vertical video wall scrollers */
+@keyframes blinkScrollUp   { from { transform: translateY(0); }    to { transform: translateY(-50%); } }
+@keyframes blinkScrollDown { from { transform: translateY(-50%); } to { transform: translateY(0); } }
+.blink-col-up    { animation: blinkScrollUp   38s linear infinite; }
+.blink-col-down  { animation: blinkScrollDown 44s linear infinite; }
+.blink-col-up.blink-slow   { animation-duration: 52s; }
+.blink-col-down.blink-slow { animation-duration: 60s; }
+
+/* Live recording dot */
+@keyframes blinkPulse {
+  0%   { box-shadow: 0 0 0 0   rgba(255, 46, 63, 0.7); }
+  70%  { box-shadow: 0 0 0 9px rgba(255, 46, 63, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(255, 46, 63, 0); }
+}
+.blink-live-dot { animation: blinkPulse 1.6s infinite; }
+
+/* CTA sheen */
+@keyframes blinkSheen {
+  0%, 60%   { left: -120%; }
+  80%, 100% { left: 160%; }
+}
+.blink-sheen::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  transform: skewX(-20deg);
+  animation: blinkSheen 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Rise-in entrance */
+@keyframes blinkRise {
+  from { opacity: 0; transform: translateY(26px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.blink-rise { animation: blinkRise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+/* Scroll cue */
+@keyframes blinkCue {
+  0%, 100% { opacity: 0.3; transform: scaleY(0.6); }
+  50%      { opacity: 1;   transform: scaleY(1); }
+}
+.blink-cue-bar { animation: blinkCue 1.8s ease-in-out infinite; }
+
+/* Hero frosted glass behind the headline */
+.blink-hero-frost {
+  backdrop-filter: blur(16px) brightness(0.7);
+  -webkit-backdrop-filter: blur(16px) brightness(0.7);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, #000 35%, transparent 72%);
+          mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, #000 35%, transparent 72%);
+}
+.blink-hero-vignette {
+  background: radial-gradient(
+    ellipse 60% 55% at 50% 46%,
+    rgba(5, 6, 8, 0.92) 0%,
+    rgba(5, 6, 8, 0.86) 30%,
+    rgba(5, 6, 8, 0.55) 55%,
+    rgba(5, 6, 8, 0.18) 75%,
+    rgba(5, 6, 8, 0.05) 100%
+  );
+}
+.blink-hero-edges {
+  background:
+    linear-gradient(180deg, rgba(5, 6, 8, 0.85) 0%, transparent 18%, transparent 80%, rgba(5, 6, 8, 0.92) 100%),
+    linear-gradient(90deg,  rgba(5, 6, 8, 0.6)  0%, transparent 16%, transparent 84%, rgba(5, 6, 8, 0.6)  100%);
+}
+
+/* Tile gradient palette (for fallback) */
+.blink-g1 { background-image: linear-gradient(135deg, #2563ff, #0b1230); }
+.blink-g2 { background-image: linear-gradient(135deg, #ff2e3f, #2a0608); }
+.blink-g3 { background-image: linear-gradient(135deg, #1f2937, #05060a); }
+.blink-g4 { background-image: linear-gradient(135deg, #4d82ff, #101a3a); }
+.blink-g5 { background-image: linear-gradient(135deg, #e11d2b, #3a0a10, #2563ff); }
+.blink-g6 { background-image: linear-gradient(135deg, #0f1730, #2563ff, #070b18); }
+.blink-g7 { background-image: linear-gradient(135deg, #2a2f3a, #ff2e3f); }
+.blink-g8 { background-image: linear-gradient(135deg, #0b0d12, #4d82ff); }

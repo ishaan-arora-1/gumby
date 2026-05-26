@@ -23,12 +23,22 @@ schemes:
     archive:
       config: Release
 
+packages:
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "7.1.0"
+
 targets:
   GumbyAI:
     type: application
     platform: iOS
     sources:
       - path: GumbyAI
+    dependencies:
+      - package: GoogleSignIn
+        product: GoogleSignIn
+      - package: GoogleSignIn
+        product: GoogleSignInSwift
     settings:
       base:
         SWIFT_VERSION: "5.9"

@@ -101,7 +101,7 @@ struct UGCAssistantBubble: View {
 
 // MARK: - Welcome landing
 
-/// The "Create UGC" landing body — rendered directly on the chat background
+/// The "Blinkugc" landing body — rendered directly on the chat background
 /// image (no card surface around it). It owns the horizontal template
 /// carousel and the suggested-prompt pills; the composer at the bottom of
 /// the screen is a separate sibling view (`UGCChatComposerBar`).
