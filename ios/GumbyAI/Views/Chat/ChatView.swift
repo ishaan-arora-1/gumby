@@ -17,7 +17,7 @@ private struct ChatBackgroundImage: View {
     }
 }
 
-/// The AI Chat tab is the "Create UGC" studio.
+/// The AI Chat tab is the "Blinkugc" studio.
 ///
 /// Two visual modes share the same screen:
 ///   • **Welcome** (`chatVM.step == .welcome`) — brand background image with
@@ -89,7 +89,7 @@ struct ChatView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(height: 30)
-                .accessibilityLabel("Create UGC")
+                .accessibilityLabel("Blinkugc")
         }
         .padding(.horizontal, 14)
         .padding(.top, 6)

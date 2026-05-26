@@ -15,6 +15,8 @@ struct SidebarView: View {
     @Binding var selectedDestination: NavigationDestination
 
     @State private var didLoadHistory = false
+    @State private var showDeleteConfirm = false
+    @State private var isDeleting = false
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -33,6 +35,19 @@ struct SidebarView: View {
             guard isOpen else { return }
             Task { await historyVM.loadHistory() }
             didLoadHistory = true
+        }
+        .alert("Delete account?", isPresented: $showDeleteConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                isDeleting = true
+                Task {
+                    _ = await authService.deleteAccount()
+                    isDeleting = false
+                    sidebarVM.close()
+                }
+            }
+        } message: {
+            Text("This permanently deletes your Blinkugc account and all of your videos, drafts, and chat history. This action cannot be undone.")
         }
     }
 
@@ -72,7 +87,7 @@ struct SidebarView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(height: 38)
-                .accessibilityLabel("Create UGC")
+                .accessibilityLabel("Blinkugc")
 
             Spacer(minLength: 8)
 
@@ -85,11 +100,16 @@ struct SidebarView: View {
                 .buttonStyle(.plain)
 
                 Menu {
-                    Button(role: .destructive) {
+                    Button {
                         authService.signOut()
                         sidebarVM.close()
                     } label: {
                         Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Label("Delete account", systemImage: "trash")
                     }
                 } label: {
                     profileAvatar

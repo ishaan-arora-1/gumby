@@ -53,7 +53,7 @@ private struct AuthWelcomeView: View {
                     .resizable()
                     .scaledToFit()
                     .frame(height: 34)
-                    .accessibilityLabel("Create UGC")
+                    .accessibilityLabel("Blinkugc")
 
                 Spacer()
 
@@ -166,7 +166,7 @@ private struct AuthLoginView: View {
                         .frame(height: 88)
                         .frame(maxWidth: .infinity)
                         .padding(.top, 8)
-                        .accessibilityLabel("Create UGC")
+                        .accessibilityLabel("Blinkugc")
 
                     Text("Log in")
                         .font(.system(size: 32, weight: .bold))
@@ -316,8 +316,7 @@ private struct AuthLoginView: View {
             case .apple:
                 authService.startSignInWithApple()
             case .google:
-                // Wire Google Sign-In SDK, then `await authService.handleGoogleSignIn(idToken:)`.
-                break
+                authService.startSignInWithGoogle()
             case .github:
                 // Wire GitHub OAuth, then `await authService.handleGitHubSignIn(idToken:)`.
                 break

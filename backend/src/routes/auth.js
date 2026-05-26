@@ -56,4 +56,54 @@ router.post('/verify', async (req, res) => {
   }
 });
 
+// Permanently delete the authenticated user's account and all associated data.
+// Required by Apple Guideline 5.1.1(v) for any app that supports account creation.
+router.delete('/account', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+
+  if (!token) {
+    return res.status(401).json({ success: false, error: 'Missing bearer token' });
+  }
+
+  try {
+    const { data: { user }, error: getUserError } = await supabase.auth.getUser(token);
+    if (getUserError || !user) {
+      return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+
+    const userId = user.id;
+
+    // Best-effort cascade. RLS-protected tables are removed via the service role.
+    const tables = [
+      'messages',
+      'conversations',
+      'posts',
+      'moodboards',
+      'saved_assets',
+      'models',
+      'ugc_jobs',
+      'ugc_creator_jobs',
+    ];
+    for (const table of tables) {
+      const { error: delError } = await supabase.from(table).delete().eq('user_id', userId);
+      if (delError) console.error(`Delete from ${table} failed:`, delError);
+    }
+
+    const { error: userRowError } = await supabase.from('users').delete().eq('id', userId);
+    if (userRowError) console.error('Delete users row failed:', userRowError);
+
+    const { error: authDeleteError } = await supabase.auth.admin.deleteUser(userId);
+    if (authDeleteError) {
+      console.error('Auth delete failed:', authDeleteError);
+      return res.status(500).json({ success: false, error: 'Could not delete auth user' });
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Account deletion error:', err);
+    return res.status(500).json({ success: false, error: 'Account deletion failed' });
+  }
+});
+
 module.exports = router;

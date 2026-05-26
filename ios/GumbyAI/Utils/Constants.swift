@@ -56,6 +56,11 @@ enum AppConstants {
 
     static let baseURL = "http://192.168.1.35:3000/api"
 
+    /// iOS OAuth client ID for Google Sign-In. Must match the
+    /// `GIDClientID` entry in Info.plist and the reversed URL scheme.
+    /// Also add this client ID to Supabase Auth → Providers → Google → Authorized Client IDs.
+    static let googleClientID = "429862551098-61qli52e04646cao0a38e4qdumf8ua64.apps.googleusercontent.com"
+
     static let supabaseURL = "https://zsmwvjrvuucuablyibko.supabase.co"
     static let supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzbXd2anJ2dXVjdWFibHlpYmtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MDAzNjQsImV4cCI6MjA5MzM3NjM2NH0.5F6QCXWf6bP7zfB9DpHYq0y6RfKiEzEhiEF6YTBDUXc"
 }

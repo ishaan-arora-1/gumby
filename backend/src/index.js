@@ -40,6 +40,6 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, async () => {
-  console.log(`Gumby AI backend running on port ${PORT}`);
+  console.log(`Blinkugc backend running on port ${PORT}`);
   await ensureBuckets();
 });

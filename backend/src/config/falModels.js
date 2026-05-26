@@ -1,5 +1,5 @@
 /**
- * Central registry of the fal.ai model endpoints we use across "Create UGC"'s
+ * Central registry of the fal.ai model endpoints we use across "Blinkugc"'s
  * pipeline. The full ad flow is now exactly two API calls:
  *
  *   1. IMAGE_SUBJECT_SWAP  — Nano Banana Pro takes the user's inspiration

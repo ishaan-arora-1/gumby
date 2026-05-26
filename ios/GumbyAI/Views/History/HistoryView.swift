@@ -57,7 +57,7 @@ struct HistoryView: View {
                 .font(.title3)
                 .fontWeight(.semibold)
                 .foregroundColor(AppConstants.textPrimary)
-            Text("Start chatting with Gumby AI")
+            Text("Start chatting with Blinkugc")
                 .font(.subheadline)
                 .foregroundColor(AppConstants.textSecondary)
             Spacer()

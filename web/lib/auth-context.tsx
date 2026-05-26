@@ -22,6 +22,7 @@ interface AuthContextValue {
   ) => Promise<{ needsConfirmation: boolean }>;
   resendConfirmation: (email: string) => Promise<void>;
   signInWithMagicLink: (email: string) => Promise<void>;
+  signInWithGoogle: (redirectPath?: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -88,6 +89,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
+  const signInWithGoogle = async (redirectPath = '/studio') => {
+    if (typeof window === 'undefined') return;
+    const next = encodeURIComponent(redirectPath);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${next}`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+    if (error) throw error;
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
   };
@@ -101,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithEmail,
         signUpWithEmail,
         signInWithMagicLink,
+        signInWithGoogle,
         resendConfirmation,
         signOut,
       }}

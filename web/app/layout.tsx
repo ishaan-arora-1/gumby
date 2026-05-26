@@ -1,14 +1,29 @@
 import type { Metadata, Viewport } from 'next';
+import { Sora, Archivo } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
 
+const sora = Sora({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-sora',
+  display: 'swap',
+});
+
+const archivo = Archivo({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800', '900'],
+  variable: '--font-archivo',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
-  title: 'Create UGC — AI-generated creator videos for your brand',
+  title: 'Blink UGC — The fastest way to create AI UGC videos',
   description:
-    'Cast AI creators, write scripts in seconds, and ship lip-synced UGC ads that look exactly like the real thing. Built for founders who move fast.',
+    'Powered by Kling 3.0 Pro. Cast AI creators, write scripts in seconds, and ship lip-synced UGC ads that look exactly like the real thing. Built for founders who move fast.',
   openGraph: {
-    title: 'Create UGC',
-    description: 'AI-generated UGC ads. Lip-synced, on-brand, in minutes.',
+    title: 'Blink UGC',
+    description: 'AI-generated UGC ads, powered by Kling 3.0 Pro. Lip-synced, on-brand, in minutes.',
     type: 'website',
   },
 };
@@ -25,7 +40,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className={`dark ${sora.variable} ${archivo.variable}`}>
       <body className="bg-black text-white antialiased min-h-screen">
         <AuthProvider>{children}</AuthProvider>
       </body>

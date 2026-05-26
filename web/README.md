@@ -1,6 +1,6 @@
-# Create UGC — Web
+# Blinkugc — Web
 
-The marketing site + web app for **Create UGC** (formerly Gumby). Built with Next.js 14 (App Router) + TypeScript + Tailwind + framer-motion. Shares the existing Express backend (`/backend`) and Supabase database with the iOS app.
+The marketing site + web app for **Blinkugc** (formerly Gumby). Built with Next.js 14 (App Router) + TypeScript + Tailwind + framer-motion. Shares the existing Express backend (`/backend`) and Supabase database with the iOS app.
 
 ## Run locally
 
