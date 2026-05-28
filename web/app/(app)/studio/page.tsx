@@ -2,30 +2,24 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, pollJob } from '@/lib/api';
-import type { UGCTemplate, UGCCreatorJob, UGCJob } from '@/lib/types';
+import type { UGCTemplate, UGCJob } from '@/lib/types';
 import { PromptComposer } from '@/components/studio/PromptComposer';
 import { TemplateCard } from '@/components/studio/TemplateCard';
-import { StudioForm } from '@/components/studio/StudioForm';
+import { StudioForm, type StudioPrefill } from '@/components/studio/StudioForm';
 import { GeneratingCard } from '@/components/studio/GeneratingCard';
 import { VideoResult } from '@/components/studio/VideoResult';
 import { LoopingVideo } from '@/components/ui/LoopingVideo';
 import { Button } from '@/components/ui/Button';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
-type Step =
-  | 'welcome'
-  | 'generating_creator'
-  | 'creator_ready'
-  | 'studio'
-  | 'generating_ad'
-  | 'ad_done';
+type Step = 'welcome' | 'studio' | 'generating_ad' | 'ad_done';
 
 export default function StudioPage() {
   const [step, setStep] = useState<Step>('welcome');
   const [templates, setTemplates] = useState<UGCTemplate[]>([]);
   const [pickedTemplate, setPickedTemplate] = useState<UGCTemplate | null>(null);
-  const [creatorJob, setCreatorJob] = useState<UGCCreatorJob | null>(null);
-  const [creatorPrompt, setCreatorPrompt] = useState<string>('');
+  const [prefill, setPrefill] = useState<StudioPrefill | null>(null);
+  const [isParsing, setIsParsing] = useState(false);
   const [adJob, setAdJob] = useState<UGCJob | null>(null);
   const [error, setError] = useState<string>('');
 
@@ -33,44 +27,36 @@ export default function StudioPage() {
     api.listTemplates(1).then((r) => setTemplates(r.data)).catch(() => {});
   }, []);
 
-  const onComposerSubmit = async (
-    prompt: string,
-    opts: { aspectRatio: '9:16' | '1:1' | '16:9'; durationSeconds: 5 | 10 }
-  ) => {
+  const onComposerSubmit = async (prompt: string) => {
+    if (prompt.trim().length < 10) {
+      setError('Describe your video in a bit more detail.');
+      return;
+    }
     setError('');
-    setCreatorPrompt(prompt);
+    setIsParsing(true);
     try {
-      const { data } = await api.generateCreator({ prompt, ...opts });
-      setCreatorJob(data);
-      setStep('generating_creator');
-      const final = await pollJob(
-        () => api.getCreatorJob(data.id),
-        (j) => setCreatorJob(j)
-      );
-      setCreatorJob(final);
-      setStep('creator_ready');
+      const { data } = await api.parsePrompt(prompt.trim());
+      setPickedTemplate(null);
+      setPrefill({
+        creatorDescription: data.creatorDescription || '',
+        includeProduct: !!data.includeProduct,
+        productName: data.productName || '',
+        productDescription: data.productDescription || '',
+        videoDescription: data.videoDescription || '',
+        duration: data.suggestedDuration === 5 ? 5 : 10,
+      });
+      setStep('studio');
     } catch (e: any) {
-      setError(e.message || 'Creator generation failed');
-      setStep('welcome');
+      setError(e.message || 'Could not understand your prompt. Try again.');
+    } finally {
+      setIsParsing(false);
     }
   };
 
   const onUseTemplate = (t: UGCTemplate) => {
     setPickedTemplate(t);
+    setPrefill(null);
     setStep('studio');
-  };
-
-  const onContinueFromCreator = async () => {
-    if (!creatorJob) return;
-    try {
-      const { data } = await api.promoteToTemplate(creatorJob.id);
-      setPickedTemplate(data);
-      setStep('studio');
-    } catch {
-      // Fall back to using creator description directly
-      setPickedTemplate(null);
-      setStep('studio');
-    }
   };
 
   const onGenerateAd = async (payload: any) => {
@@ -94,14 +80,13 @@ export default function StudioPage() {
   const reset = () => {
     setStep('welcome');
     setPickedTemplate(null);
-    setCreatorJob(null);
+    setPrefill(null);
     setAdJob(null);
     setError('');
   };
 
   return (
     <div className="min-h-screen pb-24 md:pb-12">
-      {/* Header */}
       {step !== 'welcome' && (
         <div className="px-6 lg:px-10 pt-10 pb-6 flex items-center justify-end">
           <Button variant="ghost" size="sm" onClick={reset}>
@@ -125,14 +110,13 @@ export default function StudioPage() {
             exit={{ opacity: 0, y: -20 }}
             className="px-6 lg:px-10 pt-32 lg:pt-40"
           >
-            {/* Composer */}
             <div className="text-center mb-14 lg:mb-16 max-w-2xl mx-auto">
-            <h2 className="font-mono text-white text-[clamp(16px,2.6vw,42px)] leading-[1.05] tracking-[-0.05em] [word-spacing:-0.2em]">
-              Start Creating UGC</h2>
+              <h2 className="font-mono text-white text-[clamp(16px,2.6vw,42px)] leading-[1.05] tracking-[-0.05em] [word-spacing:-0.2em]">
+                Start Creating UGC
+              </h2>
             </div>
-            <PromptComposer onSubmit={onComposerSubmit} />
+            <PromptComposer onSubmit={onComposerSubmit} loading={isParsing} />
 
-            {/* Or pick a template */}
             <div className="mt-20 max-w-7xl mx-auto">
               <div className="flex items-end justify-between mb-5">
                 <div>
@@ -156,74 +140,6 @@ export default function StudioPage() {
                     />
                   ))}
               </div>
-            </div>
-          </motion.div>
-        )}
-
-        {step === 'generating_creator' && (
-          <motion.div
-            key="gen-creator"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="px-6 lg:px-10 pt-10"
-          >
-            <div className="text-center mb-8 max-w-xl mx-auto">
-              <div className="text-xs uppercase tracking-[0.2em] text-white/40 mb-3">
-                Step 1 / 2
-              </div>
-              <h2 className="font-display font-bold text-3xl tracking-tight mb-2">
-                Casting your creator
-              </h2>
-              <p className="text-white/55 text-sm">"{creatorPrompt}"</p>
-            </div>
-            <GeneratingCard
-              serverProgress={creatorJob?.progress}
-              estimatedSeconds={45}
-              label="Creating your creator"
-            />
-          </motion.div>
-        )}
-
-        {step === 'creator_ready' && creatorJob?.video_url && (
-          <motion.div
-            key="creator-ready"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="px-6 lg:px-10 pt-10"
-          >
-            <div className="text-center mb-8 max-w-xl mx-auto">
-              <div className="text-xs uppercase tracking-[0.2em] text-accent2 mb-3 font-semibold">
-                Your creator is ready
-              </div>
-              <h2 className="font-display font-bold text-3xl tracking-tight mb-2">
-                Meet your creator
-              </h2>
-            </div>
-            <div className="max-w-xs mx-auto">
-              <div className="aspect-[9/16] rounded-card overflow-hidden gradient-border">
-                <LoopingVideo
-                  src={creatorJob.video_url}
-                  poster={creatorJob.thumbnail_url}
-                  className="w-full h-full"
-                />
-              </div>
-            </div>
-            <div className="mt-8 flex flex-wrap gap-3 justify-center">
-              <Button variant="gradient" size="lg" onClick={onContinueFromCreator}>
-                Make a full ad with this creator →
-              </Button>
-              <a
-                href={creatorJob.video_url}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button variant="outline" size="lg">
-                  Just save the clip
-                </Button>
-              </a>
             </div>
           </motion.div>
         )}
@@ -264,7 +180,7 @@ export default function StudioPage() {
             )}
             <StudioForm
               template={pickedTemplate}
-              creatorDescription={creatorPrompt}
+              prefill={prefill}
               onSubmit={onGenerateAd}
             />
           </motion.div>
@@ -279,9 +195,6 @@ export default function StudioPage() {
             className="px-6 lg:px-10 pt-10"
           >
             <div className="text-center mb-8 max-w-xl mx-auto">
-              <div className="text-xs uppercase tracking-[0.2em] text-white/40 mb-3">
-                Step 2 / 2
-              </div>
               <h2 className="font-display font-bold text-3xl tracking-tight mb-2">
                 Rendering your ad
               </h2>
