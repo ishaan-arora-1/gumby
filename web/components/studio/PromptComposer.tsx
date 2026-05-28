@@ -29,10 +29,15 @@ export function PromptComposer({ onSubmit, loading }: Props) {
 
   return (
     <div className="relative w-full max-w-3xl mx-auto">
-      {/* Gemini-style radial blue glow centered on the composer */}
+      {/* Gemini-style radial blue glow centered on the composer.
+          NOTE: do NOT use a negative z-index here — the AppShell wraps the
+          page in an opaque <div class="bg-canvas">, and a negative z-index
+          on a descendant escapes into the parent stacking context and gets
+          painted behind that background, hiding the glow. The gradient is
+          first in source order so the composer naturally paints on top. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[200%] w-[220%] -translate-x-1/2 -translate-y-1/2"
+        className="pointer-events-none absolute left-1/2 top-1/2 h-[200%] w-[220%] -translate-x-1/2 -translate-y-1/2"
         style={{
           background:
             'radial-gradient(ellipse 50% 50% at center, rgba(59, 130, 246, 0.65) 0%, rgba(37, 99, 235, 0.40) 22%, rgba(30, 58, 138, 0.22) 45%, rgba(15, 23, 42, 0.08) 65%, rgba(0, 0, 0, 0) 80%)',
