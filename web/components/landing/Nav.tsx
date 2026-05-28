@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { Logo } from '@/components/ui/Logo';
+import Image from 'next/image';
 import { Button } from '@/components/ui/Button';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
@@ -24,7 +24,16 @@ export function Nav() {
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between">
-        <Logo />
+        <Link href="/" className="flex items-center group">
+          <Image
+            src="/brand/logo-combined.png"
+            alt="blink ugc"
+            width={140}
+            height={36}
+            priority
+            className="h-9 w-auto transition-transform group-hover:scale-[1.03]"
+          />
+        </Link>
         <nav className="hidden md:flex items-center gap-8 text-sm text-white/70">
           <Link href="#features" className="hover:text-white transition">Features</Link>
           <Link href="#templates" className="hover:text-white transition">Creators</Link>
