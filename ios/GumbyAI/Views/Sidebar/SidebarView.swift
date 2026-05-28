@@ -15,8 +15,7 @@ struct SidebarView: View {
     @Binding var selectedDestination: NavigationDestination
 
     @State private var didLoadHistory = false
-    @State private var showDeleteConfirm = false
-    @State private var isDeleting = false
+    @State private var showProfile = false
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -36,18 +35,9 @@ struct SidebarView: View {
             Task { await historyVM.loadHistory() }
             didLoadHistory = true
         }
-        .alert("Delete account?", isPresented: $showDeleteConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) {
-                isDeleting = true
-                Task {
-                    _ = await authService.deleteAccount()
-                    isDeleting = false
-                    sidebarVM.close()
-                }
-            }
-        } message: {
-            Text("This permanently deletes your Blinkugc account and all of your videos, drafts, and chat history. This action cannot be undone.")
+        .sheet(isPresented: $showProfile) {
+            ProfileView()
+                .environmentObject(authService)
         }
     }
 
@@ -99,22 +89,14 @@ struct SidebarView: View {
                 }
                 .buttonStyle(.plain)
 
-                Menu {
-                    Button {
-                        authService.signOut()
-                        sidebarVM.close()
-                    } label: {
-                        Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
-                    }
-                    Button(role: .destructive) {
-                        showDeleteConfirm = true
-                    } label: {
-                        Label("Delete account", systemImage: "trash")
-                    }
+                Button {
+                    showProfile = true
                 } label: {
                     profileAvatar
                         .frame(width: 32, height: 32)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Account")
             }
             .padding(.leading, 14)
             .padding(.trailing, 8)

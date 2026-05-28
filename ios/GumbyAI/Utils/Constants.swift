@@ -48,13 +48,14 @@ enum AppConstants {
     static let authPrimaryCTALabel = Color(hex: "121212")
     static let authSocialButtonStroke = Color(hex: "2D2D2D")
 
-    /// Update to your production legal URLs.
-    static let termsOfServiceURL = URL(string: "https://gumby.ai/terms")!
-    static let privacyPolicyURL = URL(string: "https://gumby.ai/privacy")!
+    static let termsOfServiceURL = URL(string: "https://blinkugc.com/terms")!
+    static let privacyPolicyURL = URL(string: "https://blinkugc.com/privacy")!
+    static let supportEmail = "support@blinkugc.com"
+    static let websiteURL = URL(string: "https://blinkugc.com")!
     static let sidebarWidthRatio: CGFloat = 0.8
     static let pageSize = 20
 
-    static let baseURL = "http://192.168.1.35:3000/api"
+    static let baseURL = "https://api.blinkugc.com/api"
 
     /// iOS OAuth client ID for Google Sign-In. Must match the
     /// `GIDClientID` entry in Info.plist and the reversed URL scheme.
