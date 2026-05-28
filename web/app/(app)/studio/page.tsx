@@ -102,21 +102,13 @@ export default function StudioPage() {
   return (
     <div className="min-h-screen pb-24 md:pb-12">
       {/* Header */}
-      <div className="px-6 lg:px-10 pt-10 pb-6 flex items-center justify-between">
-        <div>
-          <h1 className="font-display font-bold text-3xl lg:text-4xl tracking-[-0.03em]">
-            Studio
-          </h1>
-          <p className="text-sm text-white/50 mt-1">
-            Generate UGC ads with AI creators
-          </p>
-        </div>
-        {step !== 'welcome' && (
+      {step !== 'welcome' && (
+        <div className="px-6 lg:px-10 pt-10 pb-6 flex items-center justify-end">
           <Button variant="ghost" size="sm" onClick={reset}>
             <Plus className="w-4 h-4" /> New
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {error && (
         <div className="mx-6 lg:mx-10 mb-4 p-4 rounded-btn bg-red-500/10 border border-red-500/20 text-sm text-red-400">
@@ -131,16 +123,12 @@ export default function StudioPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="px-6 lg:px-10"
+            className="px-6 lg:px-10 pt-32 lg:pt-40"
           >
             {/* Composer */}
-            <div className="text-center mb-8 max-w-2xl mx-auto">
-              <h2 className="font-display font-bold text-[clamp(28px,4vw,52px)] leading-[1.05] tracking-[-0.03em] mb-3">
-                What's your <span className="text-gradient">creator</span> like?
-              </h2>
-              <p className="text-white/55">
-                Describe them. We'll generate them.
-              </p>
+            <div className="text-center mb-14 lg:mb-16 max-w-2xl mx-auto">
+            <h2 className="font-mono text-white text-[clamp(16px,2.6vw,42px)] leading-[1.05] tracking-[-0.05em] [word-spacing:-0.2em]">
+              Start Creating UGC</h2>
             </div>
             <PromptComposer onSubmit={onComposerSubmit} />
 

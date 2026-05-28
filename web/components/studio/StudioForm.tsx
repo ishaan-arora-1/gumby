@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { api, fileToBase64 } from '@/lib/api';
 import type { UGCTemplate } from '@/lib/types';
-import { Sparkles, Upload, X, Wand2 } from 'lucide-react';
+import { Sparkles, Upload, X, Wand2, Image as ImageIcon } from 'lucide-react';
 
 interface Props {
   template: UGCTemplate | null;
@@ -14,19 +14,29 @@ interface Props {
 
 export function StudioForm({ template, creatorDescription, onSubmit, loading }: Props) {
   const [creatorDesc, setCreatorDesc] = useState(creatorDescription ?? '');
+
+  // Product
+  const [includeProduct, setIncludeProduct] = useState(true);
   const [productName, setProductName] = useState('');
   const [productDesc, setProductDesc] = useState('');
+  const [productTone, setProductTone] = useState('');
+  const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
+  const [uploadingProduct, setUploadingProduct] = useState(false);
+
+  // Inspiration
+  const [inspirationImageUrl, setInspirationImageUrl] = useState<string | null>(null);
+  const [uploadingInspiration, setUploadingInspiration] = useState(false);
+
+  // Script / scene / duration
   const [script, setScript] = useState(template?.sample_script ?? '');
   const [videoDescription, setVideoDescription] = useState('');
-  const [duration, setDuration] = useState<5 | 10>(5);
-  const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const [duration, setDuration] = useState<5 | 10>(10);
   const [genScript, setGenScript] = useState(false);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploadingImage(true);
+    setUploadingProduct(true);
     try {
       const base64 = await fileToBase64(file);
       const res = await api.uploadProductImage(file.type, base64);
@@ -35,20 +45,37 @@ export function StudioForm({ template, creatorDescription, onSubmit, loading }: 
       console.error(e);
       alert('Upload failed');
     } finally {
-      setUploadingImage(false);
+      setUploadingProduct(false);
+    }
+  };
+
+  const handleInspirationImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingInspiration(true);
+    try {
+      const base64 = await fileToBase64(file);
+      const res = await api.uploadInspirationImage(file.type, base64);
+      setInspirationImageUrl(res.data.url);
+    } catch (e) {
+      console.error(e);
+      alert('Upload failed');
+    } finally {
+      setUploadingInspiration(false);
     }
   };
 
   const generateScriptAI = async () => {
-    if (!productName || !productDesc) {
+    if (includeProduct && (!productName || !productDesc)) {
       alert('Add product name + description first');
       return;
     }
     setGenScript(true);
     try {
       const res = await api.generateScript({
-        productName,
-        productDescription: productDesc,
+        productName: includeProduct ? productName : '',
+        productDescription: includeProduct ? productDesc : '',
+        tone: productTone || undefined,
         template: template
           ? {
               name: template.name,
@@ -56,7 +83,12 @@ export function StudioForm({ template, creatorDescription, onSubmit, loading }: 
               setting: template.setting,
               sample_script: template.sample_script,
             }
-          : { name: 'creator', actor_name: 'Creator', setting: 'casual', sample_script: '' },
+          : {
+              name: 'creator',
+              actor_name: creatorDesc || 'Creator',
+              setting: 'casual',
+              sample_script: '',
+            },
         targetSeconds: duration,
       });
       setScript(res.data.script);
@@ -68,18 +100,31 @@ export function StudioForm({ template, creatorDescription, onSubmit, loading }: 
   };
 
   const submit = () => {
-    if (!productName || !script) {
-      alert('Add product name and script');
+    if (!template && !creatorDesc.trim()) {
+      alert('Describe the creator for your video');
+      return;
+    }
+    if (includeProduct && !productName.trim()) {
+      alert('Add a product name (or turn off "Include product")');
+      return;
+    }
+    if (!script.trim()) {
+      alert('Write or generate a script');
+      return;
+    }
+    if (!videoDescription.trim()) {
+      alert("Describe the scene (what's happening on camera)");
       return;
     }
     onSubmit({
       templateId: template?.id ?? null,
       creatorDescription: template ? undefined : creatorDesc,
-      productName,
-      productDescription: productDesc,
-      productImageUrl: productImageUrl ?? undefined,
+      productName: includeProduct ? productName : '',
+      productDescription: includeProduct ? productDesc : '',
+      productImageUrl: includeProduct ? productImageUrl ?? undefined : undefined,
+      inspirationImageUrl: inspirationImageUrl ?? undefined,
       script,
-      videoDescription: videoDescription || undefined,
+      videoDescription,
       videoDuration: duration,
     });
   };
@@ -98,26 +143,86 @@ export function StudioForm({ template, creatorDescription, onSubmit, loading }: 
         </Section>
       )}
 
-      <Section title="Product" hint="What are you selling?">
-        <input
-          value={productName}
-          onChange={(e) => setProductName(e.target.value)}
-          placeholder="Product name"
-          className={inputCls}
-        />
-        <textarea
-          value={productDesc}
-          onChange={(e) => setProductDesc(e.target.value)}
-          placeholder="What is it and why is it special?"
-          rows={3}
-          className={inputCls}
-        />
+      <Section
+        title="Product"
+        hint={includeProduct ? 'What are you selling?' : 'Talking-head video — no product.'}
+        action={
+          <button
+            type="button"
+            onClick={() => setIncludeProduct((v) => !v)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+              includeProduct ? 'bg-accent2' : 'bg-white/15'
+            }`}
+            aria-label="Include product"
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
+                includeProduct ? 'translate-x-5' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        }
+      >
+        {includeProduct && (
+          <>
+            <input
+              value={productName}
+              onChange={(e) => setProductName(e.target.value)}
+              placeholder="Product name"
+              className={inputCls}
+            />
+            <textarea
+              value={productDesc}
+              onChange={(e) => setProductDesc(e.target.value)}
+              placeholder="What is it and why is it special?"
+              rows={3}
+              className={inputCls}
+            />
+            <input
+              value={productTone}
+              onChange={(e) => setProductTone(e.target.value)}
+              placeholder="Tone (optional) — e.g. excited, chill, sarcastic"
+              className={inputCls}
+            />
+            <div className="flex items-center gap-3">
+              {productImageUrl ? (
+                <div className="relative w-16 h-16 rounded-btn overflow-hidden border border-white/10">
+                  <img src={productImageUrl} alt="" className="w-full h-full object-cover" />
+                  <button
+                    onClick={() => setProductImageUrl(null)}
+                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <label className="inline-flex items-center gap-2 px-3 h-9 rounded-pill border border-white/10 text-xs text-white/70 hover:text-white hover:border-white/30 cursor-pointer">
+                  <Upload className="w-3.5 h-3.5" />
+                  {uploadingProduct ? 'Uploading…' : 'Add product image'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleProductImageUpload}
+                    disabled={uploadingProduct}
+                    className="hidden"
+                  />
+                </label>
+              )}
+            </div>
+          </>
+        )}
+      </Section>
+
+      <Section
+        title="Inspiration"
+        hint="Optional. A reference photo of the scene you want."
+      >
         <div className="flex items-center gap-3">
-          {productImageUrl ? (
-            <div className="relative w-16 h-16 rounded-btn overflow-hidden border border-white/10">
-              <img src={productImageUrl} alt="" className="w-full h-full object-cover" />
+          {inspirationImageUrl ? (
+            <div className="relative w-20 h-20 rounded-btn overflow-hidden border border-white/10">
+              <img src={inspirationImageUrl} alt="" className="w-full h-full object-cover" />
               <button
-                onClick={() => setProductImageUrl(null)}
+                onClick={() => setInspirationImageUrl(null)}
                 className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center"
               >
                 <X className="w-3 h-3" />
@@ -125,13 +230,13 @@ export function StudioForm({ template, creatorDescription, onSubmit, loading }: 
             </div>
           ) : (
             <label className="inline-flex items-center gap-2 px-3 h-9 rounded-pill border border-white/10 text-xs text-white/70 hover:text-white hover:border-white/30 cursor-pointer">
-              <Upload className="w-3.5 h-3.5" />
-              {uploadingImage ? 'Uploading…' : 'Add product image'}
+              <ImageIcon className="w-3.5 h-3.5" />
+              {uploadingInspiration ? 'Uploading…' : 'Add inspiration image'}
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
-                onChange={handleImageUpload}
-                disabled={uploadingImage}
+                onChange={handleInspirationImageUpload}
+                disabled={uploadingInspiration}
                 className="hidden"
               />
             </label>
@@ -162,7 +267,7 @@ export function StudioForm({ template, creatorDescription, onSubmit, loading }: 
         />
       </Section>
 
-      <Section title="Scene" hint="Optional. What's happening?">
+      <Section title="Scene" hint="What's happening on camera?">
         <textarea
           value={videoDescription}
           onChange={(e) => setVideoDescription(e.target.value)}

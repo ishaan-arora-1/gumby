@@ -24,14 +24,14 @@ export function Nav() {
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center group">
+        <Link href="/" className="flex items-center">
           <Image
             src="/brand/logo-combined.png"
             alt="blink ugc"
             width={140}
             height={36}
             priority
-            className="h-9 w-auto transition-transform group-hover:scale-[1.03]"
+            className="h-9 w-auto"
           />
         </Link>
         <nav className="hidden md:flex items-center gap-8 text-sm text-white/70">
