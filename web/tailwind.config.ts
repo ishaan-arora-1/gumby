@@ -7,6 +7,7 @@ const config: Config = {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         display: ['Inter', 'system-ui', 'sans-serif'],
+        serif: ['var(--font-instrument-serif)', 'Instrument Serif', 'Georgia', 'serif'],
       },
       colors: {
         // From iOS Constants.swift — exact match

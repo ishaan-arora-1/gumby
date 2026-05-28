@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Sparkles, Send } from 'lucide-react';
+import { Sparkles, ArrowUp } from 'lucide-react';
 
 interface Props {
   onSubmit: (prompt: string, opts: { aspectRatio: '9:16' | '1:1' | '16:9'; durationSeconds: 5 | 10 }) => void;
@@ -32,6 +32,12 @@ export function PromptComposer({ onSubmit, loading }: Props) {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                submit();
+              }
+            }}
             placeholder="Describe your creator. Who are they, where are they, what's the vibe?"
             rows={3}
             className="w-full bg-transparent text-[15px] placeholder:text-placeholder resize-none focus:outline-none leading-relaxed"
@@ -72,12 +78,13 @@ export function PromptComposer({ onSubmit, loading }: Props) {
             <button
               onClick={submit}
               disabled={loading || prompt.trim().length < 6}
-              className="h-10 w-10 rounded-full bg-brand-gradient flex items-center justify-center shadow-lg shadow-accent2/30 disabled:opacity-40 disabled:cursor-not-allowed hover:scale-105 active:scale-95 transition"
+              aria-label="Send"
+              className="h-10 w-10 rounded-full bg-white/10 border border-white/15 text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/15 active:scale-95 transition"
             >
               {loading ? (
                 <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
               ) : (
-                <Send className="w-4 h-4 text-white" />
+                <ArrowUp className="w-4 h-4" />
               )}
             </button>
           </div>

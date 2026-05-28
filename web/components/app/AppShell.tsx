@@ -1,27 +1,46 @@
 'use client';
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Logo } from '@/components/ui/Logo';
 import { useAuth } from '@/lib/auth-context';
-import { Sparkles, Film, Folder, LogOut, Users } from 'lucide-react';
+import { Sparkles, Film, LogOut, Users, PanelLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV = [
   { href: '/studio', label: 'Studio', icon: Sparkles },
   { href: '/templates', label: 'Creators', icon: Users },
-  { href: '/library', label: 'Library', icon: Folder },
   { href: '/videos', label: 'My videos', icon: Film },
 ];
+
+const SIDEBAR_KEY = 'gumby:sidebarCollapsed';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, loading, signOut } = useAuth();
   const router = useRouter();
   const path = usePathname();
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
   }, [loading, user, router]);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(SIDEBAR_KEY);
+      if (v === '1') setCollapsed(true);
+    } catch {}
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0');
+      } catch {}
+      return next;
+    });
+  };
 
   if (loading || !user) {
     return (
@@ -34,9 +53,27 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-canvas text-white flex">
       {/* Sidebar */}
-      <aside className="hidden md:flex flex-col w-60 border-r border-white/5 bg-bg p-4">
-        <div className="px-2 py-3 mb-2">
-          <Logo />
+      <aside
+        className={cn(
+          'hidden md:flex flex-col border-r border-white/5 bg-bg p-4 transition-[width] duration-200',
+          collapsed ? 'w-[72px]' : 'w-60'
+        )}
+      >
+        <div
+          className={cn(
+            'flex items-center mb-2 py-3',
+            collapsed ? 'justify-center' : 'gap-1 -ml-1'
+          )}
+        >
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="p-2 rounded-btn text-white/60 hover:text-white hover:bg-white/5 transition"
+          >
+            <PanelLeft className="w-5 h-5" />
+          </button>
+          {!collapsed && <Logo href="/studio" size={26} />}
         </div>
         <nav className="flex-1 space-y-1">
           {NAV.map((n) => {
@@ -46,38 +83,49 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 key={n.href}
                 href={n.href}
+                title={collapsed ? n.label : undefined}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-btn text-sm font-medium transition',
+                  'flex items-center rounded-btn text-sm font-medium transition',
+                  collapsed
+                    ? 'justify-center px-2 py-2.5'
+                    : 'gap-3 px-3 py-2.5',
                   active
                     ? 'bg-elevated text-white'
                     : 'text-white/60 hover:text-white hover:bg-white/5'
                 )}
               >
-                <Icon className="w-4 h-4" />
-                {n.label}
+                <Icon className="w-4 h-4 shrink-0" />
+                {!collapsed && <span>{n.label}</span>}
               </Link>
             );
           })}
         </nav>
         <div className="pt-4 border-t border-white/5 mt-4">
-          <div className="px-3 py-2 text-xs text-white/45 truncate">
-            {user.email}
-          </div>
+          {!collapsed && (
+            <div className="px-3 py-2 text-xs text-white/45 truncate">
+              {user.email}
+            </div>
+          )}
           <button
             onClick={async () => {
               await signOut();
               router.push('/');
             }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-btn text-sm text-white/60 hover:text-white hover:bg-white/5"
+            title={collapsed ? 'Sign out' : undefined}
+            className={cn(
+              'w-full flex items-center rounded-btn text-sm text-white/60 hover:text-white hover:bg-white/5 transition',
+              collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5'
+            )}
           >
-            <LogOut className="w-4 h-4" /> Sign out
+            <LogOut className="w-4 h-4 shrink-0" />
+            {!collapsed && <span>Sign out</span>}
           </button>
         </div>
       </aside>
 
       {/* Mobile top nav */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-black/80 backdrop-blur border-b border-white/5 px-4 flex items-center justify-between">
-        <Logo />
+        <Logo href="/studio" size={28} />
         <button
           onClick={async () => {
             await signOut();
