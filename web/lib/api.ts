@@ -1,7 +1,19 @@
 'use client';
 import { supabase } from './supabase';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000/api';
+function resolveApiBase(): string {
+  const explicit = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (explicit && explicit.trim()) return explicit;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://localhost:3000/api';
+    }
+  }
+  return 'https://api.blinkugc.com/api';
+}
+
+const API_BASE = resolveApiBase();
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
