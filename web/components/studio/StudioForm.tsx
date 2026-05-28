@@ -5,20 +5,29 @@ import { api, fileToBase64 } from '@/lib/api';
 import type { UGCTemplate } from '@/lib/types';
 import { Sparkles, Upload, X, Wand2, Image as ImageIcon } from 'lucide-react';
 
+export interface StudioPrefill {
+  creatorDescription?: string;
+  includeProduct?: boolean;
+  productName?: string;
+  productDescription?: string;
+  videoDescription?: string;
+  duration?: 5 | 10;
+}
+
 interface Props {
   template: UGCTemplate | null;
-  creatorDescription?: string;
+  prefill?: StudioPrefill | null;
   onSubmit: (payload: any) => void;
   loading?: boolean;
 }
 
-export function StudioForm({ template, creatorDescription, onSubmit, loading }: Props) {
-  const [creatorDesc, setCreatorDesc] = useState(creatorDescription ?? '');
+export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
+  const [creatorDesc, setCreatorDesc] = useState(prefill?.creatorDescription ?? '');
 
   // Product
-  const [includeProduct, setIncludeProduct] = useState(true);
-  const [productName, setProductName] = useState('');
-  const [productDesc, setProductDesc] = useState('');
+  const [includeProduct, setIncludeProduct] = useState(prefill?.includeProduct ?? true);
+  const [productName, setProductName] = useState(prefill?.productName ?? '');
+  const [productDesc, setProductDesc] = useState(prefill?.productDescription ?? '');
   const [productTone, setProductTone] = useState('');
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
   const [uploadingProduct, setUploadingProduct] = useState(false);
@@ -29,8 +38,8 @@ export function StudioForm({ template, creatorDescription, onSubmit, loading }: 
 
   // Script / scene / duration
   const [script, setScript] = useState(template?.sample_script ?? '');
-  const [videoDescription, setVideoDescription] = useState('');
-  const [duration, setDuration] = useState<5 | 10>(10);
+  const [videoDescription, setVideoDescription] = useState(prefill?.videoDescription ?? '');
+  const [duration, setDuration] = useState<5 | 10>(prefill?.duration ?? 10);
   const [genScript, setGenScript] = useState(false);
 
   const handleProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
