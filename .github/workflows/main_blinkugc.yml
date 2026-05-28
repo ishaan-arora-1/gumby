@@ -1,5 +1,6 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# Auth: publish profile (AZURE_WEBAPP_PUBLISH_PROFILE) — bypasses OneDeploy/OIDC issues.
+# Build the backend and deploy via Kudu /api/zipdeploy.
+# Bypasses azure/webapps-deploy@v3 entirely — it routes through OneDeploy which
+# hangs indefinitely on many App Service plans (open Microsoft issue).
 
 name: Build and deploy Node.js app to Azure Web App - Blinkugc
 
@@ -10,7 +11,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -35,30 +36,44 @@ jobs:
           zip -r ../release.zip . -x "node_modules/*" ".env" ".env.*"
           ls -lh ../release.zip
 
-      - name: Upload zip artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: node-app
-          path: release.zip
+      - name: Deploy zip directly to Kudu /api/zipdeploy
+        shell: bash
+        env:
+          PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    permissions:
-      contents: read
+          # Parse credentials from the ZipDeploy entry in the publish profile.
+          read -r KUDU_HOST KUDU_USER KUDU_PASS < <(python3 - <<'PY'
+          import os, xml.etree.ElementTree as ET
+          root = ET.fromstring(os.environ["PUBLISH_PROFILE"])
+          p = next(x for x in root if x.get("publishMethod") == "ZipDeploy")
+          host = p.get("publishUrl").split(":")[0]
+          print(host, p.get("userName"), p.get("userPWD"))
+          PY
+          )
 
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: node-app
+          # Mask the password in logs.
+          echo "::add-mask::$KUDU_PASS"
+          echo "Deploying release.zip to https://$KUDU_HOST/api/zipdeploy"
 
-      - name: 'Deploy to Azure Web App'
-        id: deploy-to-webapp
-        uses: azure/webapps-deploy@v3
-        timeout-minutes: 10
-        with:
-          app-name: 'Blinkugc'
-          slot-name: 'Production'
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: release.zip
+          HTTP=$(curl -sS \
+            -w "%{http_code}" \
+            -o /tmp/zipdeploy_response.txt \
+            --max-time 300 \
+            --retry 2 --retry-delay 10 \
+            -u "$KUDU_USER:$KUDU_PASS" \
+            -H "Content-Type: application/zip" \
+            --data-binary @release.zip \
+            "https://$KUDU_HOST/api/zipdeploy")
+
+          echo "Kudu responded with HTTP $HTTP"
+          echo "--- response body ---"
+          cat /tmp/zipdeploy_response.txt || true
+          echo
+          echo "--- end ---"
+
+          if [ "$HTTP" != "200" ] && [ "$HTTP" != "202" ]; then
+            echo "::error::Kudu zipdeploy failed with HTTP $HTTP"
+            exit 1
+          fi
