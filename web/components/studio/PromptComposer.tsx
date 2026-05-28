@@ -28,8 +28,18 @@ export function PromptComposer({ onSubmit, loading }: Props) {
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto">
-      <div className="rounded-card bg-composer border border-white/[0.08] p-2 shadow-2xl shadow-black/40">
+    <div className="relative w-full max-w-3xl mx-auto">
+      {/* Gemini-style radial blue glow centered on the composer */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[140%] w-[180%] -translate-x-1/2 -translate-y-1/2"
+        style={{
+          background:
+            'radial-gradient(ellipse 55% 55% at center, rgba(37, 99, 235, 0.28) 0%, rgba(30, 58, 138, 0.16) 28%, rgba(15, 23, 42, 0.08) 50%, rgba(0, 0, 0, 0) 70%)',
+          filter: 'blur(60px)',
+        }}
+      />
+      <div className="relative rounded-card bg-composer border border-white/[0.08] p-2 shadow-2xl shadow-black/40">
         <div className="bg-composerInner rounded-[14px] p-4">
           <textarea
             value={prompt}
