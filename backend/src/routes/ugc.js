@@ -149,10 +149,14 @@ router.post('/script', async (req, res) => {
   const tplSampleScript = template?.sample_script || '';
   const hasProduct = productName && productName.trim().length > 0;
   // Target the voice-over length to match the video duration the user
-  // selected (5/10/15s). Client sends this as `targetSeconds`. Defaults
-  // to 10s for the standard 2-scene pipeline.
-  const targetSeconds = Math.min(45, Math.max(5, Number(requestedSeconds) || 10));
-  const wordTarget = Math.max(20, Math.round(targetSeconds * 2.4));
+  // selected (5 or 10s). Kling 3.0 Pro renders fixed-length clips, so an
+  // overlong script forces the TTS to speed up and the lip-sync to clip
+  // the tail. We size the script to ~2.0 spoken words per second with a
+  // hard upper bound, which leaves the creator room to breathe and land
+  // the last beat cleanly.
+  const targetSeconds = Math.min(15, Math.max(5, Number(requestedSeconds) || 10));
+  const wordTarget = Math.round(targetSeconds * 2.0);
+  const wordMax = Math.round(targetSeconds * 2.4);
 
   // We are NOT writing ad copy. We are writing what a real person would
   // actually say into their phone camera while filming a casual video for
@@ -177,7 +181,10 @@ router.post('/script', async (req, res) => {
     "- Vary sentence length. Some short. Some medium. Avoid three same-length sentences in a row.",
     "- No emojis, no hashtags, no brackets, no asterisks. Never mention scripts, AI, ads, or video.",
     "",
-    `Length target: about ${wordTarget} words (~${targetSeconds}s spoken). Slightly under is better than slightly over.`,
+    `LENGTH IS A HARD CONSTRAINT. The creator has exactly ${targetSeconds} seconds on camera.`,
+    `Write ${wordTarget} words. Absolute maximum ${wordMax} words. Count your words before responding.`,
+    `If you go over, the TTS will speed up unnaturally and the lip-sync will clip the ending. Shorter is always better than longer.`,
+    `For a ${targetSeconds}-second video: ${targetSeconds <= 5 ? 'one tight sentence, maybe two short fragments. A single beat.' : 'two or three sentences max. One setup, one payoff. No third beat.'}`,
   ].join('\n');
 
   const userPrompt = hasProduct
@@ -207,7 +214,22 @@ router.post('/script', async (req, res) => {
         { role: 'user', content: userPrompt },
       ],
     });
-    const script = (completion.choices?.[0]?.message?.content || '').trim();
+    let script = (completion.choices?.[0]?.message?.content || '').trim();
+    // Safety net: if the model overshoots the hard cap, trim to the last
+    // sentence boundary that fits. Keeps the script playable inside the
+    // fixed video duration even when the prompt instructions drift.
+    const words = script.split(/\s+/);
+    if (words.length > wordMax) {
+      const trimmed = words.slice(0, wordMax).join(' ');
+      const lastStop = Math.max(
+        trimmed.lastIndexOf('.'),
+        trimmed.lastIndexOf('!'),
+        trimmed.lastIndexOf('?')
+      );
+      script = lastStop > wordMax * 3
+        ? trimmed.slice(0, lastStop + 1).trim()
+        : trimmed.trim();
+    }
     return res.json({ success: true, data: { script } });
   } catch (err) {
     console.error('UGC script error:', err);
