@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 /* ============================================================
@@ -53,8 +54,33 @@ const CARD_VIDEOS = TEMPLATE_SOURCES.map((s) => ({
   label: s.label,
 }));
 
-const COLS = 6;
-const PER_COL = 5;
+// Responsive wall sizing. Total tile count drives how many <video> decoders
+// the browser has to keep alive concurrently, which is the #1 source of
+// jank on phones and mid-range laptops. We keep the unique-URL count at 6
+// (so the network cost is identical across breakpoints) but scale the
+// number of decoders down hard on smaller screens.
+type WallLayout = { cols: number; perCol: number };
+const LAYOUT_MOBILE: WallLayout = { cols: 3, perCol: 3 };   //  9 tiles
+const LAYOUT_TABLET: WallLayout = { cols: 4, perCol: 4 };   // 16 tiles
+const LAYOUT_DESKTOP: WallLayout = { cols: 5, perCol: 4 };  // 20 tiles
+
+function pickLayout(width: number): WallLayout {
+  if (width < 640) return LAYOUT_MOBILE;
+  if (width < 1024) return LAYOUT_TABLET;
+  return LAYOUT_DESKTOP;
+}
+
+function useWallLayout(): WallLayout {
+  // SSR-safe: assume desktop on the server, refine on mount.
+  const [layout, setLayout] = useState<WallLayout>(LAYOUT_DESKTOP);
+  useEffect(() => {
+    const update = () => setLayout(pickLayout(window.innerWidth));
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+  return layout;
+}
 
 interface Tile {
   src: string;
@@ -109,12 +135,14 @@ export function BlinkLanding() {
     };
   }, []);
 
-  // 30 tiles, deterministically reusing the 6 real Cloudinary
-  // template videos. Because every tile sharing the same `src`
-  // pulls from the browser cache after the first load, the wall
-  // is effectively instant once the 6 videos are fetched.
+  const layout = useWallLayout();
+
+  // Tiles deterministically reuse the 6 real Cloudinary template videos.
+  // Every tile sharing the same `src` pulls from the browser cache after
+  // the first load, so the wall is effectively instant once the 6 videos
+  // are fetched. Tile count varies by breakpoint (see `useWallLayout`).
   const tiles: Tile[] = useMemo(() => {
-    const total = COLS * PER_COL;
+    const total = layout.cols * layout.perCol;
     return Array.from({ length: total }, (_, i) => {
       const v = TILE_VIDEOS[i % TILE_VIDEOS.length];
       return {
@@ -125,13 +153,13 @@ export function BlinkLanding() {
         live: i > 0 && i % 4 === 1,
       };
     });
-  }, []);
+  }, [layout.cols, layout.perCol]);
 
   return (
     <div className="font-body-blink bg-[#050608] text-white overflow-x-hidden">
       <PromoBar />
       <Nav scrolled={scrolled} />
-      <Hero tiles={tiles} />
+      <Hero tiles={tiles} layout={layout} />
       <LogoStrip />
       <HowItWorks />
       <Showcase />
@@ -180,17 +208,15 @@ function Nav({ scrolled }: { scrolled: boolean }) {
       ].join(' ')}
       style={scrolled ? { backdropFilter: 'blur(18px) saturate(140%)', WebkitBackdropFilter: 'blur(18px) saturate(140%)' } : undefined}
     >
-      <Link href="/" className="flex items-center gap-2.5 font-display-blink text-[21px] font-extrabold tracking-[-0.5px]">
-        <span
-          className="grid h-[34px] w-[34px] place-items-center rounded-[9px] text-[18px] font-black text-white"
-          style={{
-            background: 'linear-gradient(135deg, #2563ff, #ff2e3f)',
-            boxShadow: '0 0 22px rgba(37,99,255,0.55)',
-          }}
-        >
-          B
-        </span>
-        Blink UGC
+      <Link href="/" className="flex items-center">
+        <Image
+          src="/brand/logo-combined.png"
+          alt="Blink UGC"
+          width={200}
+          height={42}
+          priority
+          className="h-[38px] w-auto"
+        />
       </Link>
 
       <div className="flex items-center gap-[30px] text-[14.5px] font-medium max-[900px]:hidden">
@@ -231,10 +257,32 @@ function NavLink({ href, children, caret }: { href: string; children: React.Reac
 /* ============================================================
    HERO
 ============================================================ */
-function Hero({ tiles }: { tiles: Tile[] }) {
+function Hero({ tiles, layout }: { tiles: Tile[]; layout: WallLayout }) {
+  const heroRef = useRef<HTMLElement>(null);
+  // `playing` flips to false only when the hero is *entirely* out of the
+  // viewport (every pixel scrolled past). `threshold: 0` + checking
+  // `isIntersecting` gives us exactly that: as long as a single pixel of
+  // the hero is visible, videos keep playing. On initial mount we default
+  // to `true` so the wall plays instantly without waiting for the observer
+  // to fire its first callback.
+  const [playing, setPlaying] = useState(true);
+  useEffect(() => {
+    const el = heroRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      ([entry]) => setPlaying(entry.isIntersecting),
+      { threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   return (
-    <header className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-5 pb-20 pt-[120px] text-center">
-      <VideoWall tiles={tiles} />
+    <header
+      ref={heroRef}
+      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-5 pb-20 pt-[120px] text-center"
+    >
+      <VideoWall tiles={tiles} layout={layout} playing={playing} />
 
       <div className="pointer-events-none absolute inset-0 z-[1] blink-hero-edges" />
       <div
@@ -334,21 +382,37 @@ function Hero({ tiles }: { tiles: Tile[] }) {
 /* ============================================================
    VIDEO WALL
 ============================================================ */
-function VideoWall({ tiles }: { tiles: Tile[] }) {
+function VideoWall({
+  tiles,
+  layout,
+  playing,
+}: {
+  tiles: Tile[];
+  layout: WallLayout;
+  playing: boolean;
+}) {
+  // We use inline `gridTemplateColumns` instead of a Tailwind class because
+  // `grid-cols-N` would require N to be statically known at build time and
+  // we need to swap it at runtime per breakpoint.
   return (
     <div
-      className="absolute z-0 grid grid-cols-6 gap-3.5"
-      style={{ inset: '-8%', transform: 'rotate(-4deg) scale(1.18)', transformOrigin: 'center' }}
+      className="absolute z-0 grid gap-3.5"
+      style={{
+        inset: '-8%',
+        transform: 'rotate(-4deg) scale(1.18)',
+        transformOrigin: 'center',
+        gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`,
+      }}
       aria-hidden
     >
-      {Array.from({ length: COLS }).map((_, c) => {
+      {Array.from({ length: layout.cols }).map((_, c) => {
         const dir = c % 2 === 0 ? 'blink-col-up' : 'blink-col-down';
         const slow = c % 3 === 0 ? 'blink-slow' : '';
-        const colTiles = tiles.slice(c * PER_COL, c * PER_COL + PER_COL);
+        const colTiles = tiles.slice(c * layout.perCol, c * layout.perCol + layout.perCol);
         return (
           <div key={c} className={`flex flex-col gap-3.5 ${dir} ${slow}`}>
             {[...colTiles, ...colTiles].map((tile, i) => (
-              <VTile key={`${c}-${i}`} tile={tile} />
+              <VTile key={`${c}-${i}`} tile={tile} playing={playing} />
             ))}
           </div>
         );
@@ -357,7 +421,7 @@ function VideoWall({ tiles }: { tiles: Tile[] }) {
   );
 }
 
-function VTile({ tile }: { tile: Tile }) {
+function VTile({ tile, playing }: { tile: Tile; playing: boolean }) {
   const ref = useRef<HTMLVideoElement>(null);
 
   // Some browsers (Safari especially) need an explicit play() after
@@ -375,6 +439,19 @@ function VTile({ tile }: { tile: Tile }) {
       v.removeEventListener('canplay', tryPlay);
     };
   }, []);
+
+  // Pause/resume in response to the hero leaving the viewport. Pausing
+  // releases the decode pipeline, which is what frees the CPU/GPU once
+  // the user scrolls past the hero.
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    if (playing) {
+      v.play().catch(() => {});
+    } else {
+      v.pause();
+    }
+  }, [playing]);
 
   return (
     <div
@@ -809,17 +886,14 @@ function FinalCta() {
 function Footer() {
   return (
     <footer className="relative z-[5] flex flex-wrap items-center justify-between gap-4 border-t border-white/10 bg-[#050608] px-9 py-[38px] text-[13px] text-white/60">
-      <div className="flex items-center gap-2.5 font-display-blink text-[18px] font-extrabold tracking-[-0.5px] text-white">
-        <span
-          className="grid h-[34px] w-[34px] place-items-center rounded-[9px] text-[18px] font-black text-white"
-          style={{
-            background: 'linear-gradient(135deg, #2563ff, #ff2e3f)',
-            boxShadow: '0 0 22px rgba(37,99,255,0.55)',
-          }}
-        >
-          B
-        </span>
-        Blink UGC
+      <div className="flex items-center">
+        <Image
+          src="/brand/logo-combined.png"
+          alt="Blink UGC"
+          width={150}
+          height={68}
+          className="h-[34px] w-auto"
+        />
       </div>
       <div className="flex items-center gap-5">
         <a href="/privacy" className="transition-colors hover:text-white">Privacy</a>
