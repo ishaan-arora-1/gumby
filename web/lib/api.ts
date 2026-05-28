@@ -78,6 +78,11 @@ export const api = {
       body: JSON.stringify({ name }),
     }),
 
+  // Permanently delete the signed-in user's account and all their data.
+  // Required by Apple Guideline 5.1.1(v) — surfaced in iOS, mirrored here.
+  deleteAccount: () =>
+    request<{ success: boolean }>('/auth/account', { method: 'DELETE' }),
+
   // ---- UGC Templates ----
   listTemplates: (page = 1, category?: string) => {
     const q = new URLSearchParams({ page: String(page) });

@@ -4,7 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Logo } from '@/components/ui/Logo';
 import { useAuth } from '@/lib/auth-context';
-import { Sparkles, Film, LogOut, Users, PanelLeft } from 'lucide-react';
+import { Sparkles, Film, LogOut, Users, PanelLeft, Settings as SettingsIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV = [
@@ -100,12 +100,30 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        <div className="pt-4 border-t border-white/5 mt-4">
-          {!collapsed && (
-            <div className="px-3 py-2 text-xs text-white/45 truncate">
-              {user.email}
-            </div>
-          )}
+        <div className="pt-4 border-t border-white/5 mt-4 space-y-1">
+          <Link
+            href="/settings"
+            title={collapsed ? 'Account' : undefined}
+            className={cn(
+              'w-full flex items-center rounded-btn text-sm transition',
+              path === '/settings'
+                ? 'bg-elevated text-white'
+                : 'text-white/60 hover:text-white hover:bg-white/5',
+              collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5'
+            )}
+          >
+            <SettingsIcon className="w-4 h-4 shrink-0" />
+            {!collapsed && (
+              <span className="flex flex-col items-start min-w-0">
+                <span>Account</span>
+                {user.email && (
+                  <span className="text-[11px] text-white/40 truncate max-w-[140px]">
+                    {user.email}
+                  </span>
+                )}
+              </span>
+            )}
+          </Link>
           <button
             onClick={async () => {
               await signOut();
@@ -126,15 +144,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Mobile top nav */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-black/80 backdrop-blur border-b border-white/5 px-4 flex items-center justify-between">
         <Logo href="/studio" size={28} />
-        <button
-          onClick={async () => {
-            await signOut();
-            router.push('/');
-          }}
-          className="text-white/60"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
+        <Link href="/settings" className="text-white/60" aria-label="Account">
+          <SettingsIcon className="w-4 h-4" />
+        </Link>
       </div>
 
       <main className="flex-1 min-w-0 pt-14 md:pt-0">
