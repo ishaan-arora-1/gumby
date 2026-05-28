@@ -32,13 +32,12 @@ export function PromptComposer({ onSubmit, loading }: Props) {
     // escape upward into the AppShell's opaque bg-canvas (which previously
     // ate the gradient on the second paint).
     <div className="relative isolate w-full max-w-3xl mx-auto">
-      {/* Gemini-style radial blue glow centered on the input row. The
-          vertical center is biased toward the top of the composer (`top-[38%]`)
-          so the glow visually surrounds the textarea instead of slumping
-          below it. */}
+      {/* Gemini-style radial blue glow biased above the composer so it
+          surrounds the textarea and tapers off before reaching the
+          suggestion chips below. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-[38%] z-0 h-[220%] w-[220%] -translate-x-1/2 -translate-y-1/2"
+        className="pointer-events-none absolute left-1/2 top-[22%] z-0 h-[180%] w-[220%] -translate-x-1/2 -translate-y-1/2"
         style={{
           background:
             'radial-gradient(ellipse 50% 50% at center, rgba(59, 130, 246, 0.65) 0%, rgba(37, 99, 235, 0.40) 22%, rgba(30, 58, 138, 0.22) 45%, rgba(15, 23, 42, 0.08) 65%, rgba(0, 0, 0, 0) 80%)',
