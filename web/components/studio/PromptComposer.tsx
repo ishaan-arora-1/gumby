@@ -32,11 +32,11 @@ export function PromptComposer({ onSubmit, loading }: Props) {
       {/* Gemini-style radial blue glow centered on the composer */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[140%] w-[180%] -translate-x-1/2 -translate-y-1/2"
+        className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[200%] w-[220%] -translate-x-1/2 -translate-y-1/2"
         style={{
           background:
-            'radial-gradient(ellipse 55% 55% at center, rgba(37, 99, 235, 0.28) 0%, rgba(30, 58, 138, 0.16) 28%, rgba(15, 23, 42, 0.08) 50%, rgba(0, 0, 0, 0) 70%)',
-          filter: 'blur(60px)',
+            'radial-gradient(ellipse 50% 50% at center, rgba(59, 130, 246, 0.65) 0%, rgba(37, 99, 235, 0.40) 22%, rgba(30, 58, 138, 0.22) 45%, rgba(15, 23, 42, 0.08) 65%, rgba(0, 0, 0, 0) 80%)',
+          filter: 'blur(80px)',
         }}
       />
       <div className="relative rounded-card bg-composer border border-white/[0.08] p-2 shadow-2xl shadow-black/40">
