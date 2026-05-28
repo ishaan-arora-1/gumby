@@ -52,10 +52,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-canvas text-white flex">
-      {/* Sidebar */}
+      {/* Sidebar — sticky so it stays pinned to the viewport while main scrolls */}
       <aside
         className={cn(
           'hidden md:flex flex-col border-r border-white/5 bg-bg p-4 transition-[width] duration-200',
+          'sticky top-0 h-screen shrink-0 self-start',
           collapsed ? 'w-[72px]' : 'w-60'
         )}
       >
@@ -75,7 +76,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
           {!collapsed && <Logo href="/studio" size={26} />}
         </div>
-        <nav className="flex-1 space-y-1">
+        <nav className="flex-1 space-y-1 overflow-y-auto">
           {NAV.map((n) => {
             const Icon = n.icon;
             const active = path === n.href || path.startsWith(n.href + '/');
