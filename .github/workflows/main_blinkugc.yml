@@ -24,16 +24,16 @@ jobs:
         with:
           node-version: '22.x'
 
-      - name: Verify backend dependency tree
+      - name: Install backend production dependencies
         working-directory: ./backend
         run: |
-          npm ci --omit=dev --ignore-scripts --dry-run
-          echo "Dependency tree validated"
+          npm ci --omit=dev
+          echo "Installed $(ls node_modules | wc -l) top-level packages"
 
-      - name: Create deployment zip from backend/
+      - name: Create deployment zip from backend/ (includes node_modules)
         run: |
           cd backend
-          zip -r ../release.zip . -x "node_modules/*" ".env" ".env.*"
+          zip -rq ../release.zip . -x ".env" ".env.*"
           ls -lh ../release.zip
 
       - name: Deploy zip directly to Kudu /api/zipdeploy
