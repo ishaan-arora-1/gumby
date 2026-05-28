@@ -4,7 +4,7 @@ _Last updated: 2026-05-26_
 
 This Privacy Policy describes how Blinkugc ("we", "our", or "the app") collects, uses, and shares information when you use our iOS application and related backend services.
 
-If you have questions, contact us at **support@createugc.app**. _(Replace with your real address before publishing.)_
+If you have questions, contact us at **support@blinkugc.com**.
 
 ## 1. Information We Collect
 
@@ -57,7 +57,7 @@ Blinkugc is not directed at children under 13, and we do not knowingly collect p
 
 ## 7. Your Rights
 
-Depending on where you live, you may have the right to access, correct, export, or delete the personal data we hold about you. To exercise any of these rights, email **support@createugc.app**. We will respond within 30 days.
+Depending on where you live, you may have the right to access, correct, export, or delete the personal data we hold about you. To exercise any of these rights, email **support@blinkugc.com**. We will respond within 30 days.
 
 ## 8. International Transfers
 
@@ -74,4 +74,4 @@ We may update this Privacy Policy from time to time. When we make material chang
 ## 11. Contact
 
 Blinkugc
-Email: support@createugc.app
+Email: support@blinkugc.com

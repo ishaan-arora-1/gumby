@@ -58,8 +58,8 @@ We may modify or discontinue the Service, or update these Terms, at any time. Ma
 
 ## 11. Governing Law
 
-These Terms are governed by the laws of the State of California, United States, without regard to its conflict-of-law principles. _(Replace if your business is elsewhere.)_
+These Terms are governed by the laws of India, without regard to its conflict-of-law principles. Any dispute arising out of or in connection with these Terms shall be subject to the exclusive jurisdiction of the courts in New Delhi, India.
 
 ## 12. Contact
 
-Questions about these Terms? Email **support@createugc.app**.
+Questions about these Terms? Email **support@blinkugc.com**.
