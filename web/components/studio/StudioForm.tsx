@@ -253,9 +253,25 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
         </div>
       </Section>
 
+      <Section title="Duration" hint="Pick this first — the AI script will be sized to fit.">
+        <div className="flex bg-elevated rounded-pill p-0.5 text-sm w-fit">
+          {([5, 10] as const).map((d) => (
+            <button
+              key={d}
+              onClick={() => setDuration(d)}
+              className={`px-5 h-9 rounded-pill font-semibold transition ${
+                duration === d ? 'bg-white text-black' : 'text-white/60'
+              }`}
+            >
+              {d}s
+            </button>
+          ))}
+        </div>
+      </Section>
+
       <Section
         title="Script"
-        hint="What does the creator say?"
+        hint={`What does the creator say? Keep it tight — ${duration}s of speech.`}
         action={
           <button
             onClick={generateScriptAI}
@@ -284,22 +300,6 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
           rows={2}
           className={inputCls}
         />
-      </Section>
-
-      <Section title="Duration">
-        <div className="flex bg-elevated rounded-pill p-0.5 text-sm w-fit">
-          {([5, 10] as const).map((d) => (
-            <button
-              key={d}
-              onClick={() => setDuration(d)}
-              className={`px-5 h-9 rounded-pill font-semibold transition ${
-                duration === d ? 'bg-white text-black' : 'text-white/60'
-              }`}
-            >
-              {d}s
-            </button>
-          ))}
-        </div>
       </Section>
 
       <Button
