@@ -62,7 +62,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div
           className={cn(
             'flex items-center mb-2 py-3',
-            collapsed ? 'justify-center' : 'gap-1 -ml-1'
+            collapsed ? 'justify-center' : 'justify-between -ml-1'
           )}
         >
           <button
