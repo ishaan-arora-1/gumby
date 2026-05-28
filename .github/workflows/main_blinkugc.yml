@@ -1,6 +1,5 @@
-# Build the backend and deploy via Kudu /api/zipdeploy.
-# Bypasses azure/webapps-deploy@v3 entirely — it routes through OneDeploy which
-# hangs indefinitely on many App Service plans (open Microsoft issue).
+# Classic publish-profile deploy via azure/webapps-deploy@v2.
+# v3 routes through OneDeploy which hangs on many App Service plans.
 
 name: Build and deploy Node.js app to Azure Web App - Blinkugc
 
@@ -35,45 +34,14 @@ jobs:
           cd backend
           zip -rq ../release.zip . -x ".env" ".env.*"
           ls -lh ../release.zip
+          echo "Top-level entries in zip:"
+          unzip -l ../release.zip | head -20
 
-      - name: Deploy zip directly to Kudu /api/zipdeploy
-        shell: bash
-        env:
-          PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-        run: |
-          set -euo pipefail
-
-          # Parse credentials from the ZipDeploy entry in the publish profile.
-          read -r KUDU_HOST KUDU_USER KUDU_PASS < <(python3 - <<'PY'
-          import os, xml.etree.ElementTree as ET
-          root = ET.fromstring(os.environ["PUBLISH_PROFILE"])
-          p = next(x for x in root if x.get("publishMethod") == "ZipDeploy")
-          host = p.get("publishUrl").split(":")[0]
-          print(host, p.get("userName"), p.get("userPWD"))
-          PY
-          )
-
-          # Mask the password in logs.
-          echo "::add-mask::$KUDU_PASS"
-          echo "Deploying release.zip to https://$KUDU_HOST/api/zipdeploy"
-
-          HTTP=$(curl -sS \
-            -w "%{http_code}" \
-            -o /tmp/zipdeploy_response.txt \
-            --max-time 300 \
-            --retry 2 --retry-delay 10 \
-            -u "$KUDU_USER:$KUDU_PASS" \
-            -H "Content-Type: application/zip" \
-            --data-binary @release.zip \
-            "https://$KUDU_HOST/api/zipdeploy")
-
-          echo "Kudu responded with HTTP $HTTP"
-          echo "--- response body ---"
-          cat /tmp/zipdeploy_response.txt || true
-          echo
-          echo "--- end ---"
-
-          if [ "$HTTP" != "200" ] && [ "$HTTP" != "202" ]; then
-            echo "::error::Kudu zipdeploy failed with HTTP $HTTP"
-            exit 1
-          fi
+      - name: 'Deploy to Azure Web App (v2 + publish profile)'
+        uses: azure/webapps-deploy@v2
+        timeout-minutes: 10
+        with:
+          app-name: 'Blinkugc'
+          slot-name: 'Production'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: release.zip
