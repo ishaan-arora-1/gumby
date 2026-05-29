@@ -20,6 +20,12 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { openai } = require('../config/openai');
+const { ffmpegPath } = require('../config/ffmpeg');
+
+// Bundled font, used so libass renders the same on every host (Azure
+// Linux App Service has no "Arial Black" available, and bundling avoids
+// any fontconfig surprises). The .ttf ships under backend/assets/fonts.
+const FONTS_DIR = path.join(__dirname, '..', '..', 'assets', 'fonts');
 
 // ---------------------------------------------------------------------------
 // Visual tuning — change these here while iterating on the look.
@@ -41,16 +47,21 @@ const COL_FILL    = '&H00FFFFFF';
 const COL_OUTLINE = '&H00000000';
 const COL_SHADOW  = '&H80000000';
 
-const DEFAULT_FONT = 'Arial Black';
+const DEFAULT_FONT = 'Anton';
 
 // ---------------------------------------------------------------------------
 
 function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     proc.stderr.on('data', (d) => { stderr += d.toString(); });
-    proc.on('error', reject);
+    proc.on('error', (err) => {
+      // ENOENT here means the binary isn't where we thought — surface it
+      // loudly because the previous behavior (silent caption skip) hid
+      // exactly the kind of failure we need to know about.
+      reject(new Error(`ffmpeg spawn failed (${ffmpegPath}): ${err.message}`));
+    });
     proc.on('close', (code) => {
       if (code === 0) resolve();
       else reject(new Error(`ffmpeg exit ${code}\n${stderr.slice(-1500)}`));
@@ -201,9 +212,15 @@ function buildAss({ cues, font }) {
 }
 
 async function burnSubtitles(videoPath, assPath, outPath) {
+  // `fontsdir=` tells libass to look at the bundled fonts directory FIRST,
+  // before whatever fontconfig finds on the host. Without it, Linux App
+  // Service falls back to DejaVu Sans and the caption look is wrong.
+  // The path needs ffmpeg-style escaping (colons and backslashes); on
+  // mac/linux the simple form below is safe.
+  const assFilter = `ass=${assPath}:fontsdir=${FONTS_DIR}`;
   await runFfmpeg([
     '-y', '-i', videoPath,
-    '-vf', `ass=${assPath}`,
+    '-vf', assFilter,
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
     '-c:a', 'copy',
     '-movflags', '+faststart',

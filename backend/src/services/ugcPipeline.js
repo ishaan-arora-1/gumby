@@ -12,6 +12,7 @@ const {
   IMAGE_GENERATE,
 } = require('../config/falModels');
 const { captionVideo } = require('./captioning');
+const { ffmpegPath } = require('../config/ffmpeg');
 
 const UGC_BUCKET = 'ugc-videos';
 
@@ -129,10 +130,12 @@ async function falSubscribeWithRetry(model, input, label, opts = {}) {
 
 function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     proc.stderr.on('data', (d) => { stderr += d.toString(); });
-    proc.on('error', reject);
+    proc.on('error', (err) => {
+      reject(new Error(`ffmpeg spawn failed (${ffmpegPath}): ${err.message}`));
+    });
     proc.on('close', (code) => {
       if (code === 0) resolve();
       else reject(new Error(`ffmpeg exit ${code}\n${stderr.slice(-1500)}`));
@@ -686,6 +689,7 @@ async function runSingleShotPipeline(job, jobId) {
 
     let videoBytesToUpload = fs.readFileSync(klingLocalPath);
     let captionStats = null;
+    let captionError = null;
     if (captionsEnabled) {
       await reportStage('captioning', 90, 96);
       console.log(`[ugc:${jobId}] burning captions via whisper + libass`);
@@ -702,9 +706,11 @@ async function runSingleShotPipeline(job, jobId) {
         );
       } catch (capErr) {
         // Caption failure is never fatal — fall through with the raw Kling
-        // bytes so the user still gets a video, and surface the reason in
-        // logs for investigation.
-        console.warn(`[ugc:${jobId}] caption pipeline failed, shipping uncaptioned video:`, capErr.message);
+        // bytes so the user still gets a video. We now log loudly AND
+        // remember the reason for the finalize step so it lands on the
+        // job row (best-effort; failure to persist the note is OK).
+        captionError = capErr?.message || String(capErr);
+        console.error(`[ugc:${jobId}] caption pipeline failed, shipping uncaptioned video: ${captionError}`);
       }
     } else {
       console.log(`[ugc:${jobId}] captions disabled by user — skipping`);
@@ -720,14 +726,22 @@ async function runSingleShotPipeline(job, jobId) {
 
     // ---- Step 3: finalize ----
     await updateJob(jobId, { status: 'finalizing', progress: 98 });
-    await updateJob(jobId, {
+    const completionPatch = {
       status: 'completed',
       progress: 100,
       output_video_url: finalVideoUrl,
       output_thumbnail_url: snapshot.thumbnail_url || seedImageUrl || null,
       completed_at: new Date().toISOString(),
-    });
-    console.log(`[ugc:${jobId}] DONE → ${finalVideoUrl}`);
+    };
+    // If the user asked for captions and the burn-in failed, surface the
+    // reason on the row so operations can see why future jobs aren't
+    // getting captions without trawling logs. We don't fail the job —
+    // they still get a watchable video.
+    if (captionError) {
+      completionPatch.error = `captions_skipped: ${captionError.slice(0, 400)}`;
+    }
+    await updateJob(jobId, completionPatch);
+    console.log(`[ugc:${jobId}] DONE → ${finalVideoUrl}${captionError ? ` (captions skipped: ${captionError})` : ''}`);
   } finally {
     try { fs.rmSync(workDir, { recursive: true, force: true }); } catch {}
   }

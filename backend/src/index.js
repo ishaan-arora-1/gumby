@@ -41,5 +41,14 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, async () => {
   console.log(`Blinkugc backend running on port ${PORT}`);
+  // Log the resolved ffmpeg binary so deploy regressions (e.g. Azure App
+  // Service stripping ffmpeg-static during a redeploy) are obvious in the
+  // first lines of the log instead of mysteriously dropping captions.
+  try {
+    const { ffmpegPath } = require('./config/ffmpeg');
+    console.log(`ffmpeg path: ${ffmpegPath}`);
+  } catch (e) {
+    console.warn('ffmpeg path resolver missing:', e?.message || e);
+  }
   await ensureBuckets();
 });
