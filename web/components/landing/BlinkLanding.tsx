@@ -124,11 +124,16 @@ function AutoPlayVideo({
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
-    // Mobile Safari/Chrome will only autoplay muted+playsInline videos when
-    // the browser thinks they're "ready" — a JS .play() call before the
-    // first byte downloads silently rejects. So we (a) keep the autoplay
-    // attribute on the element (so the browser starts as soon as it can)
-    // and (b) keep retrying play() once metadata/canplay fires.
+    // iOS Safari is notoriously strict about autoplay. There is a long-
+    // standing React bug where the `muted` JSX prop occasionally doesn't
+    // make it onto the DOM element as the `muted` attribute, which causes
+    // iOS to refuse autoplay and show a play overlay. Force the property
+    // on the element directly to guarantee it's muted before play().
+    v.muted = true;
+    v.defaultMuted = true;
+    v.setAttribute('muted', '');
+    v.setAttribute('playsinline', '');
+    v.setAttribute('webkit-playsinline', '');
     const tryPlay = () => {
       v.play().catch(() => {});
     };
