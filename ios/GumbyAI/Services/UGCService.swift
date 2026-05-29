@@ -80,6 +80,11 @@ final class UGCService {
         /// Creator appearance description — used only in direct mode when
         /// templateId is nil.
         let creatorDescription: String?
+        /// Optional template-mode tweaks (e.g. "same person but on a
+        /// beach"). The backend keeps the template creator's identity
+        /// locked and applies these adjustments to the surrounding scene
+        /// in the Nano Banana seed-image pass. Ignored in direct mode.
+        let creatorTweaks: String?
         let productName: String
         let productDescription: String
         let productImageURL: String?
@@ -105,6 +110,7 @@ final class UGCService {
         ]
         if let id = req.templateId { body["templateId"] = id }
         if let desc = req.creatorDescription, !desc.isEmpty { body["creatorDescription"] = desc }
+        if let tweaks = req.creatorTweaks, !tweaks.isEmpty { body["creatorTweaks"] = tweaks }
         if let url = req.productImageURL { body["productImageUrl"] = url }
         if let url = req.inspirationImageURL, !url.isEmpty { body["inspirationImageUrl"] = url }
         if !req.videoDescription.isEmpty {

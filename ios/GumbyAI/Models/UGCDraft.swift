@@ -17,6 +17,15 @@ struct UGCDraft: Identifiable {
     /// that description. Empty when a template is used instead.
     var creatorDescription: String
 
+    // MARK: - Creator tweaks (template mode only)
+
+    /// Optional adjustments the user wants applied on top of the chosen
+    /// template (e.g. "same creator but on a beach"). The backend keeps
+    /// the template creator's face/identity locked and applies these
+    /// tweaks to the surrounding scene in the Nano Banana seed image
+    /// pass. Empty in direct-prompt mode.
+    var creatorTweaks: String
+
     // MARK: - Inspiration image (optional)
 
     /// Optional reference photo describing the *scene* the user wants for
@@ -80,6 +89,7 @@ struct UGCDraft: Identifiable {
             id: UUID(),
             number: number,
             creatorDescription: "",
+            creatorTweaks: "",
             inspirationImage: nil,
             inspirationImageURL: nil,
             inspirationPhotoItem: nil,
@@ -101,6 +111,7 @@ struct UGCDraft: Identifiable {
             id: UUID(),
             number: number,
             creatorDescription: previous.creatorDescription,
+            creatorTweaks: previous.creatorTweaks,
             inspirationImage: nil,            // UIImage not cloned; URL carries forward
             inspirationImageURL: previous.inspirationImageURL,
             inspirationPhotoItem: nil,
