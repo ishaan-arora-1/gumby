@@ -17,7 +17,7 @@ This is everything between today and the App Store. Items marked **[done]** I've
 - **[done]** Added in-app **account deletion** flow (Apple Guideline 5.1.1(v)):
   - iOS: sidebar → tap profile avatar → "Delete account" with a confirm alert. Hits `DELETE /api/auth/account`.
   - Backend: new route in `backend/src/routes/auth.js` that cascades the user's rows from `messages`, `conversations`, `posts`, `moodboards`, `saved_assets`, `models`, `ugc_jobs`, `ugc_creator_jobs`, then deletes the `users` row and the Supabase auth record.
-- **[done]** Privacy Policy and Terms of Service drafts written to `legal/PRIVACY_POLICY.md` and `legal/TERMS_OF_SERVICE.md`. Replace the `support@createugc.app` placeholder with your real email and the California governing-law clause with your actual jurisdiction.
+- **[done]** Privacy Policy and Terms of Service drafts written to `legal/PRIVACY_POLICY.md` and `legal/TERMS_OF_SERVICE.md`. Replace the `support@blinkugc.com` placeholder with your real email and the California governing-law clause with your actual jurisdiction.
 
 After pulling these changes, regenerate the Xcode project:
 
@@ -42,16 +42,16 @@ cd ios && xcodegen generate
    ```
 4. Update `AppConstants.baseURL` in `ios/GumbyAI/Utils/Constants.swift` to your production URL, e.g.:
    ```swift
-   static let baseURL = "https://api.createugc.app/api"
+   static let baseURL = "https://api.blinkugc.com/api"
    ```
 
 ### 2b. Host the privacy policy and terms
 
 Apple will not let you submit without a publicly accessible Privacy Policy URL. Both URLs go into App Store Connect.
 
-1. Pick a domain (e.g. `createugc.app`).
+1. Pick a domain (e.g. `blinkugc.com`).
 2. Render `legal/PRIVACY_POLICY.md` and `legal/TERMS_OF_SERVICE.md` as HTML and host them. The simplest option is to push them to a public GitHub repo and use the raw URL, or use GitHub Pages, or drop them in your `web/` folder.
-3. Edit both files to replace the `support@createugc.app` placeholder with your real support address and fix the governing-law jurisdiction in section 11 of the Terms.
+3. Edit both files to replace the `support@blinkugc.com` placeholder with your real support address and fix the governing-law jurisdiction in section 11 of the Terms.
 4. (Optional) Add a Settings screen in the app with "Privacy Policy" and "Terms of Service" rows that open those URLs in Safari. Not required by Apple if the URLs are in App Store Connect, but it's a nice trust signal.
 
 ### 2c. Apple Developer account setup
@@ -62,7 +62,7 @@ Apple will not let you submit without a publicly accessible Privacy Policy URL. 
    - Name: **Blinkugc** (must match the display name within reason)
    - Primary language: English (U.S.)
    - Bundle ID: `com.ishaan.gumby` (matches `project.yml`). If you want a different bundle ID, change it in `project.yml` and regenerate before submitting — but note that the Google Sign-In `GIDClientID` in `Info.plist` was issued against the current ID, so changing it means also re-issuing that OAuth client.
-   - SKU: anything, e.g. `create-ugc-ios-1`
+   - SKU: anything, e.g. `blink-ugc-ios-1`
 3. **Capabilities and certificates**: since `CODE_SIGN_STYLE = Automatic`, Xcode will create distribution certificates for you. You only need to confirm Sign in with Apple is enabled for your App ID in the developer portal.
 
 ### 2d. App Store Connect listing
