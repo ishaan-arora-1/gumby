@@ -33,7 +33,7 @@ export function VideoResult({ videoUrl, posterUrl, onRegenerate }: Props) {
           const last = u.pathname.split('/').pop() || '';
           if (last.includes('.')) return last;
         } catch {}
-        return `create-ugc-${Date.now()}.mp4`;
+        return `blink-ugc-${Date.now()}.mp4`;
       })();
 
       const a = document.createElement('a');

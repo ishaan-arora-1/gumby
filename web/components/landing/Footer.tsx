@@ -37,7 +37,7 @@ export function Footer() {
           ))}
         </div>
         <div className="mt-16 pt-8 border-t border-white/5 flex flex-col md:flex-row gap-3 justify-between items-center text-xs text-white/35">
-          <div>© {new Date().getFullYear()} Create UGC. All rights reserved.</div>
+          <div>© {new Date().getFullYear()} Blink UGC. All rights reserved.</div>
           <div className="flex gap-6">
             <Link href="#" className="hover:text-white/70">Terms</Link>
             <Link href="#" className="hover:text-white/70">Privacy</Link>
