@@ -281,9 +281,14 @@ async function synthesizeCreatorScene({
 
 /**
  * Template-mode product integration. The user picked a curated template,
- * so we DON'T want to swap the creator — but we still want the product
- * visible in the video. Same idea as the inspiration path, but the first
- * image is a frame extracted from the template video.
+ * so we DON'T want to swap the creator — but we still want the user's
+ * product visible in the video. Same idea as the inspiration path, but
+ * the first image is a frame extracted from the template video.
+ *
+ * Critical: the template creator may already be holding/featuring the
+ * template's own product. We explicitly instruct Nano Banana to remove
+ * any such object first so the user's product doesn't end up sharing
+ * the frame with a leftover from the template.
  */
 async function integrateProductIntoTemplate({
   templateFrameUrl,
@@ -296,11 +301,12 @@ async function integrateProductIntoTemplate({
   const prompt = [
     'The FIRST image shows a person on camera in a specific scene.',
     'Keep that person exactly as they are — same face, same identity, same body, same clothing, same scene, same lighting, same framing.',
-    `The SECOND image is ${productPhrase}.`,
-    'Add that exact product to the scene — typically held in the person\'s hand, or being used by them — in a way that fits the scene naturally.',
+    'IMPORTANT: if the person in the first image is currently holding, wearing, or otherwise featuring any product, item, bottle, tube, box, package, or branded object, REMOVE that original object entirely. Replace whatever they were holding with the new product described below. Do not show two products. Do not show the original product anywhere in the frame.',
+    `The SECOND image is ${productPhrase} — the ONLY product that should appear in the final image.`,
+    'Place that exact product naturally into the scene — typically held in the person\'s hand, or being used by them — in a way that fits the scene.',
     'Preserve the product pixel-perfectly: packaging, color, label text, shape, and branding all match the second image exactly. Do not redesign or alter the product.',
     'The product should be clearly visible and recognizable in the final image — never hide, blur, or change its branding.',
-    'Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of the same person now holding this product.',
+    'Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of the same person now holding this product, with no trace of any other product.',
   ].join(' ');
 
   const result = await falSubscribeWithRetry(IMAGE_SUBJECT_SWAP, {
@@ -314,6 +320,43 @@ async function integrateProductIntoTemplate({
   const images = result?.data?.images || result?.images || [];
   const url = images[0]?.url;
   if (!url) throw new Error('Product integration returned no image URL');
+  return url;
+}
+
+/**
+ * Template-mode product REMOVAL. The user picked a template but did not
+ * supply their own product. The template creator may still be holding or
+ * featuring the template's original product, which would otherwise be
+ * carried into the Kling video. We run a Nano Banana edit pass to strip
+ * any held/featured object out of the frame while keeping the creator,
+ * scene, lighting, and framing untouched.
+ */
+async function stripProductFromTemplate({
+  templateFrameUrl,
+  aspectRatio = '9:16',
+  onProgress,
+}) {
+  const prompt = [
+    'The image shows a person on camera in a specific scene.',
+    'Keep that person exactly as they are — same face, same identity, same body, same clothing, same hair, same expression, same pose, same scene, same lighting, same camera angle, same framing.',
+    'If the person is holding, wearing, displaying, pointing at, or otherwise featuring any product, item, bottle, tube, jar, box, package, phone, gadget, or branded object, REMOVE that object completely from the scene.',
+    'Their hands should now be empty and relaxed in a natural position consistent with the rest of the pose — as if they were simply talking to camera with nothing in their hands.',
+    'Do not add any new object. Do not change the person\'s identity, clothing, body, or surroundings. Do not introduce a replacement product.',
+    'If the person was not holding anything to begin with, return the scene unchanged.',
+    'Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of the same person, hands-free, in the same scene.',
+  ].join(' ');
+
+  const result = await falSubscribeWithRetry(IMAGE_SUBJECT_SWAP, {
+    prompt,
+    image_urls: [templateFrameUrl],
+    aspect_ratio: nanoAspectFor(aspectRatio),
+    num_images: 1,
+    resolution: '2K',
+  }, 'template-strip', { onProgress });
+
+  const images = result?.data?.images || result?.images || [];
+  const url = images[0]?.url;
+  if (!url) throw new Error('Template product-strip returned no image URL');
   return url;
 }
 
@@ -515,8 +558,10 @@ async function runSingleShotPipeline(job, jobId) {
       seedKind = 'template';
 
       if (productImageUrl) {
+        // User supplied a product → swap the template's original product
+        // (if any) out and the user's product in, in one Nano Banana pass.
         const tick = await reportStage('rendering_scene', 16, 30);
-        console.log(`[ugc:${jobId}] integrating product into template frame via Nano Banana Pro`);
+        console.log(`[ugc:${jobId}] swapping template product for user product via Nano Banana Pro`);
         const integratedUrl = await integrateProductIntoTemplate({
           templateFrameUrl,
           productImageUrl,
@@ -528,6 +573,21 @@ async function runSingleShotPipeline(job, jobId) {
         await updateJob(jobId, { creator_scene_image_url: seedImageUrl }).catch(() => {});
         seedKind = 'template+product';
         console.log(`[ugc:${jobId}] template + product seed image complete`);
+      } else {
+        // No user product → the template creator may still be holding the
+        // template's original product. Run a strip pass so the user's
+        // talking-head video doesn't surface someone else's branding.
+        const tick = await reportStage('rendering_scene', 16, 30);
+        console.log(`[ugc:${jobId}] stripping any template product from frame via Nano Banana Pro`);
+        const strippedUrl = await stripProductFromTemplate({
+          templateFrameUrl,
+          aspectRatio,
+          onProgress: tick,
+        });
+        seedImageUrl = await mirrorRemote(strippedUrl, jobId, 'image');
+        await updateJob(jobId, { creator_scene_image_url: seedImageUrl }).catch(() => {});
+        seedKind = 'template-clean';
+        console.log(`[ugc:${jobId}] template clean seed image complete`);
       }
     }
 
