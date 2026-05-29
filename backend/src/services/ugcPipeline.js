@@ -11,6 +11,7 @@ const {
   IMAGE_SUBJECT_SWAP,
   IMAGE_GENERATE,
 } = require('../config/falModels');
+const { captionVideo } = require('./captioning');
 
 const UGC_BUCKET = 'ugc-videos';
 
@@ -646,7 +647,10 @@ async function runSingleShotPipeline(job, jobId) {
     }
 
     // ---- Step 2: single Kling 3.0 Pro generation (with audio + lip-sync) ----
-    const videoTick = await reportStage('generating_video', 32, 96);
+    // Captioning (optional, default ON) eats the last 6 percent of the
+    // progress bar — Kling owns 32–90, captioning 90–96.
+    const captionsEnabled = snapshot.captions_enabled !== false;
+    const videoTick = await reportStage('generating_video', 32, captionsEnabled ? 90 : 96);
     const klingPrompt = buildKlingPrompt({
       script: scriptText,
       videoDescription: effectiveVideoDesc,
@@ -671,8 +675,48 @@ async function runSingleShotPipeline(job, jobId) {
           onProgress: videoTick,
         });
 
-    const finalVideoUrl = await mirrorRemote(klingVideoUrl, jobId, 'video');
-    console.log(`[ugc:${jobId}] kling complete → ${finalVideoUrl}`);
+    // Fetch the Kling MP4 to disk once. We may need to caption it next,
+    // and ffmpeg works on file paths — staging to disk avoids a second
+    // round-trip through Supabase to read the bytes back.
+    const klingLocalPath = path.join(workDir, 'kling.mp4');
+    {
+      const { buffer } = await downloadToBuffer(klingVideoUrl);
+      fs.writeFileSync(klingLocalPath, buffer);
+    }
+
+    let videoBytesToUpload = fs.readFileSync(klingLocalPath);
+    let captionStats = null;
+    if (captionsEnabled) {
+      await reportStage('captioning', 90, 96);
+      console.log(`[ugc:${jobId}] burning captions via whisper + libass`);
+      const captionedPath = path.join(workDir, 'captioned.mp4');
+      try {
+        captionStats = await captionVideo({
+          inputPath: klingLocalPath,
+          outputPath: captionedPath,
+          scriptHint: scriptText,
+        });
+        videoBytesToUpload = fs.readFileSync(captionedPath);
+        console.log(
+          `[ugc:${jobId}] captions burned (${captionStats.wordCount} words, ${captionStats.cues} cues)`
+        );
+      } catch (capErr) {
+        // Caption failure is never fatal — fall through with the raw Kling
+        // bytes so the user still gets a video, and surface the reason in
+        // logs for investigation.
+        console.warn(`[ugc:${jobId}] caption pipeline failed, shipping uncaptioned video:`, capErr.message);
+      }
+    } else {
+      console.log(`[ugc:${jobId}] captions disabled by user — skipping`);
+    }
+
+    const finalVideoUrl = await uploadBufferToBucket(
+      videoBytesToUpload,
+      'video/mp4',
+      'mp4',
+      `jobs/${jobId}/video`
+    );
+    console.log(`[ugc:${jobId}] final video → ${finalVideoUrl}${captionStats ? ' (captioned)' : ''}`);
 
     // ---- Step 3: finalize ----
     await updateJob(jobId, { status: 'finalizing', progress: 98 });
