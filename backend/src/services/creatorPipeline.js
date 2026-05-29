@@ -6,6 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 const supabase = require('../config/supabase');
 const { fal, isFalEnabled } = require('../config/fal');
 const { KLING_TEXT_TO_VIDEO } = require('../config/falModels');
+const { ffmpegPath } = require('../config/ffmpeg');
 
 const UGC_BUCKET = 'ugc-videos';
 
@@ -40,10 +41,12 @@ async function downloadBuffer(url) {
 
 function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     proc.stderr.on('data', (d) => { stderr += d.toString(); });
-    proc.on('error', reject);
+    proc.on('error', (err) => {
+      reject(new Error(`ffmpeg spawn failed (${ffmpegPath}): ${err.message}`));
+    });
     proc.on('close', (code) => {
       if (code === 0) resolve();
       else reject(new Error(`ffmpeg exited ${code}\n${stderr.slice(-1500)}`));
