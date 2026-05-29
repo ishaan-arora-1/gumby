@@ -47,7 +47,7 @@ const COL_FILL    = '&H00FFFFFF';
 const COL_OUTLINE = '&H00000000';
 const COL_SHADOW  = '&H80000000';
 
-const DEFAULT_FONT = 'Anton';
+const DEFAULT_FONT = 'Roboto';
 
 // ---------------------------------------------------------------------------
 
