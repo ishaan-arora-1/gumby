@@ -30,6 +30,22 @@ class ChatViewModel: ObservableObject {
     @Published var composerError: String?
     @Published var isStartingCreator: Bool = false
 
+    /// Up to MAX_COMPOSER_ATTACHMENTS images attached to the welcome
+    /// composer. Each is uploaded to /ugc/upload-attachment as soon as
+    /// the user picks it; the resulting URL is sent to /parse-prompt
+    /// for vision classification (product / inspiration / both) which
+    /// then routes the URL into the studio draft's product or
+    /// inspiration slot — or both, for a creator-with-product shot.
+    struct ComposerAttachment: Identifiable, Equatable {
+        let id: UUID
+        var image: UIImage
+        var remoteURL: String?
+        var uploading: Bool
+        var failed: Bool
+    }
+    @Published var composerAttachments: [ComposerAttachment] = []
+    static let MAX_COMPOSER_ATTACHMENTS: Int = 2
+
     // MARK: - Catalog
 
     @Published var templates: [UGCTemplate] = []
@@ -181,6 +197,7 @@ class ChatViewModel: ObservableObject {
             composerError = nil
             isStartingCreator = false
             isParsingPrompt = false
+            composerAttachments = []
             pickedTemplate = nil
             activeCreatorJob = nil
             creatorError = nil
@@ -239,15 +256,40 @@ class ChatViewModel: ObservableObject {
             composerError = "Describe your video in a bit more detail."
             return
         }
+        guard !composerAttachments.contains(where: { $0.uploading }) else {
+            composerError = "Wait for your images to finish uploading."
+            return
+        }
         composerError = nil
         isParsingPrompt = true
+        let attachmentURLs = composerAttachments.compactMap { $0.remoteURL }
         Task {
             do {
-                let parsed = try await service.parsePrompt(prompt)
+                let parsed = try await service.parsePrompt(prompt, attachmentURLs: attachmentURLs)
                 await MainActor.run {
                     self.isParsingPrompt = false
                     self.resetFunnelStateForNewRun()
                     self.pickedTemplate = nil
+
+                    // Route classified attachments into product / inspiration
+                    // slots. "both" lands in BOTH (creator-with-product); the
+                    // pipeline dedups identical URLs. First-wins per kind so
+                    // surplus attachments of the same kind are dropped.
+                    var routedProductURL: String? = nil
+                    var routedInspirationURL: String? = nil
+                    for attachment in (parsed.attachments ?? []) {
+                        switch attachment.kind {
+                        case "both":
+                            if routedProductURL == nil { routedProductURL = attachment.url }
+                            if routedInspirationURL == nil { routedInspirationURL = attachment.url }
+                        case "product":
+                            if routedProductURL == nil { routedProductURL = attachment.url }
+                        case "inspiration":
+                            if routedInspirationURL == nil { routedInspirationURL = attachment.url }
+                        default:
+                            if routedInspirationURL == nil { routedInspirationURL = attachment.url }
+                        }
+                    }
 
                     var draft = UGCDraft.empty()
                     draft.creatorDescription = parsed.creatorDescription
@@ -256,8 +298,14 @@ class ChatViewModel: ObservableObject {
                     draft.productDescription = parsed.productDescription
                     draft.videoDescription = parsed.videoDescription
                     draft.videoDuration = parsed.suggestedDuration
+                    draft.productImageURL = routedProductURL
+                    draft.inspirationImageURL = routedInspirationURL
                     self.drafts = [draft]
                     self.activeDraftIndex = 0
+
+                    // Composer attachments handed off to the draft — clear so
+                    // the next welcome session starts clean.
+                    self.composerAttachments = []
 
                     self.advance(to: .studio)
                 }
@@ -268,6 +316,41 @@ class ChatViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    // MARK: - Composer attachments
+
+    /// Start uploading a freshly-picked image in the background. The
+    /// attachment shows as a thumbnail immediately with a spinner;
+    /// upload completion flips `remoteURL` and `uploading=false`.
+    func addComposerAttachment(_ image: UIImage) {
+        guard composerAttachments.count < Self.MAX_COMPOSER_ATTACHMENTS else { return }
+        let id = UUID()
+        composerAttachments.append(
+            ComposerAttachment(id: id, image: image, remoteURL: nil, uploading: true, failed: false)
+        )
+        Task {
+            do {
+                let url = try await self.service.uploadAttachment(image)
+                await MainActor.run {
+                    if let idx = self.composerAttachments.firstIndex(where: { $0.id == id }) {
+                        self.composerAttachments[idx].remoteURL = url
+                        self.composerAttachments[idx].uploading = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    if let idx = self.composerAttachments.firstIndex(where: { $0.id == id }) {
+                        self.composerAttachments[idx].uploading = false
+                        self.composerAttachments[idx].failed = true
+                    }
+                }
+            }
+        }
+    }
+
+    func removeComposerAttachment(id: UUID) {
+        composerAttachments.removeAll(where: { $0.id == id })
     }
 
     private func startCreatorGeneration(prompt: String) async {
@@ -491,7 +574,10 @@ class ChatViewModel: ObservableObject {
                         videoDescription: drafts[draftIndex].videoDescription
                             .trimmingCharacters(in: .whitespacesAndNewlines),
                         videoDuration: drafts[draftIndex].videoDuration,
-                        captionsEnabled: drafts[draftIndex].captionsEnabled
+                        captionsEnabled: drafts[draftIndex].captionsEnabled,
+                        captionPresetId: drafts[draftIndex].captionsEnabled
+                            ? drafts[draftIndex].captionPresetId
+                            : nil
                     )
                 )
                 guard drafts.indices.contains(draftIndex) else { return }

@@ -56,6 +56,13 @@ final class UGCService {
 
     // MARK: - Prompt parsing (direct mode)
 
+    struct ClassifiedAttachment: Codable {
+        let url: String
+        /// "product" | "inspiration" | "both" — unknown values fall through
+        /// to "inspiration" client-side (the more flexible slot).
+        let kind: String
+    }
+
     struct ParsedPrompt: Codable {
         let creatorDescription: String
         let productName: String
@@ -63,10 +70,16 @@ final class UGCService {
         let videoDescription: String
         let suggestedDuration: Int
         let includeProduct: Bool
+        /// Per-attachment classifications when the composer passed
+        /// `attachments` to /parse-prompt. Empty (or absent) otherwise.
+        let attachments: [ClassifiedAttachment]?
     }
 
-    func parsePrompt(_ prompt: String) async throws -> ParsedPrompt {
-        let body: [String: Any] = ["prompt": prompt]
+    func parsePrompt(_ prompt: String, attachmentURLs: [String] = []) async throws -> ParsedPrompt {
+        var body: [String: Any] = ["prompt": prompt]
+        if !attachmentURLs.isEmpty {
+            body["attachments"] = attachmentURLs.map { ["url": $0] }
+        }
         let resp: APIResponse<ParsedPrompt> = try await api.post(path: "/ugc/parse-prompt", body: body)
         guard let data = resp.data else { throw APIError.noData }
         return data
@@ -102,6 +115,8 @@ final class UGCService {
         /// Whether to burn TikTok-style word-by-word captions into the
         /// finished video. Defaults to true on both clients.
         let captionsEnabled: Bool
+        /// Caption style preset id — see CaptionPreset.all.
+        let captionPresetId: String?
     }
 
     func startGeneration(_ req: GenerateRequest) async throws -> UGCJob {
@@ -120,6 +135,9 @@ final class UGCService {
             body["videoDescription"] = req.videoDescription
         }
         body["captionsEnabled"] = req.captionsEnabled
+        if let preset = req.captionPresetId, !preset.isEmpty {
+            body["captionPreset"] = preset
+        }
         let resp: APIResponse<UGCJob> = try await api.post(path: "/ugc/generate", body: body)
         guard let job = resp.data else { throw APIError.noData }
         return job
@@ -209,6 +227,10 @@ final class UGCService {
 
     func uploadProductImage(_ image: UIImage) async throws -> String {
         try await uploadImage(image, path: "/ugc/upload-product-image")
+    }
+
+    func uploadAttachment(_ image: UIImage) async throws -> String {
+        try await uploadImage(image, path: "/ugc/upload-attachment")
     }
 
     func uploadInspirationImage(_ image: UIImage) async throws -> String {

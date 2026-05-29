@@ -493,11 +493,13 @@ private struct PromptPill: View {
 // MARK: - Composer bar (pinned to bottom on the welcome step)
 
 /// The "Ask…" composer pinned to the bottom of the screen on the welcome
-/// step. Mirrors the reference mock: leading "+" affordance, free-text
-/// prompt input, aspect-ratio chip, mic glyph, and a gradient send button.
+/// step. Mirrors the reference mock: leading "+" affordance opens the
+/// photo picker so users can attach images that we auto-classify into
+/// product / inspiration / both, then aspect-ratio chip and send button.
 struct UGCChatComposerBar: View {
     @EnvironmentObject var chatVM: ChatViewModel
     @FocusState private var promptFocused: Bool
+    @State private var photoPickerItem: PhotosPickerItem?
 
     var body: some View {
         VStack(spacing: 8) {
@@ -515,10 +517,25 @@ struct UGCChatComposerBar: View {
         }
         .padding(.horizontal, 14)
         .padding(.bottom, 8)
+        .onChange(of: photoPickerItem) { _, newItem in
+            guard let item = newItem else { return }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let img = UIImage(data: data) {
+                    await MainActor.run {
+                        chatVM.addComposerAttachment(img)
+                        photoPickerItem = nil
+                    }
+                }
+            }
+        }
     }
 
     private var composerRow: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if !chatVM.composerAttachments.isEmpty {
+                attachmentStrip
+            }
             ZStack(alignment: .topLeading) {
                 if chatVM.composerPrompt.isEmpty {
                     Text("Describe your video ad…")
@@ -540,16 +557,19 @@ struct UGCChatComposerBar: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 10) {
-                Button {
-                    // Reserved for future "attach product photo" affordance.
-                    promptFocused = true
-                } label: {
+                PhotosPicker(
+                    selection: $photoPickerItem,
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
                     Image(systemName: "plus")
                         .font(.system(size: 18, weight: .heavy))
-                        .foregroundColor(.white.opacity(0.9))
+                        .foregroundColor(chatVM.composerAttachments.count >= ChatViewModel.MAX_COMPOSER_ATTACHMENTS
+                                         ? .white.opacity(0.3)
+                                         : .white.opacity(0.9))
                         .frame(width: 32, height: 32)
                 }
-                .buttonStyle(.plain)
+                .disabled(chatVM.composerAttachments.count >= ChatViewModel.MAX_COMPOSER_ATTACHMENTS)
 
                 Menu {
                     ForEach(["9:16", "1:1", "16:9"], id: \.self) { option in
@@ -616,6 +636,44 @@ struct UGCChatComposerBar: View {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
         )
+    }
+
+    private var attachmentStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(chatVM.composerAttachments) { att in
+                    ZStack(alignment: .topTrailing) {
+                        Image(uiImage: att.image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 48, height: 48)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                            )
+                        if att.uploading {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.black.opacity(0.55))
+                                .frame(width: 48, height: 48)
+                            ProgressView().tint(.white).scaleEffect(0.7)
+                                .frame(width: 48, height: 48)
+                        }
+                        Button {
+                            chatVM.removeComposerAttachment(id: att.id)
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 16, height: 16)
+                                .background(Circle().fill(Color.black.opacity(0.75)))
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 4, y: -4)
+                    }
+                }
+            }
+        }
     }
 }
 

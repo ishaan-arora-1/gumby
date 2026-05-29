@@ -392,25 +392,43 @@ struct UGCStudioCard: View {
     }
 
     private var captionsToggleRow: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Captions")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
-                Text(draft.captionsEnabled
-                     ? "Word-by-word captions burned into the video, in the Reels safe zone."
-                     : "Clean video — no captions on screen.")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(hex: "8E8E93"))
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Captions")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                    Text(draft.captionsEnabled
+                         ? "Pick a look. Captions burn into the Reels safe zone."
+                         : "Clean video — no captions on screen.")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "8E8E93"))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 12)
+                Toggle("", isOn: Binding(
+                    get: { chatVM.drafts[draftIndex].captionsEnabled },
+                    set: { chatVM.drafts[draftIndex].captionsEnabled = $0 }
+                ))
+                .labelsHidden()
+                .tint(Self.accent)
             }
-            Spacer(minLength: 12)
-            Toggle("", isOn: Binding(
-                get: { chatVM.drafts[draftIndex].captionsEnabled },
-                set: { chatVM.drafts[draftIndex].captionsEnabled = $0 }
-            ))
-            .labelsHidden()
-            .tint(Self.accent)
+            if draft.captionsEnabled {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(CaptionPreset.all) { preset in
+                            CaptionPreviewTile(
+                                preset: preset,
+                                selected: draft.captionPresetId == preset.id,
+                                onTap: {
+                                    chatVM.drafts[draftIndex].captionPresetId = preset.id
+                                }
+                            )
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
         }
         .padding(.top, 4)
     }
