@@ -124,41 +124,45 @@ function AutoPlayVideo({
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
-    let visible = false;
+    // Mobile Safari/Chrome will only autoplay muted+playsInline videos when
+    // the browser thinks they're "ready" — a JS .play() call before the
+    // first byte downloads silently rejects. So we (a) keep the autoplay
+    // attribute on the element (so the browser starts as soon as it can)
+    // and (b) keep retrying play() once metadata/canplay fires.
     const tryPlay = () => {
-      if (!visible) return;
       v.play().catch(() => {});
     };
+    tryPlay();
+    v.addEventListener('loadedmetadata', tryPlay);
+    v.addEventListener('canplay', tryPlay);
+
+    let io: IntersectionObserver | undefined;
     if (typeof IntersectionObserver !== 'undefined') {
-      const io = new IntersectionObserver(
+      io = new IntersectionObserver(
         ([entry]) => {
-          visible = entry.isIntersecting;
-          if (visible) tryPlay();
+          if (entry.isIntersecting) tryPlay();
           else v.pause();
         },
         { rootMargin, threshold: 0 },
       );
       io.observe(v);
-      v.addEventListener('loadedmetadata', tryPlay);
-      v.addEventListener('canplay', tryPlay);
-      return () => {
-        io.disconnect();
-        v.removeEventListener('loadedmetadata', tryPlay);
-        v.removeEventListener('canplay', tryPlay);
-      };
     }
-    visible = true;
-    tryPlay();
+    return () => {
+      io?.disconnect();
+      v.removeEventListener('loadedmetadata', tryPlay);
+      v.removeEventListener('canplay', tryPlay);
+    };
   }, [rootMargin]);
   return (
     <video
       ref={ref}
       src={src}
       poster={poster}
+      autoPlay
       muted
       loop
       playsInline
-      preload="metadata"
+      preload="auto"
       disablePictureInPicture
       className={className}
     />
