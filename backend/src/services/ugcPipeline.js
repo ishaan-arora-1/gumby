@@ -174,21 +174,38 @@ async function reimagineCreatorInScene({
   aspectRatio = '9:16',
   onProgress,
 }) {
-  const cleanCreator = (creatorDescription || '').trim() || 'a completely different person';
+  // The user gave us an inspiration photo PLUS a creator description.
+  // We treat the photo as the reference scene/composition and the
+  // description as the user's instructions for adjustments — could be a
+  // full person swap ("20-year-old woman in a kitchen"), or just tweaks
+  // ("same person but in a hoodie", "make the room warmer"). Nano Banana
+  // is given both as inputs and told to honor whichever interpretation
+  // matches the description.
+  const cleanCreator = (creatorDescription || '').trim();
   const hasProduct = !!productImageUrl;
   const productPhrase = productName ? `"${productName}"` : 'the product';
 
   const parts = [
-    `Replace the person in the first image with a completely different individual: ${cleanCreator}.`,
-    'The new person must have entirely different facial features, ethnicity, hair, body type, and clothing from the original — do not copy the original person\'s face or identity in any way.',
-    'Keep the EXACT same environment, background, props, lighting, camera angle, framing, and composition from the first image. Only the person changes.',
-    'The new person should sit/stand/pose in roughly the same position as the original and look like they belong naturally in the scene.',
+    'The FIRST image is a reference photo from the user showing the scene, lighting, composition, and framing they want.',
+    'Use this reference as the starting point for the final image — preserve its overall environment, camera angle, framing, and lighting style.',
   ];
+
+  if (cleanCreator) {
+    parts.push(
+      `The user\'s description of what they want is: "${cleanCreator}".`,
+      'Apply this description as the source of truth for who appears on camera and any adjustments to the scene. If the description specifies a different person from the one in the reference photo, swap the person to match the description (entirely different face, identity, ethnicity, hair, body type — do not copy the reference person\'s identity). If the description only specifies tweaks (clothing, mood, props, setting changes), keep the person from the reference but apply those tweaks. Resolve any conflict between the photo and the description in favor of the description.',
+    );
+  } else {
+    parts.push(
+      'Recreate the same scene but with a completely different individual on camera — entirely different facial features, ethnicity, hair, body type, and clothing from the original. Do not copy the original person\'s identity. The new person should pose naturally in roughly the same position.',
+    );
+  }
 
   if (hasProduct) {
     parts.push(
-      `The SECOND image is ${productPhrase} — the product this person is featuring.`,
-      `Integrate that exact product naturally into the scene — typically held in the new person's hand, or being used by them, in a way that fits the scene. The product MUST be preserved pixel-perfectly: packaging, color, label text, shape, and branding all match the second image exactly. Do not redesign, restyle, recolor, blur, or otherwise alter the product in any way.`,
+      `The SECOND image is ${productPhrase} — the product the on-camera person is featuring.`,
+      'Integrate that exact product naturally into the scene — typically held in their hand, or being used by them, in a way that fits the scene.',
+      'The product MUST be preserved pixel-perfectly: packaging, color, label text, shape, and branding all match the second image exactly. Do not redesign, restyle, recolor, blur, or otherwise alter the product in any way.',
       'The product should be clearly visible and recognizable in the final image — never hide it, never replace its label, never change its branding.',
     );
   }
