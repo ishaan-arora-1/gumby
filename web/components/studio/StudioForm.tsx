@@ -223,8 +223,12 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
       </Section>
 
       <Section
-        title="Inspiration"
-        hint="Optional. A reference photo of the scene you want."
+        title="Inspiration photo"
+        hint={
+          inspirationImageUrl
+            ? "We'll preserve this environment and swap the person to match your creator description."
+            : "Optional. Tap to attach an image. We'll keep the setting and put your creator into it."
+        }
       >
         <div className="flex items-center gap-3">
           {inspirationImageUrl ? (
