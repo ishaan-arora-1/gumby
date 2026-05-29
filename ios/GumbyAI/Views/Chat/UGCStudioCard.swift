@@ -67,14 +67,24 @@ struct UGCStudioCard: View {
                 productSection
             }
 
+            // Order mirrors web: Duration sits ABOVE Script so the AI
+            // script generator knows the length when it runs.
+            subCard(title: "Duration", systemImage: "timer") {
+                durationSection
+            }
+
             subCard(title: "Script", systemImage: "text.alignleft", trailing: {
                 AnyView(writeWithAIButton)
             }) {
                 scriptSection
             }
 
-            subCard(title: "Video", systemImage: "video") {
-                shotsSection
+            subCard(title: "Scene", systemImage: "video") {
+                sceneSection
+            }
+
+            subCard(title: "Captions", systemImage: "captions.bubble") {
+                captionsSection
             }
         }
         .padding(.bottom, 12)
@@ -352,11 +362,29 @@ struct UGCStudioCard: View {
         }
     }
 
-    // MARK: - Video description + duration
+    // MARK: - Duration / Scene / Captions
+    //
+    // These three live as separate sub-cards so the order matches the web
+    // form exactly: Product → Duration → Script → Scene → Captions. The
+    // AI script generator depends on duration being chosen first.
 
-    private var shotsSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Describe what you want the creator doing in the video. We'll handle the rest.")
+    private var durationSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Pick this first — the AI script will be sized to fit.")
+                .font(.system(size: 13))
+                .foregroundColor(Color(hex: "8E8E93"))
+            SegmentedDuration(
+                selected: Binding(
+                    get: { chatVM.drafts[draftIndex].videoDuration },
+                    set: { chatVM.drafts[draftIndex].videoDuration = $0 }
+                )
+            )
+        }
+    }
+
+    private var sceneSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Describe what you want the creator doing on camera. We'll handle the rest.")
                 .font(.system(size: 13))
                 .foregroundColor(Color(hex: "8E8E93"))
 
@@ -365,7 +393,7 @@ struct UGCStudioCard: View {
                     get: { chatVM.drafts[draftIndex].videoDescription },
                     set: { chatVM.drafts[draftIndex].videoDescription = $0 }
                 ),
-                label: "Video description",
+                label: "Scene",
                 placeholder: draft.includeProduct
                     ? "e.g. Creator picks up the product, shows it to camera, uses it and reacts"
                     : "e.g. Creator talks to camera, gestures expressively, smiles and leans in",
@@ -373,31 +401,13 @@ struct UGCStudioCard: View {
                 isFocused: focused == .video
             )
             .focused($focused, equals: .video)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Duration")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Color(hex: "8E8E93"))
-
-                SegmentedDuration(
-                    selected: Binding(
-                        get: { chatVM.drafts[draftIndex].videoDuration },
-                        set: { chatVM.drafts[draftIndex].videoDuration = $0 }
-                    )
-                )
-            }
-
-            captionsToggleRow
         }
     }
 
-    private var captionsToggleRow: some View {
+    private var captionsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Captions")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
                     Text(draft.captionsEnabled
                          ? "Pick a look. Captions burn into the Reels safe zone."
                          : "Clean video — no captions on screen.")
@@ -430,7 +440,6 @@ struct UGCStudioCard: View {
                 }
             }
         }
-        .padding(.top, 4)
     }
 
     // MARK: - Sticky generate bar
@@ -460,26 +469,28 @@ struct UGCStudioCard: View {
                 Button {
                     chatVM.generateForActiveDraft()
                 } label: {
-                    HStack(spacing: 8) {
+                    Group {
                         if draft.isSubmitting {
-                            ProgressView().tint(.white)
+                            HStack(spacing: 8) {
+                                ProgressView().tint(.white)
+                                Text("Starting…").font(.system(size: 15, weight: .semibold))
+                            }
                         } else {
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 12, weight: .semibold))
+                            Text("Generate").font(.system(size: 15, weight: .semibold))
                         }
-                        Text(draft.isSubmitting ? "Starting…" : "Generate")
-                            .font(.system(size: 15, weight: .semibold))
                     }
                     .foregroundColor(draft.canGenerate && !draft.isSubmitting
                                      ? .white
                                      : .white.opacity(0.35))
-                    .padding(.horizontal, 22)
+                    .padding(.horizontal, 24)
                     .padding(.vertical, 13)
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(draft.canGenerate && !draft.isSubmitting
-                                  ? Self.accent
-                                  : Color.white.opacity(0.06))
+                            .fill(Color.black)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
                     )
                 }
                 .buttonStyle(PressableStyle())
