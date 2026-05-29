@@ -145,8 +145,13 @@ struct UGCStudioCard: View {
     // MARK: - Creator (direct mode)
 
     private var creatorSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Describe the person in your video — their look, age, and setting.")
+        let hasInspiration = draft.inspirationImage != nil || draft.inspirationImageURL != nil
+        return VStack(alignment: .leading, spacing: 14) {
+            inspirationPicker
+
+            Text(hasInspiration
+                 ? "Tell us who is on camera and any tweaks for the photo above (clothing, mood, swap the person, etc.). Always included in the prompt."
+                 : "Describe the person and the whole scene — their look, age, and setting. Always included in the prompt.")
                 .font(.system(size: 13))
                 .foregroundColor(Color(hex: "6B6B6B"))
 
@@ -156,13 +161,13 @@ struct UGCStudioCard: View {
                     set: { chatVM.drafts[draftIndex].creatorDescription = $0 }
                 ),
                 label: "Creator description",
-                placeholder: "e.g. 20-year-old athletic woman in a bright modern kitchen",
+                placeholder: hasInspiration
+                    ? "e.g. Same setting but a 20-year-old woman in a hoodie holding a coffee"
+                    : "e.g. 20-year-old athletic woman in a bright modern kitchen",
                 minHeight: 76,
                 isFocused: focused == .creator
             )
             .focused($focused, equals: .creator)
-
-            inspirationPicker
         }
     }
 

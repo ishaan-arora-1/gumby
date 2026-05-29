@@ -145,14 +145,64 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
     });
   };
 
+  const inspirationSection = (
+    <Section
+      title="Inspiration photo"
+      hint={
+        inspirationImageUrl
+          ? "We'll use this as the reference scene. Your creator description below will be applied as adjustments on top of it."
+          : 'Optional. Attach a reference photo of the scene you want. Your creator description will define the rest.'
+      }
+    >
+      <div className="flex items-center gap-3">
+        {inspirationImageUrl ? (
+          <div className="relative w-20 h-20 rounded-btn overflow-hidden border border-white/10">
+            <img src={inspirationImageUrl} alt="" className="w-full h-full object-cover" />
+            <button
+              onClick={() => setInspirationImageUrl(null)}
+              className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        ) : (
+          <label className="inline-flex items-center gap-2 px-3 h-9 rounded-pill border border-white/10 text-xs text-white/70 hover:text-white hover:border-white/30 cursor-pointer">
+            <ImageIcon className="w-3.5 h-3.5" />
+            {uploadingInspiration ? 'Uploading…' : 'Add inspiration image (optional)'}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleInspirationImageUpload}
+              disabled={uploadingInspiration}
+              className="hidden"
+            />
+          </label>
+        )}
+      </div>
+    </Section>
+  );
+
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
+      {!template && inspirationSection}
+
       {!template && (
-        <Section title="Creator" hint="Describe the person you want.">
+        <Section
+          title="Creator"
+          hint={
+            inspirationImageUrl
+              ? 'Tell us who is on camera and any tweaks you want applied to the photo above (clothing, mood, swap the person, etc.). Always included in the prompt.'
+              : 'Describe the person and the whole scene — who they are, where they are, the vibe.'
+          }
+        >
           <textarea
             value={creatorDesc}
             onChange={(e) => setCreatorDesc(e.target.value)}
-            placeholder="20-year-old, friendly, in a kitchen, soft daylight…"
+            placeholder={
+              inspirationImageUrl
+                ? 'Same setting but a 20-year-old woman in a hoodie holding a coffee…'
+                : '20-year-old, friendly, in a kitchen, soft daylight…'
+            }
             rows={3}
             className={inputCls}
           />
@@ -244,40 +294,7 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
         )}
       </Section>
 
-      <Section
-        title="Inspiration photo"
-        hint={
-          inspirationImageUrl
-            ? "We'll preserve this environment and swap the person to match your creator description."
-            : "Optional. Tap to attach an image. We'll keep the setting and put your creator into it."
-        }
-      >
-        <div className="flex items-center gap-3">
-          {inspirationImageUrl ? (
-            <div className="relative w-20 h-20 rounded-btn overflow-hidden border border-white/10">
-              <img src={inspirationImageUrl} alt="" className="w-full h-full object-cover" />
-              <button
-                onClick={() => setInspirationImageUrl(null)}
-                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          ) : (
-            <label className="inline-flex items-center gap-2 px-3 h-9 rounded-pill border border-white/10 text-xs text-white/70 hover:text-white hover:border-white/30 cursor-pointer">
-              <ImageIcon className="w-3.5 h-3.5" />
-              {uploadingInspiration ? 'Uploading…' : 'Add inspiration image'}
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={handleInspirationImageUpload}
-                disabled={uploadingInspiration}
-                className="hidden"
-              />
-            </label>
-          )}
-        </div>
-      </Section>
+      {template && inspirationSection}
 
       <Section title="Duration" hint="Pick this first — the AI script will be sized to fit.">
         <div className="flex bg-elevated rounded-pill p-0.5 text-sm w-fit">
