@@ -189,23 +189,40 @@ async function reimagineCreatorInScene({
   const hasProduct = !!productImageUrl;
   const productPhrase = productName ? `"${productName}"` : 'the product';
 
-  const parts = [
-    'The FIRST image is a reference photo from the user showing the scene, lighting, composition, and framing they want.',
-    'Use this reference as the starting point for the final image — preserve its overall environment, camera angle, framing, and lighting style.',
-  ];
+  // "Both" case from the composer: the user uploaded a single image that
+  // is BOTH the inspiration AND the product (e.g. a creator already
+  // holding the product). The frontend dropped the same URL into both
+  // slots, so dedupe here — we send Nano Banana ONE image with a prompt
+  // that explains the single image carries both roles.
+  const singleImageBoth = hasProduct && productImageUrl === inspirationImageUrl;
+
+  const parts = [];
+
+  if (singleImageBoth) {
+    parts.push(
+      'The image provided shows BOTH the scene the user wants AND the product they are featuring — the on-camera person is already holding or using the product in this exact reference.',
+      'Use this image as the reference for the scene, lighting, composition, framing, AND the product. Preserve the environment, camera angle, framing, and lighting style.',
+      `The product visible in the image is ${productPhrase}. Preserve it pixel-perfectly: packaging, color, label text, shape, and branding all stay identical to the reference image. Do not redesign, restyle, recolor, blur, or alter the product in any way.`,
+    );
+  } else {
+    parts.push(
+      'The FIRST image is a reference photo from the user showing the scene, lighting, composition, and framing they want.',
+      'Use this reference as the starting point for the final image — preserve its overall environment, camera angle, framing, and lighting style.',
+    );
+  }
 
   if (cleanCreator) {
     parts.push(
       `The user\'s description of what they want is: "${cleanCreator}".`,
       'Apply this description as the source of truth for who appears on camera and any adjustments to the scene. If the description specifies a different person from the one in the reference photo, swap the person to match the description (entirely different face, identity, ethnicity, hair, body type — do not copy the reference person\'s identity). If the description only specifies tweaks (clothing, mood, props, setting changes), keep the person from the reference but apply those tweaks. Resolve any conflict between the photo and the description in favor of the description.',
     );
-  } else {
+  } else if (!singleImageBoth) {
     parts.push(
       'Recreate the same scene but with a completely different individual on camera — entirely different facial features, ethnicity, hair, body type, and clothing from the original. Do not copy the original person\'s identity. The new person should pose naturally in roughly the same position.',
     );
   }
 
-  if (hasProduct) {
+  if (hasProduct && !singleImageBoth) {
     parts.push(
       `The SECOND image is ${productPhrase} — the product the on-camera person is featuring.`,
       'Integrate that exact product naturally into the scene — typically held in their hand, or being used by them, in a way that fits the scene.',
@@ -216,9 +233,16 @@ async function reimagineCreatorInScene({
 
   parts.push(REALISM_GUIDANCE);
 
-  const image_urls = hasProduct
-    ? [inspirationImageUrl, productImageUrl]
-    : [inspirationImageUrl];
+  // Dedup the URL list when the same image carries both roles, so Nano
+  // Banana sees a single input that the prompt above describes as both
+  // scene and product. Passing the same URL twice can confuse the model
+  // into treating the second instance as a separate "product photo to
+  // composite in," which is not what we want.
+  const image_urls = singleImageBoth
+    ? [inspirationImageUrl]
+    : hasProduct
+      ? [inspirationImageUrl, productImageUrl]
+      : [inspirationImageUrl];
 
   const result = await falSubscribeWithRetry(IMAGE_SUBJECT_SWAP, {
     prompt: parts.join(' '),
@@ -703,6 +727,7 @@ async function runSingleShotPipeline(job, jobId) {
           inputPath: klingLocalPath,
           outputPath: captionedPath,
           scriptHint: scriptText,
+          presetId: snapshot.caption_preset || undefined,
         });
         videoBytesToUpload = fs.readFileSync(captionedPath);
         console.log(

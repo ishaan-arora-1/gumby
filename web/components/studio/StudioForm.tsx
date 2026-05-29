@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/Button';
 import { api, fileToBase64 } from '@/lib/api';
 import type { UGCTemplate } from '@/lib/types';
 import { Sparkles, Upload, X, Wand2, Image as ImageIcon } from 'lucide-react';
+import { CAPTION_PRESETS, DEFAULT_CAPTION_PRESET_ID } from '@/lib/captionPresets';
+import { CaptionPreview } from './CaptionPreview';
 
 export interface StudioPrefill {
   creatorDescription?: string;
@@ -12,6 +14,11 @@ export interface StudioPrefill {
   productDescription?: string;
   videoDescription?: string;
   duration?: 5 | 10;
+  // Routed by the composer based on Vision classification of the
+  // attachments — same URL can appear in both fields when the user
+  // uploaded a single "creator holding product" shot.
+  productImageUrl?: string | null;
+  inspirationImageUrl?: string | null;
 }
 
 interface Props {
@@ -35,11 +42,11 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
   const [productName, setProductName] = useState(prefill?.productName ?? '');
   const [productDesc, setProductDesc] = useState(prefill?.productDescription ?? '');
   const [productTone, setProductTone] = useState('');
-  const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
+  const [productImageUrl, setProductImageUrl] = useState<string | null>(prefill?.productImageUrl ?? null);
   const [uploadingProduct, setUploadingProduct] = useState(false);
 
   // Inspiration
-  const [inspirationImageUrl, setInspirationImageUrl] = useState<string | null>(null);
+  const [inspirationImageUrl, setInspirationImageUrl] = useState<string | null>(prefill?.inspirationImageUrl ?? null);
   const [uploadingInspiration, setUploadingInspiration] = useState(false);
 
   // Script / scene / duration
@@ -51,6 +58,7 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
   // Captions — on by default. Backend burns word-by-word TikTok-style
   // captions in the Reels safe zone via whisper + libass when enabled.
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
+  const [captionPresetId, setCaptionPresetId] = useState<string>(DEFAULT_CAPTION_PRESET_ID);
 
   const handleProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -147,6 +155,7 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
       videoDescription,
       videoDuration: duration,
       captionsEnabled,
+      captionPreset: captionsEnabled ? captionPresetId : undefined,
     });
   };
 
@@ -354,7 +363,7 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
         title="Captions"
         hint={
           captionsEnabled
-            ? 'Word-by-word captions will be burned into the video, positioned in the Reels safe zone.'
+            ? 'Pick the look. Captions burn into the Reels safe zone.'
             : 'Clean video with no captions on screen.'
         }
         action={
@@ -374,24 +383,30 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
           </button>
         }
       >
-        <div className="text-xs text-white/45">
-          {captionsEnabled ? 'On' : 'Off'}
-        </div>
+        {captionsEnabled ? (
+          <div className="flex flex-wrap gap-4">
+            {CAPTION_PRESETS.map((p) => (
+              <CaptionPreview
+                key={p.id}
+                preset={p}
+                selected={captionPresetId === p.id}
+                onSelect={() => setCaptionPresetId(p.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-white/45">Off</div>
+        )}
       </Section>
 
-      <Button
-        variant="gradient"
-        size="xl"
-        className="w-full"
+      <button
+        type="button"
         onClick={submit}
         disabled={loading}
+        className="w-full h-14 rounded-btn bg-black text-white font-semibold text-base border border-white/10 hover:bg-[#0a0a0a] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition"
       >
-        {loading ? 'Generating…' : (
-          <>
-            <Sparkles className="w-4 h-4" /> Generate ad
-          </>
-        )}
-      </Button>
+        {loading ? 'Generating…' : 'Generate'}
+      </button>
     </div>
   );
 }
