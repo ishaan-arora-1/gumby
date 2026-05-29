@@ -13,7 +13,6 @@ import {
   ArrowUp,
   Headphones,
   Heart,
-  Play,
 } from 'lucide-react';
 
 /* ============================================================
@@ -83,8 +82,11 @@ function pickLayout(width: number): WallLayout {
 }
 
 function useWallLayout(): WallLayout {
-  // SSR-safe: assume desktop on the server, refine on mount.
-  const [layout, setLayout] = useState<WallLayout>(LAYOUT_DESKTOP);
+  // SSR-safe: start with the *mobile* layout so phones never have to first
+  // render the 20-tile desktop wall and then downshift — that flash of a
+  // zoomed-out, over-populated grid is jarring and expensive on phones.
+  // Desktops upgrade to the bigger wall on mount, which is cheap.
+  const [layout, setLayout] = useState<WallLayout>(LAYOUT_MOBILE);
   useEffect(() => {
     const update = () => setLayout(pickLayout(window.innerWidth));
     update();
@@ -99,6 +101,68 @@ interface Tile {
   poster: string;
   label: string;
   live: boolean;
+}
+
+/* Reusable autoplay-when-visible video. Uses IntersectionObserver to
+   pause whenever the element is fully off-screen, which is the single
+   biggest perf win on this page — without it every <video> on the page
+   keeps decoding even when scrolled past, which is what was making the
+   site lag. Keep the API tiny so all other video components funnel
+   through here. */
+function AutoPlayVideo({
+  src,
+  poster,
+  className,
+  rootMargin = '200px',
+}: {
+  src: string;
+  poster: string;
+  className?: string;
+  rootMargin?: string;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    let visible = false;
+    const tryPlay = () => {
+      if (!visible) return;
+      v.play().catch(() => {});
+    };
+    if (typeof IntersectionObserver !== 'undefined') {
+      const io = new IntersectionObserver(
+        ([entry]) => {
+          visible = entry.isIntersecting;
+          if (visible) tryPlay();
+          else v.pause();
+        },
+        { rootMargin, threshold: 0 },
+      );
+      io.observe(v);
+      v.addEventListener('loadedmetadata', tryPlay);
+      v.addEventListener('canplay', tryPlay);
+      return () => {
+        io.disconnect();
+        v.removeEventListener('loadedmetadata', tryPlay);
+        v.removeEventListener('canplay', tryPlay);
+      };
+    }
+    visible = true;
+    tryPlay();
+  }, [rootMargin]);
+  return (
+    <video
+      ref={ref}
+      src={src}
+      poster={poster}
+      muted
+      loop
+      playsInline
+      preload="metadata"
+      disablePictureInPicture
+      className={className}
+    />
+  );
 }
 
 export function BlinkLanding() {
@@ -169,12 +233,10 @@ export function BlinkLanding() {
 
   return (
     <div className="font-body-blink bg-[#050608] text-white overflow-x-hidden">
-      <PromoBar />
       <Nav scrolled={scrolled} />
       <Hero tiles={tiles} layout={layout} />
-      <HowItWorks />
-      <FeatureBreakdown />
       <Showcase />
+      <FeatureBreakdown />
       <SpeedSection />
       <Faq />
       <FinalCta />
@@ -188,14 +250,16 @@ export function BlinkLanding() {
 ============================================================ */
 function PromoBar() {
   return (
-    <div className="relative z-[60] flex items-center justify-center gap-3.5 px-4 py-[9px] text-center text-[13px] font-medium tracking-[0.2px] text-white"
+    <div className="relative z-[60] flex flex-wrap items-center justify-center gap-2 px-3 py-[9px] text-center text-[12px] font-medium tracking-[0.2px] text-white sm:gap-3.5 sm:px-4 sm:text-[13px]"
          style={{ background: 'linear-gradient(90deg, #e11d2b, #ff2e3f)' }}>
       <span>
-        <span aria-hidden>🔥</span> Kling 3.0 Pro is <b className="font-bold">LIVE</b> — create your first AI ad for just <b className="font-bold">$1</b>
+        <span aria-hidden>🔥</span>{' '}
+        <span className="hidden sm:inline">Kling 3.0 Pro is <b className="font-bold">LIVE</b> — create your first AI ad for just <b className="font-bold">$1</b></span>
+        <span className="sm:hidden">Your first AI ad for just <b className="font-bold">$1</b></span>
       </span>
       <a
         href="#cta-main"
-        className="whitespace-nowrap rounded-full bg-white px-3.5 py-[5px] text-xs font-bold text-[#0a0a0a] transition-transform duration-150 hover:-translate-y-0.5"
+        className="whitespace-nowrap rounded-full bg-white px-3 py-[4px] text-[11px] font-bold text-[#0a0a0a] transition-transform duration-150 hover:-translate-y-0.5 sm:px-3.5 sm:py-[5px] sm:text-xs"
       >
         Try Now
       </a>
@@ -213,9 +277,8 @@ function Nav({ scrolled }: { scrolled: boolean }) {
         'fixed left-0 right-0 top-0 z-50 flex items-center justify-between',
         'transition-[background,backdrop-filter,border-color,margin-top,padding] duration-300 ease-out',
         scrolled
-          ? 'mt-0 border-b border-white/10 bg-[rgba(5,6,8,0.72)] px-9 py-3.5 backdrop-blur-xl'
-          : 'mt-10 border-b border-transparent px-9 py-[18px]',
-        'max-[900px]:px-5',
+          ? 'mt-0 border-b border-white/10 bg-[rgba(5,6,8,0.72)] px-4 py-3 backdrop-blur-xl sm:px-9 sm:py-3.5'
+          : 'mt-0 border-b border-transparent px-4 py-3 sm:px-9 sm:py-[18px]',
       ].join(' ')}
       style={scrolled ? { backdropFilter: 'blur(18px) saturate(140%)', WebkitBackdropFilter: 'blur(18px) saturate(140%)' } : undefined}
     >
@@ -226,28 +289,26 @@ function Nav({ scrolled }: { scrolled: boolean }) {
           width={200}
           height={42}
           priority
-          className="h-[38px] w-auto"
+          className="h-[28px] w-auto sm:h-[38px]"
         />
       </Link>
 
       <div className="flex items-center gap-[30px] text-[14.5px] font-medium max-[900px]:hidden">
-        <NavLink href="#features" caret>Features</NavLink>
         <NavLink href="#how">How it works</NavLink>
         <NavLink href="#pricing">Pricing</NavLink>
         <NavLink href="#faq">FAQ</NavLink>
-        <NavLink href="#enterprise">Enterprise</NavLink>
       </div>
 
       <div className="flex items-center gap-3.5">
         <Link
           href="/login"
-          className="px-1.5 py-2.5 text-[14.5px] font-medium text-white transition-opacity hover:opacity-70"
+          className="hidden px-1.5 py-2.5 text-[14.5px] font-medium text-white transition-opacity hover:opacity-70 sm:inline-block"
         >
           Login
         </Link>
         <Link
           href="/login?mode=signup"
-          className="rounded-full bg-white px-[22px] py-2.5 text-[14.5px] font-bold text-[#080808] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(255,255,255,0.18)]"
+          className="rounded-full bg-white px-4 py-2 text-[13px] font-bold text-[#080808] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(255,255,255,0.18)] sm:px-[22px] sm:py-2.5 sm:text-[14.5px]"
         >
           Get Started
         </Link>
@@ -269,31 +330,11 @@ function NavLink({ href, children, caret }: { href: string; children: React.Reac
    HERO
 ============================================================ */
 function Hero({ tiles, layout }: { tiles: Tile[]; layout: WallLayout }) {
-  const heroRef = useRef<HTMLElement>(null);
-  // `playing` flips to false only when the hero is *entirely* out of the
-  // viewport (every pixel scrolled past). `threshold: 0` + checking
-  // `isIntersecting` gives us exactly that: as long as a single pixel of
-  // the hero is visible, videos keep playing. On initial mount we default
-  // to `true` so the wall plays instantly without waiting for the observer
-  // to fire its first callback.
-  const [playing, setPlaying] = useState(true);
-  useEffect(() => {
-    const el = heroRef.current;
-    if (!el || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver(
-      ([entry]) => setPlaying(entry.isIntersecting),
-      { threshold: 0 },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-
   return (
     <header
-      ref={heroRef}
-      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-5 pb-20 pt-[120px] text-center"
+      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4 pb-20 pt-[110px] text-center sm:px-5 sm:pt-[120px]"
     >
-      <VideoWall tiles={tiles} layout={layout} playing={playing} />
+      <VideoWall tiles={tiles} layout={layout} />
 
       <div className="pointer-events-none absolute inset-0 z-[1] blink-hero-edges" />
       <div
@@ -311,7 +352,7 @@ function Hero({ tiles, layout }: { tiles: Tile[]; layout: WallLayout }) {
         <h1
           className="font-display-blink font-black blink-rise"
           style={{
-            fontSize: 'clamp(42px, 7.4vw, 92px)',
+            fontSize: 'clamp(34px, 6vw, 76px)',
             lineHeight: 0.96,
             letterSpacing: '-0.03em',
             textShadow: '0 8px 50px rgba(0,0,0,0.7)',
@@ -319,7 +360,7 @@ function Hero({ tiles, layout }: { tiles: Tile[]; layout: WallLayout }) {
           }}
         >
           The fastest way to create{' '}
-          <span className="blink-accent-text">AI&nbsp;UGC&nbsp;videos</span>
+          <span className="blink-accent-text">UGC&nbsp;videos</span>
         </h1>
 
         <p
@@ -339,12 +380,12 @@ function Hero({ tiles, layout }: { tiles: Tile[]; layout: WallLayout }) {
 
         <div
           id="cta-main"
-          className="blink-rise mt-[38px] flex flex-wrap items-center justify-center gap-4"
+          className="blink-rise mt-[30px] flex flex-wrap items-center justify-center gap-3 sm:mt-[38px] sm:gap-4"
           style={{ animationDelay: '0.22s' }}
         >
           <Link
             href="/login?mode=signup"
-            className="blink-sheen relative overflow-hidden rounded-full border-none px-[38px] py-[18px] font-display-blink text-[17px] font-extrabold tracking-[0.2px] text-white transition-all duration-200 ease-out hover:-translate-y-[3px] hover:scale-[1.02]"
+            className="blink-sheen relative overflow-hidden rounded-full border-none px-7 py-[14px] font-display-blink text-[15px] font-extrabold tracking-[0.2px] text-white transition-all duration-200 ease-out hover:-translate-y-[3px] hover:scale-[1.02] sm:px-[38px] sm:py-[18px] sm:text-[17px]"
             style={{
               background: 'linear-gradient(135deg, #ff2e3f, #e11d2b)',
               boxShadow: '0 14px 44px rgba(225,29,43,0.5), inset 0 1px 0 rgba(255,255,255,0.2)',
@@ -352,13 +393,6 @@ function Hero({ tiles, layout }: { tiles: Tile[]; layout: WallLayout }) {
           >
             <span className="relative z-[2]">Create Your Ad For $1 →</span>
           </Link>
-          <a
-            href="#showcase"
-            className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.18] bg-white/[0.08] px-[30px] py-[18px] text-[16px] font-semibold text-white backdrop-blur transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-white/[0.14]"
-          >
-            <span className="grid h-[26px] w-[26px] place-items-center rounded-full bg-white text-[11px] text-[#080808]">▶</span>
-            Watch the demo
-          </a>
         </div>
 
       </div>
@@ -383,11 +417,9 @@ function Hero({ tiles, layout }: { tiles: Tile[]; layout: WallLayout }) {
 function VideoWall({
   tiles,
   layout,
-  playing,
 }: {
   tiles: Tile[];
   layout: WallLayout;
-  playing: boolean;
 }) {
   // We use inline `gridTemplateColumns` instead of a Tailwind class because
   // `grid-cols-N` would require N to be statically known at build time and
@@ -410,7 +442,7 @@ function VideoWall({
         return (
           <div key={c} className={`flex flex-col gap-3.5 ${dir} ${slow}`}>
             {[...colTiles, ...colTiles].map((tile, i) => (
-              <VTile key={`${c}-${i}`} tile={tile} playing={playing} />
+              <VTile key={`${c}-${i}`} tile={tile} />
             ))}
           </div>
         );
@@ -419,38 +451,7 @@ function VideoWall({
   );
 }
 
-function VTile({ tile, playing }: { tile: Tile; playing: boolean }) {
-  const ref = useRef<HTMLVideoElement>(null);
-
-  // Some browsers (Safari especially) need an explicit play() after
-  // autoplay+muted to actually start the loop. Kick it off on mount
-  // and on every metadata load.
-  useEffect(() => {
-    const v = ref.current;
-    if (!v) return;
-    const tryPlay = () => v.play().catch(() => {});
-    tryPlay();
-    v.addEventListener('loadedmetadata', tryPlay);
-    v.addEventListener('canplay', tryPlay);
-    return () => {
-      v.removeEventListener('loadedmetadata', tryPlay);
-      v.removeEventListener('canplay', tryPlay);
-    };
-  }, []);
-
-  // Pause/resume in response to the hero leaving the viewport. Pausing
-  // releases the decode pipeline, which is what frees the CPU/GPU once
-  // the user scrolls past the hero.
-  useEffect(() => {
-    const v = ref.current;
-    if (!v) return;
-    if (playing) {
-      v.play().catch(() => {});
-    } else {
-      v.pause();
-    }
-  }, [playing]);
-
+function VTile({ tile }: { tile: Tile }) {
   return (
     <div
       className="relative aspect-[9/16] shrink-0 overflow-hidden rounded-[14px] bg-[#11131a]"
@@ -462,16 +463,9 @@ function VTile({ tile, playing }: { tile: Tile; playing: boolean }) {
           style={{ background: '#ff2e3f' }}
         />
       )}
-      <video
-        ref={ref}
+      <AutoPlayVideo
         src={tile.src}
         poster={tile.poster}
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="auto"
-        disablePictureInPicture
         className="block h-full w-full object-cover"
       />
     </div>
@@ -570,7 +564,7 @@ function FeatureBreakdown() {
     {
       kicker: 2,
       title: 'Generate your video',
-      desc: 'Combine creator and script to ship 9:16 lip-synced ads in 30 seconds — ready for TikTok and Reels.',
+      desc: 'Combine creator and script to ship 9:16 lip-synced ads in 60 seconds — ready for TikTok and Reels.',
       Mockup: VideoMockup,
       mockupRight: true,
     },
@@ -578,6 +572,7 @@ function FeatureBreakdown() {
 
   return (
     <section
+      id="how"
       className="relative z-[5] px-5 py-[110px] text-center"
       style={{ background: 'linear-gradient(180deg, #0b0d12, #050608)' }}
     >
@@ -591,16 +586,19 @@ function FeatureBreakdown() {
         From idea to video in minutes — ready to use instantly.
       </p>
 
-      <div className="mx-auto mt-16 grid max-w-[1120px] gap-5">
-        {items.map((it) => (
+      <div className="mx-auto mt-12 max-w-[1120px] overflow-hidden rounded-[20px] border border-white/10 bg-white/[0.02] sm:mt-16">
+        {items.map((it, rowIdx) => (
           <div
             key={it.kicker}
-            className="grid grid-cols-1 gap-5 md:grid-cols-2"
+            className={[
+              'grid grid-cols-1 md:grid-cols-2',
+              rowIdx > 0 ? 'border-t border-white/10' : '',
+            ].join(' ')}
           >
-            <div className={it.mockupRight ? '' : 'md:order-2'}>
+            <div className={`flex border-b border-white/10 md:border-b-0 ${it.mockupRight ? 'md:border-r md:border-white/10' : 'md:order-2'}`}>
               <FeatureTextCard kicker={it.kicker} title={it.title} desc={it.desc} />
             </div>
-            <div className={it.mockupRight ? '' : 'md:order-1'}>
+            <div className={`flex ${it.mockupRight ? '' : 'md:order-1 md:border-r md:border-white/10'}`}>
               <FeatureMockupCard>
                 <it.Mockup />
               </FeatureMockupCard>
@@ -614,11 +612,11 @@ function FeatureBreakdown() {
 
 function FeatureTextCard({ kicker, title, desc }: { kicker: 0 | 1 | 2; title: string; desc: string }) {
   return (
-    <div className="relative flex h-full min-h-[300px] flex-col rounded-[20px] border border-white/10 bg-white/[0.03] p-7 text-left transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[rgba(77,130,255,0.5)]">
+    <div className="relative flex w-full min-h-[220px] flex-col bg-white/[0.03] p-6 text-left transition-colors duration-300 ease-out hover:bg-white/[0.05] sm:p-7 md:min-h-[340px]">
       <StepIndicator active={kicker} />
-      <div className="mt-auto">
-        <h3 className="font-display-blink text-[22px] font-bold leading-tight">{title}</h3>
-        <p className="mt-2 text-[15px] leading-[1.55] text-white/60">{desc}</p>
+      <div className="mt-auto pt-8">
+        <h3 className="font-display-blink text-[20px] font-bold leading-tight sm:text-[22px]">{title}</h3>
+        <p className="mt-2 text-[14px] leading-[1.55] text-white/60 sm:text-[15px]">{desc}</p>
       </div>
     </div>
   );
@@ -627,13 +625,12 @@ function FeatureTextCard({ kicker, title, desc }: { kicker: 0 | 1 | 2; title: st
 function FeatureMockupCard({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="relative flex h-full min-h-[300px] items-center justify-center overflow-hidden rounded-[20px] border border-white/10 p-8"
+      className="relative flex w-full min-h-[260px] items-center justify-center overflow-hidden p-6 sm:p-8 md:min-h-[340px]"
       style={{
         background:
           'radial-gradient(circle at 30% 20%, rgba(77,130,255,0.10), transparent 55%), radial-gradient(circle at 80% 80%, rgba(255,46,63,0.08), transparent 55%), rgba(255,255,255,0.03)',
       }}
     >
-      <StepIndicator active={1} className="absolute left-7 top-7" />
       {children}
     </div>
   );
@@ -746,7 +743,7 @@ function ActorsMockup() {
     { x: 120, y: 22, rot: 10, z: 1, scale: 0.9 },
   ];
   return (
-    <div className="relative h-[260px] w-full max-w-[460px]">
+    <div className="relative h-[220px] w-full max-w-[460px] scale-[0.78] sm:h-[260px] sm:scale-100">
       {cards.map((c, i) => {
         const p = layout[i];
         return (
@@ -786,7 +783,7 @@ function VideoMockup() {
     { x: 95, y: 14, rot: 8, z: 1, scale: 0.92 },
   ];
   return (
-    <div className="relative h-[300px] w-full max-w-[460px]">
+    <div className="relative h-[240px] w-full max-w-[460px] scale-[0.8] sm:h-[300px] sm:scale-100">
       {c.map((v, i) => {
         const p = layout[i];
         return (
@@ -799,17 +796,15 @@ function VideoMockup() {
               boxShadow: '0 26px 64px rgba(0,0,0,0.65)',
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={v.poster} alt="" className="h-full w-full object-cover" />
+            <AutoPlayVideo
+              src={v.src}
+              poster={v.poster}
+              className="h-full w-full object-cover"
+            />
             {i === 1 && (
-              <>
-                <span className="absolute left-2 top-2 rounded-full bg-black/65 px-2 py-[2px] text-[10px] font-semibold text-white backdrop-blur">
-                  01:48
-                </span>
-                <span className="absolute inset-0 m-auto grid h-11 w-11 place-items-center rounded-full bg-white text-[#080808] shadow-[0_8px_22px_rgba(0,0,0,0.45)]">
-                  <Play className="h-4 w-4 fill-[#080808]" />
-                </span>
-              </>
+              <span className="absolute left-2 top-2 rounded-full bg-black/65 px-2 py-[2px] text-[10px] font-semibold text-white backdrop-blur">
+                01:48
+              </span>
             )}
           </div>
         );
@@ -827,19 +822,19 @@ function Showcase() {
       t: 'Hyper-real avatars',
       d: 'Diverse, lifelike presenters that look filmed on a phone — not rendered.',
       b: 'NEW',
-      video: CARD_VIDEOS[0],
+      video: CARD_VIDEOS[5],
     },
     {
-      t: 'Script → video in 30s',
+      t: 'Script → video in 60s',
       d: 'Paste a hook, pick a voice, hit generate. Ten variations before your coffee cools.',
       b: 'FAST',
-      video: CARD_VIDEOS[2],
+      video: CARD_VIDEOS[1],
     },
     {
       t: 'Built for ads',
       d: '9:16 native, captions baked in, ready to upload straight to TikTok & Reels.',
       b: '$1',
-      video: CARD_VIDEOS[5],
+      video: CARD_VIDEOS[0],
     },
   ];
 
@@ -847,7 +842,7 @@ function Showcase() {
     <section
       id="features"
       className="relative z-[5] px-5 py-[110px] pb-[130px] text-center"
-      style={{ background: 'linear-gradient(180deg, #0b0d12, #050608)' }}
+      style={{ background: 'linear-gradient(180deg, #050608, #0b0d12)' }}
     >
       <h2
         id="showcase"
@@ -885,30 +880,10 @@ function Showcase() {
 }
 
 function ShowcaseVideo({ src, poster }: { src: string; poster: string }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    const v = ref.current;
-    if (!v) return;
-    const tryPlay = () => v.play().catch(() => {});
-    tryPlay();
-    v.addEventListener('loadedmetadata', tryPlay);
-    v.addEventListener('canplay', tryPlay);
-    return () => {
-      v.removeEventListener('loadedmetadata', tryPlay);
-      v.removeEventListener('canplay', tryPlay);
-    };
-  }, []);
   return (
-    <video
-      ref={ref}
+    <AutoPlayVideo
       src={src}
       poster={poster}
-      autoPlay
-      muted
-      loop
-      playsInline
-      preload="auto"
-      disablePictureInPicture
       className="block h-full w-full object-cover"
     />
   );
@@ -925,8 +900,8 @@ function SpeedSection() {
       desc: 'AI Script writer drafts three hook variations in your brand voice — paste a product, get copy.',
     },
     {
-      time: '~30s',
-      title: 'Video in half a minute',
+      time: '~60s',
+      title: 'Video in a minute',
       desc: 'Kling 3.0 Pro renders a 9:16 lip-synced ad with baked-in captions, ready to upload.',
     },
     {
@@ -987,7 +962,7 @@ function Faq() {
     },
     {
       q: 'How long does a video take to generate?',
-      a: 'About 30 seconds for a 9:16 ad. You can queue ten variations and let them all render in parallel.',
+      a: 'About 60 seconds for a 9:16 ad. You can queue ten variations and let them all render in parallel.',
     },
     {
       q: 'Can I bring my own creator?',
@@ -1071,10 +1046,10 @@ function FinalCta() {
       <p className="mx-auto mt-[22px] max-w-[480px] text-[17px] text-white/60">
         Stop guessing what converts. Generate ten variations before lunch and let the data decide.
       </p>
-      <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
+      <div className="mt-9 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
         <Link
           href="/login?mode=signup"
-          className="blink-sheen relative overflow-hidden rounded-full px-[38px] py-[18px] font-display-blink text-[17px] font-extrabold text-white transition-all duration-200 ease-out hover:-translate-y-[3px] hover:scale-[1.02]"
+          className="blink-sheen relative overflow-hidden rounded-full px-7 py-[14px] font-display-blink text-[15px] font-extrabold text-white transition-all duration-200 ease-out hover:-translate-y-[3px] hover:scale-[1.02] sm:px-[38px] sm:py-[18px] sm:text-[17px]"
           style={{
             background: 'linear-gradient(135deg, #ff2e3f, #e11d2b)',
             boxShadow: '0 14px 44px rgba(225,29,43,0.5), inset 0 1px 0 rgba(255,255,255,0.2)',
@@ -1084,9 +1059,9 @@ function FinalCta() {
         </Link>
         <a
           href="#showcase"
-          className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.18] bg-white/[0.08] px-[30px] py-[18px] text-[16px] font-semibold text-white backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/[0.14]"
+          className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.18] bg-white/[0.08] px-6 py-[14px] text-[14px] font-semibold text-white backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/[0.14] sm:px-[30px] sm:py-[18px] sm:text-[16px]"
         >
-          <span className="grid h-[26px] w-[26px] place-items-center rounded-full bg-white text-[11px] text-[#080808]">▶</span>
+          <span className="grid h-[22px] w-[22px] place-items-center rounded-full bg-white text-[10px] text-[#080808] sm:h-[26px] sm:w-[26px] sm:text-[11px]">▶</span>
           See examples
         </a>
       </div>
@@ -1099,14 +1074,14 @@ function FinalCta() {
 ============================================================ */
 function Footer() {
   return (
-    <footer className="relative z-[5] flex flex-wrap items-center justify-between gap-4 border-t border-white/10 bg-[#050608] px-9 py-[38px] text-[13px] text-white/60">
+    <footer className="relative z-[5] flex flex-col items-center gap-5 border-t border-white/10 bg-[#050608] px-5 py-[28px] text-center text-[12px] text-white/60 sm:flex-row sm:flex-wrap sm:justify-between sm:gap-4 sm:px-9 sm:py-[38px] sm:text-left sm:text-[13px]">
       <div className="flex items-center">
         <Image
           src="/brand/logo-combined.png"
           alt="Blink UGC"
           width={150}
           height={68}
-          className="h-[34px] w-auto"
+          className="h-[28px] w-auto sm:h-[34px]"
         />
       </div>
       <div className="flex items-center gap-5">
@@ -1114,7 +1089,7 @@ function Footer() {
         <a href="/terms" className="transition-colors hover:text-white">Terms</a>
         <a href="mailto:hi@blinkugc.com" className="transition-colors hover:text-white">Contact</a>
       </div>
-      <div>© {new Date().getFullYear()} Blink UGC. The fastest way to create AI UGC videos.</div>
+      <div>© {new Date().getFullYear()} Blink UGC. The fastest way to create UGC videos.</div>
     </footer>
   );
 }
