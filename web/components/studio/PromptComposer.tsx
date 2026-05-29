@@ -106,7 +106,7 @@ export function PromptComposer({ onSubmit, loading }: Props) {
         </div>
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-2 justify-center">
+      <div className="mt-12 flex flex-wrap gap-2 justify-center">
         {SUGGESTIONS.map((s) => (
           <button
             key={s}
