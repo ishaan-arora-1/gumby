@@ -294,20 +294,35 @@ async function integrateProductIntoTemplate({
   templateFrameUrl,
   productImageUrl,
   productName,
+  userTweaks,
   aspectRatio = '9:16',
   onProgress,
 }) {
   const productPhrase = productName ? `"${productName}"` : 'the product';
-  const prompt = [
+  const hasTweaks = !!(userTweaks && userTweaks.trim());
+  const parts = [
     'The FIRST image shows a person on camera in a specific scene.',
-    'Keep that person exactly as they are — same face, same identity, same body, same clothing, same scene, same lighting, same framing.',
+    // Identity is always locked. Scene/clothing/pose are only locked
+    // when the user did not request changes — see the tweaks branch.
+    hasTweaks
+      ? 'Keep that person\'s face, identity, ethnicity, hair, and body type EXACTLY as in the first image. Their facial features and the person they are must not change.'
+      : 'Keep that person exactly as they are — same face, same identity, same body, same clothing, same scene, same lighting, same framing.',
+  ];
+  if (hasTweaks) {
+    parts.push(
+      `Apply the following changes the user requested for the scene around this person, while keeping their identity intact: ${userTweaks.trim()}.`,
+      'Adjust the environment, lighting, clothing, and props as needed to satisfy that request — but the person\'s face and identity stay locked to the first image.',
+    );
+  }
+  parts.push(
     'IMPORTANT: if the person in the first image is currently holding, wearing, or otherwise featuring any product, item, bottle, tube, box, package, or branded object, REMOVE that original object entirely. Replace whatever they were holding with the new product described below. Do not show two products. Do not show the original product anywhere in the frame.',
     `The SECOND image is ${productPhrase} — the ONLY product that should appear in the final image.`,
     'Place that exact product naturally into the scene — typically held in the person\'s hand, or being used by them — in a way that fits the scene.',
     'Preserve the product pixel-perfectly: packaging, color, label text, shape, and branding all match the second image exactly. Do not redesign or alter the product.',
     'The product should be clearly visible and recognizable in the final image — never hide, blur, or change its branding.',
     'Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of the same person now holding this product, with no trace of any other product.',
-  ].join(' ');
+  );
+  const prompt = parts.join(' ');
 
   const result = await falSubscribeWithRetry(IMAGE_SUBJECT_SWAP, {
     prompt,
@@ -333,18 +348,33 @@ async function integrateProductIntoTemplate({
  */
 async function stripProductFromTemplate({
   templateFrameUrl,
+  userTweaks,
   aspectRatio = '9:16',
   onProgress,
 }) {
-  const prompt = [
+  const hasTweaks = !!(userTweaks && userTweaks.trim());
+  const parts = [
     'The image shows a person on camera in a specific scene.',
-    'Keep that person exactly as they are — same face, same identity, same body, same clothing, same hair, same expression, same pose, same scene, same lighting, same camera angle, same framing.',
+    hasTweaks
+      ? 'Keep that person\'s face, identity, ethnicity, hair, and body type EXACTLY as in this image. Their facial features and the person they are must not change.'
+      : 'Keep that person exactly as they are — same face, same identity, same body, same clothing, same hair, same expression, same pose, same scene, same lighting, same camera angle, same framing.',
+  ];
+  if (hasTweaks) {
+    parts.push(
+      `Apply the following changes the user requested for the scene around this person, while keeping their identity intact: ${userTweaks.trim()}.`,
+      'Adjust the environment, lighting, clothing, and props as needed to satisfy that request — but the person\'s face and identity stay locked to the original image.',
+    );
+  }
+  parts.push(
     'If the person is holding, wearing, displaying, pointing at, or otherwise featuring any product, item, bottle, tube, jar, box, package, phone, gadget, or branded object, REMOVE that object completely from the scene.',
     'Their hands should now be empty and relaxed in a natural position consistent with the rest of the pose — as if they were simply talking to camera with nothing in their hands.',
-    'Do not add any new object. Do not change the person\'s identity, clothing, body, or surroundings. Do not introduce a replacement product.',
-    'If the person was not holding anything to begin with, return the scene unchanged.',
-    'Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of the same person, hands-free, in the same scene.',
-  ].join(' ');
+    'Do not add any new object. Do not introduce a replacement product.',
+    hasTweaks
+      ? 'If the person was not holding anything, keep their hands as-is but still apply the requested scene changes above.'
+      : 'If the person was not holding anything to begin with, return the scene unchanged.',
+    'Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of the same person, hands-free.',
+  );
+  const prompt = parts.join(' ');
 
   const result = await falSubscribeWithRetry(IMAGE_SUBJECT_SWAP, {
     prompt,
@@ -482,6 +512,11 @@ async function runSingleShotPipeline(job, jobId) {
     .filter(Boolean)
     .join(', ') || 'a lifestyle creator on camera';
 
+  // Optional template-mode tweaks: "same creator but on a beach", etc.
+  // Passed into both Nano Banana branches so the seed image can reflect
+  // the user's adjustments while keeping the template creator's identity.
+  const userTweaks = (snapshot.user_tweaks || '').trim();
+
   const effectiveVideoDesc = videoDescription
     || (job.product_name
         ? `The creator engages naturally with ${job.product_name}, gesturing and talking to camera.`
@@ -566,6 +601,7 @@ async function runSingleShotPipeline(job, jobId) {
           templateFrameUrl,
           productImageUrl,
           productName: job.product_name,
+          userTweaks,
           aspectRatio,
           onProgress: tick,
         });
@@ -581,6 +617,7 @@ async function runSingleShotPipeline(job, jobId) {
         console.log(`[ugc:${jobId}] stripping any template product from frame via Nano Banana Pro`);
         const strippedUrl = await stripProductFromTemplate({
           templateFrameUrl,
+          userTweaks,
           aspectRatio,
           onProgress: tick,
         });

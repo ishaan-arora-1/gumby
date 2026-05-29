@@ -309,6 +309,7 @@ router.post('/generate', async (req, res) => {
   const {
     templateId,
     creatorDescription,
+    creatorTweaks,
     productName,
     productDescription,
     productImageUrl,
@@ -360,6 +361,9 @@ router.post('/generate', async (req, res) => {
     };
 
     if (template) {
+      const cleanTweaks = typeof creatorTweaks === 'string'
+        ? creatorTweaks.trim().slice(0, 500)
+        : '';
       job.template_snapshot = {
         name: template.name,
         actor_name: template.actor_name,
@@ -368,6 +372,11 @@ router.post('/generate', async (req, res) => {
         thumbnail_url: template.thumbnail_url,
         aspect_ratio: template.aspect_ratio,
         duration_seconds: template.duration_seconds,
+        // Optional user-provided tweaks ("same person but on a beach…").
+        // Read by the pipeline to relax the "keep scene identical" rule
+        // in the Nano Banana seed image prompt while still locking the
+        // template creator's face and identity.
+        user_tweaks: cleanTweaks || null,
       };
     } else {
       // Direct mode: store creator description in the snapshot so the
