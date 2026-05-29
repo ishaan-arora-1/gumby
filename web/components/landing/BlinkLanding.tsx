@@ -172,12 +172,10 @@ export function BlinkLanding() {
       <PromoBar />
       <Nav scrolled={scrolled} />
       <Hero tiles={tiles} layout={layout} />
-      <LogoStrip />
       <HowItWorks />
       <FeatureBreakdown />
       <Showcase />
-      <StatsBar />
-      <Testimonials />
+      <SpeedSection />
       <Faq />
       <FinalCta />
       <Footer />
@@ -363,19 +361,6 @@ function Hero({ tiles, layout }: { tiles: Tile[]; layout: WallLayout }) {
           </a>
         </div>
 
-        <div
-          className="blink-rise mt-[34px] flex flex-wrap items-center justify-center gap-6 text-[13px] text-white/60"
-          style={{ animationDelay: '0.3s' }}
-        >
-          <div className="flex items-center gap-2">
-            <span className="tracking-[2px]" style={{ color: '#ffb627' }}>★★★★★</span>
-            <b className="font-bold text-white">4.9/5</b> from 12,400+ creators
-          </div>
-          <div className="flex items-center gap-2">
-            <b className="font-bold text-white">3M+</b> videos generated
-          </div>
-          <div className="flex items-center gap-2">No credit card to start</div>
-        </div>
       </div>
 
       <div
@@ -490,26 +475,6 @@ function VTile({ tile, playing }: { tile: Tile; playing: boolean }) {
         className="block h-full w-full object-cover"
       />
     </div>
-  );
-}
-
-/* ============================================================
-   LOGO STRIP
-============================================================ */
-function LogoStrip() {
-  return (
-    <section className="relative z-[5] border-y border-white/10 bg-[#050608] px-5 py-[46px] text-center">
-      <p className="mb-6 text-xs uppercase tracking-[2.5px] text-white/60">
-        Trusted by brands &amp; agencies scaling content
-      </p>
-      <div className="flex flex-wrap items-center justify-center gap-x-[54px] gap-y-4 opacity-55">
-        {['Magalu', 'NORTHBEAM', 'Hyros', 'Triple Whale', 'Foreplay', 'NORDIC LABS', 'FIGMENT'].map((b) => (
-          <span key={b} className="font-display-blink text-[21px] font-extrabold tracking-[-0.5px] text-white">
-            {b}
-          </span>
-        ))}
-      </div>
-    </section>
   );
 }
 
@@ -950,101 +915,61 @@ function ShowcaseVideo({ src, poster }: { src: string; poster: string }) {
 }
 
 /* ============================================================
-   STATS BAR (new section)
+   SPEED SECTION — replaces the old testimonials/stats blocks
 ============================================================ */
-function StatsBar() {
-  const stats = [
-    { v: '3M+', l: 'videos generated' },
-    { v: '30s', l: 'avg render time' },
-    { v: '200+', l: 'AI creators' },
-    { v: '12.4k', l: 'happy founders' },
-  ];
-  return (
-    <section className="relative z-[5] border-y border-white/10 bg-[#050608] px-5 py-[60px]">
-      <div className="mx-auto grid max-w-[1080px] grid-cols-2 gap-8 md:grid-cols-4">
-        {stats.map((s) => (
-          <div key={s.l} className="text-center">
-            <div
-              className="font-display-blink font-black"
-              style={{
-                fontSize: 'clamp(32px, 4.5vw, 48px)',
-                lineHeight: 1,
-                background: 'linear-gradient(135deg, #4d82ff, #ff2e3f)',
-                WebkitBackgroundClip: 'text',
-                backgroundClip: 'text',
-                color: 'transparent',
-              }}
-            >
-              {s.v}
-            </div>
-            <div className="mt-2 text-[13px] uppercase tracking-[1.5px] text-white/60">{s.l}</div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/* ============================================================
-   TESTIMONIALS (new section)
-============================================================ */
-function Testimonials() {
-  const tweets = [
+function SpeedSection() {
+  const beats = [
     {
-      name: 'Maya Chen',
-      role: 'Founder, Halo Skincare',
-      avatar: 'MC',
-      quote:
-        'We replaced our $4k/mo creator agency in a week. Blink ads outperformed our hand-shot UGC by 38% on day one.',
+      time: '~10s',
+      title: 'Script in seconds',
+      desc: 'AI Script writer drafts three hook variations in your brand voice — paste a product, get copy.',
     },
     {
-      name: 'Ravi Patel',
-      role: 'Growth, Nordic Labs',
-      avatar: 'RP',
-      quote:
-        'Ten ad variations before lunch. The Kling 3.0 Pro renders look exactly like an iPhone selfie — no uncanny valley.',
+      time: '~30s',
+      title: 'Video in half a minute',
+      desc: 'Kling 3.0 Pro renders a 9:16 lip-synced ad with baked-in captions, ready to upload.',
     },
     {
-      name: 'Sofia Martins',
-      role: 'CMO, Magalu',
-      avatar: 'SM',
-      quote:
-        'The lip-sync is genuinely scary good. We A/B test five hooks on every drop and let the data pick the winner.',
+      time: 'In parallel',
+      title: 'Iterate, don’t wait',
+      desc: 'Queue ten variations at once and let the renders fan out. Pick winners by the time your coffee cools.',
     },
   ];
 
   return (
     <section className="relative z-[5] px-5 py-[110px]" style={{ background: '#050608' }}>
       <h2
-        className="mx-auto max-w-[780px] text-center font-display-blink font-black"
+        className="mx-auto max-w-[820px] text-center font-display-blink font-black"
         style={{ fontSize: 'clamp(30px, 4.6vw, 56px)', lineHeight: 1.02, letterSpacing: '-0.025em' }}
       >
-        Founders are <span className="blink-accent-text">shipping faster.</span>
+        Generate at the <span className="blink-accent-text">speed of thought.</span>
       </h2>
-      <p className="mx-auto mt-5 max-w-[560px] text-center text-[17px] leading-[1.6] text-white/60">
-        Real numbers from real brands using Blink UGC to fuel paid acquisition.
+      <p className="mx-auto mt-5 max-w-[600px] text-center text-[17px] leading-[1.6] text-white/60">
+        No render queues. No waiting room. Type your idea and watch the ad render in real time —
+        then iterate again, and again, until the data picks a winner.
       </p>
 
-      <div className="mx-auto mt-16 grid max-w-[1180px] grid-cols-1 gap-[22px] md:grid-cols-3">
-        {tweets.map((t) => (
-          <figure
-            key={t.name}
-            className="rounded-[20px] border border-white/10 bg-white/[0.03] p-7 transition-all duration-300 hover:border-[rgba(255,46,63,0.4)]"
+      <div className="mx-auto mt-16 grid max-w-[1080px] grid-cols-1 gap-[22px] md:grid-cols-3">
+        {beats.map((b) => (
+          <div
+            key={b.title}
+            className="relative rounded-[20px] border border-white/10 bg-white/[0.03] p-7 text-left transition-all duration-300 ease-out hover:-translate-y-2 hover:border-[rgba(77,130,255,0.5)]"
           >
-            <blockquote className="text-[16px] leading-[1.55] text-white/85">“{t.quote}”</blockquote>
-            <figcaption className="mt-6 flex items-center gap-3">
-              <div
-                className="grid h-11 w-11 place-items-center rounded-full font-display-blink text-[14px] font-bold text-white"
-                style={{ background: 'linear-gradient(135deg, #2563ff, #ff2e3f)' }}
-              >
-                {t.avatar}
-              </div>
-              <div>
-                <div className="text-[14px] font-semibold text-white">{t.name}</div>
-                <div className="text-[12.5px] text-white/55">{t.role}</div>
-              </div>
-            </figcaption>
-          </figure>
+            <div
+              className="font-display-blink font-black leading-none"
+              style={{
+                fontSize: 'clamp(36px, 4.5vw, 48px)',
+                background: 'linear-gradient(135deg, #4d82ff, #2563ff, #ff2e3f)',
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+              }}
+            >
+              {b.time}
+            </div>
+            <h3 className="mt-4 font-display-blink text-[22px] font-bold">{b.title}</h3>
+            <p className="mt-2 text-[15px] leading-[1.55] text-white/60">{b.desc}</p>
+          </div>
         ))}
       </div>
     </section>
