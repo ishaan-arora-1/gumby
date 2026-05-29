@@ -48,6 +48,10 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
   const [duration, setDuration] = useState<5 | 10>(prefill?.duration ?? 10);
   const [genScript, setGenScript] = useState(false);
 
+  // Captions — on by default. Backend burns word-by-word TikTok-style
+  // captions in the Reels safe zone via whisper + libass when enabled.
+  const [captionsEnabled, setCaptionsEnabled] = useState(true);
+
   const handleProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -142,6 +146,7 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
       script,
       videoDescription,
       videoDuration: duration,
+      captionsEnabled,
     });
   };
 
@@ -343,6 +348,35 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
           rows={2}
           className={inputCls}
         />
+      </Section>
+
+      <Section
+        title="Captions"
+        hint={
+          captionsEnabled
+            ? 'Word-by-word captions will be burned into the video, positioned in the Reels safe zone.'
+            : 'Clean video with no captions on screen.'
+        }
+        action={
+          <button
+            type="button"
+            onClick={() => setCaptionsEnabled((v) => !v)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+              captionsEnabled ? 'bg-accent2' : 'bg-white/15'
+            }`}
+            aria-label="Toggle captions"
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
+                captionsEnabled ? 'translate-x-5' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        }
+      >
+        <div className="text-xs text-white/45">
+          {captionsEnabled ? 'On' : 'Off'}
+        </div>
       </Section>
 
       <Button

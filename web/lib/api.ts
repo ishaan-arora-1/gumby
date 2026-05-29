@@ -125,6 +125,7 @@ export const api = {
     script: string;
     videoDescription?: string;
     videoDuration?: number;
+    captionsEnabled?: boolean;
   }) =>
     request<{ success: boolean; data: any }>('/ugc/generate', {
       method: 'POST',

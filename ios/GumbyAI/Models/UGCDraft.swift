@@ -59,6 +59,15 @@ struct UGCDraft: Identifiable {
     var videoDescription: String
     var videoDuration: Int  // 5 or 10 (Kling 3.0 Pro enum)
 
+    // MARK: - Captions
+
+    /// Whether the backend should burn TikTok-style word-by-word captions
+    /// into the final video. Defaults to true. The pipeline transcribes
+    /// the Kling audio with Whisper, chunks the words into 1–3 word cues,
+    /// and renders them in the Instagram Reels safe zone (~76% from top)
+    /// via libass.
+    var captionsEnabled: Bool
+
     // MARK: - Generation
 
     var status: DraftStatus = .editing
@@ -102,7 +111,8 @@ struct UGCDraft: Identifiable {
             productPhotoItem: nil,
             script: "",
             videoDescription: "",
-            videoDuration: 10
+            videoDuration: 10,
+            captionsEnabled: true
         )
     }
 
@@ -124,7 +134,8 @@ struct UGCDraft: Identifiable {
             productPhotoItem: nil,
             script: previous.script,
             videoDescription: previous.videoDescription,
-            videoDuration: previous.videoDuration
+            videoDuration: previous.videoDuration,
+            captionsEnabled: previous.captionsEnabled
         )
     }
 }

@@ -99,6 +99,9 @@ final class UGCService {
         let videoDescription: String
         /// Target video duration: 5 or 10 seconds (Kling 3.0 Pro enum).
         let videoDuration: Int
+        /// Whether to burn TikTok-style word-by-word captions into the
+        /// finished video. Defaults to true on both clients.
+        let captionsEnabled: Bool
     }
 
     func startGeneration(_ req: GenerateRequest) async throws -> UGCJob {
@@ -116,6 +119,7 @@ final class UGCService {
         if !req.videoDescription.isEmpty {
             body["videoDescription"] = req.videoDescription
         }
+        body["captionsEnabled"] = req.captionsEnabled
         let resp: APIResponse<UGCJob> = try await api.post(path: "/ugc/generate", body: body)
         guard let job = resp.data else { throw APIError.noData }
         return job

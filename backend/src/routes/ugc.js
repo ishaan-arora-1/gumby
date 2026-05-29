@@ -317,6 +317,7 @@ router.post('/generate', async (req, res) => {
     script,
     videoDescription,
     videoDuration,
+    captionsEnabled,
   } = req.body || {};
 
   // Either a templateId or a creatorDescription is required (direct mode)
@@ -360,6 +361,10 @@ router.post('/generate', async (req, res) => {
       progress: 0,
     };
 
+    // Captions default ON. The pipeline reads this off template_snapshot to
+    // avoid a DB migration, same pattern we use for user_tweaks.
+    const wantsCaptions = captionsEnabled !== false;
+
     if (template) {
       const cleanTweaks = typeof creatorTweaks === 'string'
         ? creatorTweaks.trim().slice(0, 500)
@@ -377,6 +382,7 @@ router.post('/generate', async (req, res) => {
         // in the Nano Banana seed image prompt while still locking the
         // template creator's face and identity.
         user_tweaks: cleanTweaks || null,
+        captions_enabled: wantsCaptions,
       };
     } else {
       // Direct mode: store creator description in the snapshot so the
@@ -389,6 +395,7 @@ router.post('/generate', async (req, res) => {
         thumbnail_url: null,
         aspect_ratio: '9:16',
         duration_seconds: null,
+        captions_enabled: wantsCaptions,
       };
     }
 

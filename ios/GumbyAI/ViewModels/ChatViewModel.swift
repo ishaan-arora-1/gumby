@@ -490,7 +490,8 @@ class ChatViewModel: ObservableObject {
                         script: drafts[draftIndex].script,
                         videoDescription: drafts[draftIndex].videoDescription
                             .trimmingCharacters(in: .whitespacesAndNewlines),
-                        videoDuration: drafts[draftIndex].videoDuration
+                        videoDuration: drafts[draftIndex].videoDuration,
+                        captionsEnabled: drafts[draftIndex].captionsEnabled
                     )
                 )
                 guard drafts.indices.contains(draftIndex) else { return }
