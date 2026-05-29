@@ -12,7 +12,7 @@ struct UGCStudioCard: View {
     static let accent = Color(hex: "7C5CFF")
 
     private enum Field: Hashable {
-        case creator, productName, productTone, productDesc, script, video
+        case creator, creatorTweaks, productName, productTone, productDesc, script, video
     }
     @FocusState private var focused: Field?
 
@@ -46,6 +46,10 @@ struct UGCStudioCard: View {
             if isDirectMode {
                 subCard(title: "Creator", systemImage: "person.crop.circle") {
                     creatorSection
+                }
+            } else {
+                subCard(title: "Creator tweaks", systemImage: "wand.and.stars") {
+                    creatorTweaksSection
                 }
             }
 
@@ -159,6 +163,28 @@ struct UGCStudioCard: View {
             .focused($focused, equals: .creator)
 
             inspirationPicker
+        }
+    }
+
+    // MARK: - Creator tweaks (template mode)
+
+    private var creatorTweaksSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Optional. Same creator from the template, but with adjustments — e.g. on a beach, in casual streetwear, different lighting. Their face and identity stay the same.")
+                .font(.system(size: 13))
+                .foregroundColor(Color(hex: "6B6B6B"))
+
+            FocusEditor(
+                text: Binding(
+                    get: { chatVM.drafts[draftIndex].creatorTweaks },
+                    set: { chatVM.drafts[draftIndex].creatorTweaks = $0 }
+                ),
+                label: "Creator tweaks",
+                placeholder: "Same person but outdoors on a sunny beach instead of indoors…",
+                minHeight: 64,
+                isFocused: focused == .creatorTweaks
+            )
+            .focused($focused, equals: .creatorTweaks)
         }
     }
 

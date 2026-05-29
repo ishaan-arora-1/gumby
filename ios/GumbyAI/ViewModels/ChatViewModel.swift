@@ -475,11 +475,14 @@ class ChatViewModel: ObservableObject {
                     drafts[draftIndex].inspirationImageURL = inspirationURL
                 }
 
+                let tweaks = drafts[draftIndex].creatorTweaks
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 let job = try await service.startGeneration(
                     UGCService.GenerateRequest(
                         templateId: pickedTemplate?.id,
                         creatorDescription: isDirectMode
                             ? drafts[draftIndex].creatorDescription : nil,
+                        creatorTweaks: (!isDirectMode && !tweaks.isEmpty) ? tweaks : nil,
                         productName: hasProduct ? drafts[draftIndex].productName : "",
                         productDescription: hasProduct ? drafts[draftIndex].productDescription : "",
                         productImageURL: hasProduct ? imageURL : nil,
