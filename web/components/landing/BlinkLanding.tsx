@@ -3,6 +3,18 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Sparkles,
+  Plus,
+  Mic,
+  ChevronDown,
+  AudioLines,
+  AudioWaveform,
+  ArrowUp,
+  Headphones,
+  Heart,
+  Play,
+} from 'lucide-react';
 
 /* ============================================================
    Blink UGC — landing page
@@ -162,6 +174,7 @@ export function BlinkLanding() {
       <Hero tiles={tiles} layout={layout} />
       <LogoStrip />
       <HowItWorks />
+      <FeatureBreakdown />
       <Showcase />
       <StatsBar />
       <Testimonials />
@@ -561,6 +574,282 @@ function HowItWorks() {
         ))}
       </div>
     </section>
+  );
+}
+
+/* ============================================================
+   FEATURE BREAKDOWN — 3 alternating cards with UI mockups
+============================================================ */
+function FeatureBreakdown() {
+  const items: {
+    kicker: 0 | 1 | 2;
+    title: string;
+    desc: string;
+    Mockup: () => JSX.Element;
+    mockupRight: boolean;
+  }[] = [
+    {
+      kicker: 0,
+      title: 'Write or generate your script',
+      desc: 'Enter your hook or let AI write three variations in your brand voice — in under 10 seconds.',
+      Mockup: ScriptMockup,
+      mockupRight: true,
+    },
+    {
+      kicker: 1,
+      title: 'Choose from 200+ AI creators',
+      desc: 'Pick a hyper-real presenter from our library — or generate a brand-new one from a single prompt.',
+      Mockup: ActorsMockup,
+      mockupRight: false,
+    },
+    {
+      kicker: 2,
+      title: 'Generate your video',
+      desc: 'Combine creator and script to ship 9:16 lip-synced ads in 30 seconds — ready for TikTok and Reels.',
+      Mockup: VideoMockup,
+      mockupRight: true,
+    },
+  ];
+
+  return (
+    <section
+      className="relative z-[5] px-5 py-[110px] text-center"
+      style={{ background: 'linear-gradient(180deg, #0b0d12, #050608)' }}
+    >
+      <h2
+        className="mx-auto max-w-[860px] font-display-blink font-black"
+        style={{ fontSize: 'clamp(30px, 4.6vw, 56px)', lineHeight: 1.02, letterSpacing: '-0.025em' }}
+      >
+        Create <span className="blink-accent-text">AI&nbsp;UGC</span> videos in minutes
+      </h2>
+      <p className="mx-auto mt-5 max-w-[560px] text-[17px] leading-[1.6] text-white/60">
+        From idea to video in minutes — ready to use instantly.
+      </p>
+
+      <div className="mx-auto mt-16 grid max-w-[1120px] gap-5">
+        {items.map((it) => (
+          <div
+            key={it.kicker}
+            className="grid grid-cols-1 gap-5 md:grid-cols-2"
+          >
+            <div className={it.mockupRight ? '' : 'md:order-2'}>
+              <FeatureTextCard kicker={it.kicker} title={it.title} desc={it.desc} />
+            </div>
+            <div className={it.mockupRight ? '' : 'md:order-1'}>
+              <FeatureMockupCard>
+                <it.Mockup />
+              </FeatureMockupCard>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FeatureTextCard({ kicker, title, desc }: { kicker: 0 | 1 | 2; title: string; desc: string }) {
+  return (
+    <div className="relative flex h-full min-h-[300px] flex-col rounded-[20px] border border-white/10 bg-white/[0.03] p-7 text-left transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[rgba(77,130,255,0.5)]">
+      <StepIndicator active={kicker} />
+      <div className="mt-auto">
+        <h3 className="font-display-blink text-[22px] font-bold leading-tight">{title}</h3>
+        <p className="mt-2 text-[15px] leading-[1.55] text-white/60">{desc}</p>
+      </div>
+    </div>
+  );
+}
+
+function FeatureMockupCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="relative flex h-full min-h-[300px] items-center justify-center overflow-hidden rounded-[20px] border border-white/10 p-8"
+      style={{
+        background:
+          'radial-gradient(circle at 30% 20%, rgba(77,130,255,0.10), transparent 55%), radial-gradient(circle at 80% 80%, rgba(255,46,63,0.08), transparent 55%), rgba(255,255,255,0.03)',
+      }}
+    >
+      <StepIndicator active={1} className="absolute left-7 top-7" />
+      {children}
+    </div>
+  );
+}
+
+function StepIndicator({ active, className = '' }: { active: 0 | 1 | 2; className?: string }) {
+  return (
+    <div className={`flex gap-1.5 ${className}`}>
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="h-[3px] w-7 rounded-full"
+          style={{ background: i === active ? '#4d82ff' : 'rgba(77,130,255,0.22)' }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ----- Mockup 1: Script writer ----- */
+function ScriptMockup() {
+  return (
+    <div className="w-full max-w-[420px]">
+      <div
+        className="rounded-2xl border border-white/10 bg-[#0a0b10] p-4 text-left"
+        style={{ boxShadow: '0 28px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)' }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <span className="text-[14px] text-white/35">Write your script…</span>
+          <span
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white"
+            style={{ background: 'linear-gradient(135deg, #4d82ff, #7a4dff 60%, #ff2e3f)' }}
+          >
+            <Sparkles className="h-3 w-3" />
+            AI Script writer
+          </span>
+        </div>
+
+        <div className="h-14" />
+
+        <div className="flex items-center justify-between">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-white/70">
+            <Plus className="h-3 w-3" /> Credits <b className="text-white">6</b>
+          </span>
+          <span className="text-[11px] text-white/35">0 / 1000</span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-white/5 pt-3">
+          <MockIconBtn>
+            <Mic className="h-3.5 w-3.5" />
+          </MockIconBtn>
+          <MockChip>
+            <Headphones className="h-3 w-3" />
+            Talking Actors
+            <ChevronDown className="h-3 w-3 opacity-60" />
+          </MockChip>
+          <MockChip>
+            <Plus className="h-3 w-3" /> Add Actors
+          </MockChip>
+          <MockChip>
+            <AudioLines className="h-3 w-3" /> Edit Voice
+          </MockChip>
+          <span className="ml-auto flex items-center gap-1.5">
+            <MockIconBtn>
+              <AudioWaveform className="h-3.5 w-3.5" />
+            </MockIconBtn>
+            <MockIconBtn accent>
+              <ArrowUp className="h-3.5 w-3.5" />
+            </MockIconBtn>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MockChip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-medium text-white/75">
+      {children}
+    </span>
+  );
+}
+
+function MockIconBtn({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
+  return (
+    <span
+      className={
+        accent
+          ? 'grid h-7 w-7 place-items-center rounded-full bg-white text-[#080808]'
+          : 'grid h-7 w-7 place-items-center rounded-full border border-white/10 bg-white/[0.05] text-white/75'
+      }
+    >
+      {children}
+    </span>
+  );
+}
+
+/* ----- Mockup 2: Actor fan ----- */
+function ActorsMockup() {
+  // Reuse the same Cloudinary template posters as the hero wall so the
+  // mockup feels real, not stocky. Poster only — no extra <video> decoders.
+  const cards = TILE_VIDEOS.slice(0, 5);
+  const names = ['Angela', 'Mike', 'Saman', 'Mila', 'Jason'];
+  const layout = [
+    { x: -120, y: 22, rot: -10, z: 1, scale: 0.9 },
+    { x: -62, y: 6, rot: -5, z: 2, scale: 0.96 },
+    { x: 0, y: -8, rot: 0, z: 3, scale: 1.08 },
+    { x: 62, y: 6, rot: 5, z: 2, scale: 0.96 },
+    { x: 120, y: 22, rot: 10, z: 1, scale: 0.9 },
+  ];
+  return (
+    <div className="relative h-[260px] w-full max-w-[460px]">
+      {cards.map((c, i) => {
+        const p = layout[i];
+        return (
+          <div
+            key={i}
+            className="absolute left-1/2 top-1/2 aspect-[9/14] w-[120px] overflow-hidden rounded-[14px] border border-white/15 bg-[#11131a]"
+            style={{
+              transform: `translate(calc(-50% + ${p.x}px), calc(-50% + ${p.y}px)) rotate(${p.rot}deg) scale(${p.scale})`,
+              zIndex: p.z,
+              boxShadow: '0 22px 50px rgba(0,0,0,0.55)',
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={c.poster} alt="" className="h-full w-full object-cover" />
+            {i === 2 && (
+              <span className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-black/55 text-white backdrop-blur">
+                <Heart className="h-3 w-3 fill-white" />
+              </span>
+            )}
+            <div className="absolute inset-x-1.5 bottom-1.5 flex items-center justify-between rounded-md bg-black/55 px-1.5 py-[3px] text-[10px] font-semibold text-white backdrop-blur">
+              <span>{names[i]}</span>
+              <span className="rounded-sm bg-white/20 px-1 text-[9px]">HD</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ----- Mockup 3: Final video result ----- */
+function VideoMockup() {
+  const c = [TILE_VIDEOS[5], TILE_VIDEOS[4], TILE_VIDEOS[3]];
+  const layout = [
+    { x: -95, y: 14, rot: -8, z: 1, scale: 0.92 },
+    { x: 0, y: -12, rot: 0, z: 3, scale: 1.08 },
+    { x: 95, y: 14, rot: 8, z: 1, scale: 0.92 },
+  ];
+  return (
+    <div className="relative h-[300px] w-full max-w-[460px]">
+      {c.map((v, i) => {
+        const p = layout[i];
+        return (
+          <div
+            key={i}
+            className="absolute left-1/2 top-1/2 aspect-[9/19] w-[140px] overflow-hidden rounded-[22px] border-[3px] border-[#11131a] bg-[#11131a]"
+            style={{
+              transform: `translate(calc(-50% + ${p.x}px), calc(-50% + ${p.y}px)) rotate(${p.rot}deg) scale(${p.scale})`,
+              zIndex: p.z,
+              boxShadow: '0 26px 64px rgba(0,0,0,0.65)',
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={v.poster} alt="" className="h-full w-full object-cover" />
+            {i === 1 && (
+              <>
+                <span className="absolute left-2 top-2 rounded-full bg-black/65 px-2 py-[2px] text-[10px] font-semibold text-white backdrop-blur">
+                  01:48
+                </span>
+                <span className="absolute inset-0 m-auto grid h-11 w-11 place-items-center rounded-full bg-white text-[#080808] shadow-[0_8px_22px_rgba(0,0,0,0.45)]">
+                  <Play className="h-4 w-4 fill-[#080808]" />
+                </span>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
