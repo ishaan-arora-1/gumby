@@ -54,6 +54,8 @@
 		<string>Inter-Medium.ttf</string>
 		<string>Inter-SemiBold.ttf</string>
 		<string>Inter-Bold.ttf</string>
+		<string>Roboto-Black.ttf</string>
+		<string>Anton-Regular.ttf</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>

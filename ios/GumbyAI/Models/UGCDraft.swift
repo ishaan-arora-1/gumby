@@ -68,6 +68,11 @@ struct UGCDraft: Identifiable {
     /// via libass.
     var captionsEnabled: Bool
 
+    /// Caption style preset id — see CaptionPreset.all. Defaults to "bold".
+    /// Sent to the backend as `captionPreset`; lookup happens against the
+    /// shared backend preset config.
+    var captionPresetId: String
+
     // MARK: - Generation
 
     var status: DraftStatus = .editing
@@ -112,7 +117,8 @@ struct UGCDraft: Identifiable {
             script: "",
             videoDescription: "",
             videoDuration: 10,
-            captionsEnabled: true
+            captionsEnabled: true,
+            captionPresetId: CaptionPreset.defaultId
         )
     }
 
@@ -135,7 +141,8 @@ struct UGCDraft: Identifiable {
             script: previous.script,
             videoDescription: previous.videoDescription,
             videoDuration: previous.videoDuration,
-            captionsEnabled: previous.captionsEnabled
+            captionsEnabled: previous.captionsEnabled,
+            captionPresetId: previous.captionPresetId
         )
     }
 }
