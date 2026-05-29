@@ -47,7 +47,11 @@ const COL_FILL    = '&H00FFFFFF';
 const COL_OUTLINE = '&H00000000';
 const COL_SHADOW  = '&H80000000';
 
-const DEFAULT_FONT = 'Roboto';
+// Must match the *family name* recorded inside the bundled .ttf so libass
+// finds it via fontsdir on Linux. The Roboto-Black.ttf we ship reports its
+// family as "Roboto Black" (with the space) — using bare "Roboto" works on
+// macOS (fuzzy match) but renders empty glyphs on Railway/Linux.
+const DEFAULT_FONT = 'Roboto Black';
 
 // ---------------------------------------------------------------------------
 

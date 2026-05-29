@@ -691,7 +691,11 @@ async function runSingleShotPipeline(job, jobId) {
     let captionStats = null;
     let captionError = null;
     if (captionsEnabled) {
-      await reportStage('captioning', 90, 96);
+      // We use 'finalizing' here (not 'captioning') because the DB
+      // CHECK constraint on ugc_jobs.status doesn't allow new values —
+      // updateJob would log a constraint violation otherwise. Captioning
+      // is logically the last step of finalizing the output anyway.
+      await reportStage('finalizing', 90, 96);
       console.log(`[ugc:${jobId}] burning captions via whisper + libass`);
       const captionedPath = path.join(workDir, 'captioned.mp4');
       try {
