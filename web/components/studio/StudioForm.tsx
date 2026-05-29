@@ -24,6 +24,12 @@ interface Props {
 export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
   const [creatorDesc, setCreatorDesc] = useState(prefill?.creatorDescription ?? '');
 
+  // Template-only: optional tweaks the user wants on the creator (e.g.
+  // "same person but on a beach"). We keep the template creator's face
+  // and identity locked, but pass these tweaks into the Nano Banana seed
+  // image prompt so the rest of the scene can adapt.
+  const [creatorTweaks, setCreatorTweaks] = useState('');
+
   // Product
   const [includeProduct, setIncludeProduct] = useState(prefill?.includeProduct ?? true);
   const [productName, setProductName] = useState(prefill?.productName ?? '');
@@ -128,6 +134,7 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
     onSubmit({
       templateId: template?.id ?? null,
       creatorDescription: template ? undefined : creatorDesc,
+      creatorTweaks: template ? creatorTweaks.trim() || undefined : undefined,
       productName: includeProduct ? productName : '',
       productDescription: includeProduct ? productDesc : '',
       productImageUrl: includeProduct ? productImageUrl ?? undefined : undefined,
@@ -147,6 +154,21 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
             onChange={(e) => setCreatorDesc(e.target.value)}
             placeholder="20-year-old, friendly, in a kitchen, soft daylight…"
             rows={3}
+            className={inputCls}
+          />
+        </Section>
+      )}
+
+      {template && (
+        <Section
+          title="Creator tweaks"
+          hint="Optional. Same creator, but with adjustments — e.g. on a beach, in casual streetwear, holding nothing."
+        >
+          <textarea
+            value={creatorTweaks}
+            onChange={(e) => setCreatorTweaks(e.target.value)}
+            placeholder="Same person but outdoors on a sunny beach instead of indoors…"
+            rows={2}
             className={inputCls}
           />
         </Section>

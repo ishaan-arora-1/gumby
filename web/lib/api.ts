@@ -117,6 +117,7 @@ export const api = {
   generateAd: (body: {
     templateId?: string | null;
     creatorDescription?: string;
+    creatorTweaks?: string;
     productName: string;
     productDescription: string;
     productImageUrl?: string;
