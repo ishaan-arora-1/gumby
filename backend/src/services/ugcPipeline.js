@@ -229,6 +229,10 @@ async function reimagineCreatorInScene({
       'The product MUST be preserved pixel-perfectly: packaging, color, label text, shape, and branding all match the second image exactly. Do not redesign, restyle, recolor, blur, or otherwise alter the product in any way.',
       'The product should be clearly visible and recognizable in the final image — never hide it, never replace its label, never change its branding.',
     );
+  } else if (!hasProduct) {
+    parts.push(
+      'CRITICAL — NO PRODUCT. The user explicitly chose NOT to feature a product, so the on-camera person\'s hands must be empty and relaxed in a natural talking-head pose. No bottles, tubes, jars, boxes, packages, phones, gadgets, or held items of any kind appear anywhere in the frame.',
+    );
   }
 
   parts.push(REALISM_GUIDANCE);
@@ -282,12 +286,11 @@ async function synthesizeCreatorScene({
 
   if (hasProduct) {
     const prompt = [
-      `Generate a single photorealistic still of a new on-camera UGC creator: ${cleanCreator}.`,
+      `Generate a single photorealistic still. The creator and scene MUST match this description exactly: "${cleanCreator}". The setting/location described here is mandatory — if it specifies a kitchen, bathroom mirror, gym, beach, bedroom, office, etc., the final image must be in that exact environment.`,
       `The IMAGE provided is ${productPhrase} — the product this creator is featuring.`,
       'Integrate the product naturally into the scene — typically held in the creator\'s hand, or being used by them.',
       'Preserve the product pixel-perfectly: packaging, color, label text, shape, and branding all match the provided image exactly. Do not redesign, restyle, recolor, or otherwise alter the product.',
       'The product must be clearly visible and recognizable in the final image — never hide it, never blur it, never change its branding.',
-      'Build a believable environment around the creator that fits the scene description above (room, lighting, background props as appropriate).',
       REALISM_GUIDANCE,
     ].join(' ');
 
@@ -304,11 +307,19 @@ async function synthesizeCreatorScene({
     return url;
   }
 
-  // No inputs at all — pure text-to-image.
+  // Text-to-image fallback. Two sub-cases:
+  //   (a) user named a product but didn't upload an image — mention it
+  //       by name in the prompt so the creator references it on camera.
+  //   (b) user explicitly opted OUT of a product — forbid any held
+  //       object so the model doesn't fill empty hands with a random
+  //       phone or mug.
+  const wantsProductByName = !!(productName && productName.trim());
   const prompt = [
-    `Generate a single photorealistic still of a new on-camera UGC creator: ${cleanCreator}.`,
-    'Build a believable environment around the creator that fits the description (room, lighting, background props as appropriate).',
+    `Generate a single photorealistic still. The creator and scene MUST match this description exactly: "${cleanCreator}". The setting/location described here is mandatory — if it specifies a kitchen, bathroom mirror, gym, beach, bedroom, office, etc., the final image must be in that exact environment.`,
     'The creator is positioned naturally for a vertical phone video — framed mid-body, looking at the camera, ready to speak.',
+    wantsProductByName
+      ? `The creator is featuring ${productPhrase} — depict them holding or interacting with it naturally.`
+      : 'CRITICAL — NO PRODUCT. The creator\'s hands are empty and relaxed. No bottles, tubes, jars, boxes, packages, phones, gadgets, or held items of any kind. The user explicitly chose NOT to feature a product, so this is a pure talking-head shot.',
     REALISM_GUIDANCE,
   ].join(' ');
 
@@ -345,20 +356,25 @@ async function integrateProductIntoTemplate({
 }) {
   const productPhrase = productName ? `"${productName}"` : 'the product';
   const hasTweaks = !!(userTweaks && userTweaks.trim());
-  const parts = [
-    'The FIRST image shows a person on camera in a specific scene.',
-    // Identity is always locked. Scene/clothing/pose are only locked
-    // when the user did not request changes — see the tweaks branch.
-    hasTweaks
-      ? 'Keep that person\'s face, identity, ethnicity, hair, and body type EXACTLY as in the first image. Their facial features and the person they are must not change.'
-      : 'Keep that person exactly as they are — same face, same identity, same body, same clothing, same scene, same lighting, same framing.',
-  ];
+  const parts = [];
+
   if (hasTweaks) {
+    // Lead with the user's tweaks as the dominant goal. Frame the input
+    // image as a person reference, NOT a scene reference — otherwise
+    // Nano Banana fixates on the original location and ignores the
+    // requested scene change.
     parts.push(
-      `Apply the following changes the user requested for the scene around this person, while keeping their identity intact: ${userTweaks.trim()}.`,
-      'Adjust the environment, lighting, clothing, and props as needed to satisfy that request — but the person\'s face and identity stay locked to the first image.',
+      `PRIMARY GOAL — generate an image of the person from the FIRST image, but in this new scene/situation: "${userTweaks.trim()}". This scene change is the user's main request and must be honored fully.`,
+      'The FIRST image is provided ONLY as a reference for the person\'s identity — their face, ethnicity, hair, body type. Do NOT treat it as a reference for the location, environment, background, clothing, props, or lighting; those should match the new scene described above instead.',
+      'Keep the person\'s face, ethnicity, hair, and body type EXACTLY as in the first image. Their identity must not change. But everything around them — the room, the background, the lighting, what they are wearing, what is in the scene — should match the requested new scene.',
+    );
+  } else {
+    parts.push(
+      'The FIRST image shows a person on camera in a specific scene.',
+      'Keep that person exactly as they are — same face, same identity, same body, same clothing, same scene, same lighting, same framing.',
     );
   }
+
   parts.push(
     'IMPORTANT: if the person in the first image is currently holding, wearing, or otherwise featuring any product, item, bottle, tube, box, package, or branded object, REMOVE that original object entirely. Replace whatever they were holding with the new product described below. Do not show two products. Do not show the original product anywhere in the frame.',
     `The SECOND image is ${productPhrase} — the ONLY product that should appear in the final image.`,
@@ -398,24 +414,27 @@ async function stripProductFromTemplate({
   onProgress,
 }) {
   const hasTweaks = !!(userTweaks && userTweaks.trim());
-  const parts = [
-    'The image shows a person on camera in a specific scene.',
-    hasTweaks
-      ? 'Keep that person\'s face, identity, ethnicity, hair, and body type EXACTLY as in this image. Their facial features and the person they are must not change.'
-      : 'Keep that person exactly as they are — same face, same identity, same body, same clothing, same hair, same expression, same pose, same scene, same lighting, same camera angle, same framing.',
-  ];
+  const parts = [];
+
   if (hasTweaks) {
     parts.push(
-      `Apply the following changes the user requested for the scene around this person, while keeping their identity intact: ${userTweaks.trim()}.`,
-      'Adjust the environment, lighting, clothing, and props as needed to satisfy that request — but the person\'s face and identity stay locked to the original image.',
+      `PRIMARY GOAL — generate an image of the person from this reference photo, but in this new scene/situation: "${userTweaks.trim()}". This scene change is the user's main request and must be honored fully.`,
+      'Use this image ONLY as a reference for the person\'s identity — their face, ethnicity, hair, body type. Do NOT preserve the location, environment, background, clothing, props, or lighting from this image; those should match the new scene described above.',
+      'Keep the person\'s face, ethnicity, hair, and body type EXACTLY as in the reference. Their identity must not change. But everything around them — the room, the background, the lighting, what they are wearing, what is in the scene — should match the requested new scene.',
+    );
+  } else {
+    parts.push(
+      'The image shows a person on camera in a specific scene.',
+      'Keep that person exactly as they are — same face, same identity, same body, same clothing, same hair, same expression, same pose, same scene, same lighting, same camera angle, same framing.',
     );
   }
+
   parts.push(
-    'If the person is holding, wearing, displaying, pointing at, or otherwise featuring any product, item, bottle, tube, jar, box, package, phone, gadget, or branded object, REMOVE that object completely from the scene.',
-    'Their hands should now be empty and relaxed in a natural position consistent with the rest of the pose — as if they were simply talking to camera with nothing in their hands.',
-    'Do not add any new object. Do not introduce a replacement product.',
+    'CRITICAL — NO PRODUCT IN THE FINAL IMAGE. If the person is holding, wearing, displaying, pointing at, or otherwise featuring any product, item, bottle, tube, jar, box, package, phone, gadget, or branded object, REMOVE that object completely from the scene. The user explicitly chose NOT to feature a product, so no commercial object of any kind should appear.',
+    'Their hands should be empty and relaxed in a natural talking-head position — as if they were simply talking to camera with nothing in their hands.',
+    'Do not add any new object. Do not introduce a replacement product. No bottles, no boxes, no devices, no held items at all.',
     hasTweaks
-      ? 'If the person was not holding anything, keep their hands as-is but still apply the requested scene changes above.'
+      ? 'If the person was not holding anything, keep their hands empty but still apply the requested scene changes above.'
       : 'If the person was not holding anything to begin with, return the scene unchanged.',
     'Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of the same person, hands-free.',
   );
@@ -448,17 +467,25 @@ function klingDurationEnum(seconds) {
   return Number(seconds) >= 8 ? '10' : '5';
 }
 
-const KLING_NEGATIVE_PROMPT =
+const KLING_NEGATIVE_PROMPT_BASE =
   'professional model, supermodel, fashion model, magazine cover, glamour shot, beauty advertisement, runway, studio lighting, plastic skin, doll-like, old, elderly, aged, wrinkled, weathered face, blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed hands, extra limbs, frozen still image, multiple people, split screen, scene cuts, hard cuts, silent, no audio, mute, lip movements out of sync, mouth not matching audio';
 
-async function generateVideoFromImage({ seedImageUrl, prompt, durationSec = 10, aspectRatio = '9:16', onProgress }) {
+const KLING_NEGATIVE_PROMPT_NO_PRODUCT =
+  KLING_NEGATIVE_PROMPT_BASE +
+  ', product, bottle, tube, jar, box, package, container, branded object, item in hand, holding object, picking up object, gadget, phone, mug, cup, can';
+
+function klingNegativePrompt({ hasProduct }) {
+  return hasProduct ? KLING_NEGATIVE_PROMPT_BASE : KLING_NEGATIVE_PROMPT_NO_PRODUCT;
+}
+
+async function generateVideoFromImage({ seedImageUrl, prompt, durationSec = 10, aspectRatio = '9:16', hasProduct = true, onProgress }) {
   const result = await falSubscribeWithRetry(KLING_IMAGE_TO_VIDEO, {
     prompt,
     image_url: seedImageUrl,
     duration: klingDurationEnum(durationSec),
     aspect_ratio: aspectRatio,
     generate_audio: true,
-    negative_prompt: KLING_NEGATIVE_PROMPT,
+    negative_prompt: klingNegativePrompt({ hasProduct }),
     cfg_scale: 0.5,
   }, 'kling-i2v', { onProgress });
   const url = result?.data?.video?.url || result?.video?.url;
@@ -466,13 +493,13 @@ async function generateVideoFromImage({ seedImageUrl, prompt, durationSec = 10, 
   return url;
 }
 
-async function generateVideoFromText({ prompt, durationSec = 10, aspectRatio = '9:16', onProgress }) {
+async function generateVideoFromText({ prompt, durationSec = 10, aspectRatio = '9:16', hasProduct = true, onProgress }) {
   const result = await falSubscribeWithRetry(KLING_TEXT_TO_VIDEO, {
     prompt,
     duration: klingDurationEnum(durationSec),
     aspect_ratio: aspectRatio,
     generate_audio: true,
-    negative_prompt: KLING_NEGATIVE_PROMPT,
+    negative_prompt: klingNegativePrompt({ hasProduct }),
     cfg_scale: 0.5,
   }, 'kling-t2v', { onProgress });
   const url = result?.data?.video?.url || result?.video?.url;
@@ -498,16 +525,32 @@ async function mirrorRemote(url, jobId, kind) {
  * `generate_audio: true`, so this single call replaces the old
  * TTS + sync.so lipsync chain.
  */
-function buildKlingPrompt({ script, videoDescription, creatorContext, productName, hasProductInSeed }) {
+function buildKlingPrompt({
+  script,
+  videoDescription,
+  creatorContext,
+  userTweaks,
+  productName,
+  hasProduct,
+  hasProductInSeed,
+}) {
   const parts = [];
   if (creatorContext) parts.push(creatorContext);
+  // Tweaks override the template's natural setting — bubble them up to
+  // Kling too so the rendered video doesn't drift back to the template
+  // location after Nano Banana moved the seed image somewhere else.
+  if (userTweaks && userTweaks.trim()) {
+    parts.push(`SCENE: ${userTweaks.trim()}. The setting/environment in the video must match this description.`);
+  }
   if (videoDescription) parts.push(videoDescription);
-  if (productName) {
+  if (hasProduct && productName) {
     if (hasProductInSeed) {
       parts.push(`The creator continues holding "${productName}" visibly in their hand throughout the video — the product stays clearly in frame, unchanged in appearance, never put down, never replaced, never altered.`);
     } else {
       parts.push(`The creator is featuring "${productName}" naturally as part of the action.`);
     }
+  } else if (!hasProduct) {
+    parts.push('The creator is NOT holding or featuring any product, bottle, tube, box, gadget, or branded object — their hands stay empty throughout. This is a pure talking-head shot, just the creator speaking to camera.');
   }
   parts.push('One continuous shot, no cuts, smooth motion, natural body language, expressive facial expression, talking to camera.');
   parts.push('The on-camera person is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model and NOT a fashion ad. No glamour makeup, casual everyday clothing, candid authentic energy, shot like a vertical phone video.');
@@ -678,14 +721,17 @@ async function runSingleShotPipeline(job, jobId) {
     // progress bar — Kling owns 32–90, captioning 90–96.
     const captionsEnabled = snapshot.captions_enabled !== false;
     const videoTick = await reportStage('generating_video', 32, captionsEnabled ? 90 : 96);
+    const hasProduct = !!productImageUrl || !!(job.product_name && job.product_name.trim());
     const klingPrompt = buildKlingPrompt({
       script: scriptText,
       videoDescription: effectiveVideoDesc,
       creatorContext,
+      userTweaks,
       productName: job.product_name,
+      hasProduct,
       hasProductInSeed: !!productImageUrl && (seedKind === 'inspiration+product' || seedKind === 'template+product'),
     });
-    console.log(`[ugc:${jobId}] kling 3.0 pro ${seedImageUrl ? 'i2v' : 't2v'} (seed=${seedKind}, ${videoDuration}s, audio=on)`);
+    console.log(`[ugc:${jobId}] kling 3.0 pro ${seedImageUrl ? 'i2v' : 't2v'} (seed=${seedKind}, ${videoDuration}s, audio=on, product=${hasProduct})`);
 
     const klingVideoUrl = seedImageUrl
       ? await generateVideoFromImage({
@@ -693,12 +739,14 @@ async function runSingleShotPipeline(job, jobId) {
           prompt: klingPrompt,
           durationSec: videoDuration,
           aspectRatio,
+          hasProduct,
           onProgress: videoTick,
         })
       : await generateVideoFromText({
           prompt: klingPrompt,
           durationSec: videoDuration,
           aspectRatio,
+          hasProduct,
           onProgress: videoTick,
         });
 
