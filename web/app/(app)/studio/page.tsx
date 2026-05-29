@@ -114,8 +114,8 @@ export default function StudioPage() {
             className="px-6 lg:px-10 pt-32 lg:pt-40"
           >
             <div className="text-center mb-14 lg:mb-16 max-w-2xl mx-auto">
-              <h2 className="font-mono text-white text-[clamp(16px,2.6vw,42px)] leading-[1.05] tracking-[-0.05em] [word-spacing:-0.2em]">
-                Start Creating UGC
+              <h2 className="font-serif text-white text-[clamp(28px,4.4vw,64px)] leading-[1.05] tracking-[-0.02em]">
+                Describe your content...
               </h2>
             </div>
             <PromptComposer onSubmit={onComposerSubmit} loading={isParsing} />
