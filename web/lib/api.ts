@@ -107,10 +107,13 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  parsePrompt: (prompt: string) =>
+  parsePrompt: (prompt: string, attachments?: { url: string }[]) =>
     request<{ success: boolean; data: any }>('/ugc/parse-prompt', {
       method: 'POST',
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({
+        prompt,
+        ...(attachments && attachments.length ? { attachments } : {}),
+      }),
     }),
 
   // ---- UGC Generation Jobs (Full Ad) ----
@@ -126,6 +129,7 @@ export const api = {
     videoDescription?: string;
     videoDuration?: number;
     captionsEnabled?: boolean;
+    captionPreset?: string;
   }) =>
     request<{ success: boolean; data: any }>('/ugc/generate', {
       method: 'POST',
@@ -176,6 +180,14 @@ export const api = {
   uploadInspirationImage: (contentType: string, base64: string) =>
     request<{ success: boolean; data: { url: string } }>(
       '/ugc/upload-inspiration-image',
+      { method: 'POST', body: JSON.stringify({ contentType, base64 }) }
+    ),
+  // Generic attachment upload used by the prompt composer — the image
+  // gets classified as product / inspiration / both by /parse-prompt
+  // afterward, so the composer doesn't have to pre-label it.
+  uploadAttachment: (contentType: string, base64: string) =>
+    request<{ success: boolean; data: { url: string } }>(
+      '/ugc/upload-attachment',
       { method: 'POST', body: JSON.stringify({ contentType, base64 }) }
     ),
 };

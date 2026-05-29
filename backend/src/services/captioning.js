@@ -21,37 +21,36 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { openai } = require('../config/openai');
 const { ffmpegPath } = require('../config/ffmpeg');
+const { getPreset, DEFAULT_PRESET_ID } = require('./captionPresets');
 
-// Bundled font, used so libass renders the same on every host (Azure
-// Linux App Service has no "Arial Black" available, and bundling avoids
-// any fontconfig surprises). The .ttf ships under backend/assets/fonts.
+// Bundled fonts — libass loads from here via fontsdir so the same glyphs
+// render on every host regardless of fontconfig state.
 const FONTS_DIR = path.join(__dirname, '..', '..', 'assets', 'fonts');
 
 // ---------------------------------------------------------------------------
-// Visual tuning — change these here while iterating on the look.
+// Cue-chunking knobs — these are NOT per-preset (they govern timing/breaks,
+// not visual style). Pixel width estimation uses the preset's fontSize.
 // ---------------------------------------------------------------------------
 
 const PLAY_RES_X        = 1080;   // ASS coordinate canvas (libass auto-scales
 const PLAY_RES_Y        = 1920;   //   to the actual frame size at render time)
 const SAFE_WIDTH_RATIO  = 0.85;   // captions never exceed 85% of frame width
-const POSITION_Y_RATIO  = 0.76;   // Instagram Reels safe zone — clears bottom UI
-const FONT_SIZE         = 72;
 const MAX_WORDS_PER_CUE = 3;
 const MAX_CHARS_PER_CUE = 18;     // includes spaces
 const MAX_GAP_MS        = 250;    // gap larger than this forces a cue break
-const POP_IN_MS         = 80;
-const POP_SETTLE_MS     = 80;
 const LINGER_AFTER_LAST = 300;
 
-const COL_FILL    = '&H00FFFFFF';
-const COL_OUTLINE = '&H00000000';
-const COL_SHADOW  = '&H80000000';
-
-// Must match the *family name* recorded inside the bundled .ttf so libass
-// finds it via fontsdir on Linux. The Roboto-Black.ttf we ship reports its
-// family as "Roboto Black" (with the space) — using bare "Roboto" works on
-// macOS (fuzzy match) but renders empty glyphs on Railway/Linux.
-const DEFAULT_FONT = 'Roboto Black';
+// Convert "#RRGGBB" + optional alpha (0..1) into ASS "&HAABBGGRR" — note
+// ASS alpha is INVERTED (00 = opaque, FF = transparent).
+function hexToAss(hex, alpha = 1) {
+  const cleaned = (hex || '#000000').replace('#', '');
+  const r = cleaned.slice(0, 2);
+  const g = cleaned.slice(2, 4);
+  const b = cleaned.slice(4, 6);
+  const a = Math.round((1 - Math.max(0, Math.min(1, alpha))) * 255)
+    .toString(16).padStart(2, '0').toUpperCase();
+  return `&H${a}${b.toUpperCase()}${g.toUpperCase()}${r.toUpperCase()}`;
+}
 
 // ---------------------------------------------------------------------------
 
@@ -110,7 +109,7 @@ function estimateWidth(text, fontSize) {
   return text.length * fontSize * 0.62;
 }
 
-function chunkWordsIntoCues(words) {
+function chunkWordsIntoCues(words, fontSize) {
   const safeWidth = PLAY_RES_X * SAFE_WIDTH_RATIO;
   const cues = [];
   let cur = null;
@@ -135,7 +134,7 @@ function chunkWordsIntoCues(words) {
     if (
       gapMs > MAX_GAP_MS ||
       candidate.length > MAX_CHARS_PER_CUE ||
-      estimateWidth(candidate, FONT_SIZE) > safeWidth ||
+      estimateWidth(candidate, fontSize) > safeWidth ||
       cur.words.length >= MAX_WORDS_PER_CUE
     ) {
       flush();
@@ -167,32 +166,40 @@ function fmtTime(sec) {
   return `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
 }
 
-function buildAss({ cues, font }) {
+function buildAss({ cues, preset }) {
   const posX = Math.round(PLAY_RES_X / 2);
-  const posY = Math.round(PLAY_RES_Y * POSITION_Y_RATIO);
+  const posY = Math.round(PLAY_RES_Y * preset.positionYRatio);
+
+  const fill    = hexToAss(preset.fillHex, 1);
+  const outline = hexToAss(preset.outlineHex, 1);
+  const shadow  = hexToAss(preset.shadowHex, preset.shadowAlpha);
 
   // BorderStyle 1 = outline + shadow. Alignment 5 = middle-center so
   // \pos() refers to the geometric center of the cue (multi-line grows
   // up/down evenly, never drifts into the Reels bottom UI strip).
   const style = [
     'Style: Caption',
-    font,
-    FONT_SIZE,
-    COL_FILL, COL_FILL, COL_OUTLINE, COL_SHADOW,
-    -1, 0, 0, 0,        // Bold, Italic, Underline, StrikeOut
-    100, 100, 0, 0,     // ScaleX, ScaleY, Spacing, Angle
-    1, 4, 2, 5,         // BorderStyle, Outline px, Shadow px, Alignment
-    40, 40, 40, 1,      // MarginL, MarginR, MarginV, Encoding
+    preset.font,
+    preset.fontSize,
+    fill, fill, outline, shadow,
+    -1, 0, 0, 0,                                  // Bold, Italic, Underline, StrikeOut
+    100, 100, 0, 0,                               // ScaleX, ScaleY, Spacing, Angle
+    1, preset.outlineWidthPx, preset.shadowDyPx, 5, // BorderStyle, Outline px, Shadow px, Alignment
+    40, 40, 40, 1,                                // MarginL, MarginR, MarginV, Encoding
   ].join(',');
 
   const events = cues.map((c) => {
     const text = c.words.join(' ');
-    // Pop-in: 85% → 106% over POP_IN_MS, settle to 100% over POP_SETTLE_MS.
+    const from = preset.popFromPct;
+    const peak = preset.popPeakPct;
+    const settle = preset.popSettlePct;
+    const inMs = preset.popInMs;
+    const settleMs = preset.popSettleMs;
     const override =
       `{\\an5\\pos(${posX},${posY})` +
-      `\\fscx85\\fscy85` +
-      `\\t(0,${POP_IN_MS},\\fscx106\\fscy106)` +
-      `\\t(${POP_IN_MS},${POP_IN_MS + POP_SETTLE_MS},\\fscx100\\fscy100)}`;
+      `\\fscx${from}\\fscy${from}` +
+      `\\t(0,${inMs},\\fscx${peak}\\fscy${peak})` +
+      `\\t(${inMs},${inMs + settleMs},\\fscx${settle}\\fscy${settle})}`;
     return `Dialogue: 0,${fmtTime(c.start)},${fmtTime(c.end)},Caption,,0,0,0,,${override}${text}`;
   });
 
@@ -240,11 +247,12 @@ async function burnSubtitles(videoPath, assPath, outPath) {
  * @param {string} opts.outputPath   Local path to write the captioned MP4 to.
  * @param {string} [opts.scriptHint] Optional script text to anchor the
  *                                   Whisper word timestamps.
- * @param {string} [opts.font]       libass-resolvable font name. Defaults to
- *                                   "Arial Black".
- * @returns {Promise<{ cues: number, wordCount: number }>} debug info.
+ * @param {string} [opts.presetId]   Caption style preset id. Defaults to
+ *                                   DEFAULT_PRESET_ID. Unknown ids fall
+ *                                   back to the default — never throws.
+ * @returns {Promise<{ cues: number, wordCount: number, presetId: string }>}
  */
-async function captionVideo({ inputPath, outputPath, scriptHint, font }) {
+async function captionVideo({ inputPath, outputPath, scriptHint, presetId }) {
   if (!inputPath || !outputPath) {
     throw new Error('captionVideo requires inputPath and outputPath');
   }
@@ -252,6 +260,7 @@ async function captionVideo({ inputPath, outputPath, scriptHint, font }) {
     throw new Error('OPENAI_API_KEY missing — cannot transcribe for captions');
   }
 
+  const preset = getPreset(presetId);
   const workDir = path.dirname(outputPath);
   const audioPath = path.join(workDir, `caption-audio-${process.hrtime.bigint()}.wav`);
   const assPath   = path.join(workDir, `caption-${process.hrtime.bigint()}.ass`);
@@ -262,10 +271,10 @@ async function captionVideo({ inputPath, outputPath, scriptHint, font }) {
     if (words.length === 0) {
       throw new Error('Whisper returned 0 words — audio may be silent');
     }
-    const cues = chunkWordsIntoCues(words);
-    fs.writeFileSync(assPath, buildAss({ cues, font: font || DEFAULT_FONT }), 'utf8');
+    const cues = chunkWordsIntoCues(words, preset.fontSize);
+    fs.writeFileSync(assPath, buildAss({ cues, preset }), 'utf8');
     await burnSubtitles(inputPath, assPath, outputPath);
-    return { cues: cues.length, wordCount: words.length };
+    return { cues: cues.length, wordCount: words.length, presetId: preset.id };
   } finally {
     try { fs.unlinkSync(audioPath); } catch {}
     try { fs.unlinkSync(assPath); } catch {}

@@ -239,8 +239,49 @@ router.post('/script', async (req, res) => {
 
 // ---------- Parse prompt (direct mode) ----------
 
+// Classify a single attachment URL as 'product', 'inspiration', or 'both'.
+// Used by /parse-prompt so the studio card can pre-fill the right image
+// slot without asking the user to label their upload. Always resolves —
+// on error we default to 'inspiration' (the more flexible slot) so the
+// composer never blocks on a vision API hiccup.
+async function classifyAttachment(url) {
+  if (!url || typeof url !== 'string') return 'inspiration';
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0,
+      max_tokens: 6,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You classify images uploaded to a UGC video studio. The user attaches an image alongside a text prompt. Classify the image as one of:',
+            '- "product": a packaged commercial product (bottle, tube, box, jar, gadget, garment, etc.) shown as the main subject on a simple, neutral, or product-photo background. The object dominates the frame.',
+            '- "inspiration": a scene, environment, room, lifestyle moment, mood reference, or a person where the product is NOT the focus — primarily about setting or vibe.',
+            '- "both": a photo of a person clearly using, holding, or featuring a specific product, where both the person/scene AND the product are equally prominent. Typical "creator with product" UGC shot.',
+            '',
+            'Reply with EXACTLY one word: product, inspiration, or both. No punctuation, no quotes, no explanation.',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: [{ type: 'image_url', image_url: { url, detail: 'low' } }],
+        },
+      ],
+    });
+    const raw = (completion.choices?.[0]?.message?.content || '').trim().toLowerCase();
+    if (raw.includes('both')) return 'both';
+    if (raw.startsWith('product') || raw === 'product') return 'product';
+    if (raw.startsWith('inspiration') || raw === 'inspiration') return 'inspiration';
+    return 'inspiration';
+  } catch (err) {
+    console.warn('classifyAttachment failed:', err?.message || err);
+    return 'inspiration';
+  }
+}
+
 router.post('/parse-prompt', async (req, res) => {
-  const { prompt } = req.body || {};
+  const { prompt, attachments } = req.body || {};
   if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 6) {
     return res.status(400).json({ success: false, error: 'Prompt is too short' });
   }
@@ -268,15 +309,32 @@ router.post('/parse-prompt', async (req, res) => {
       'Return: {"creatorDescription":"...","productName":"...","productDescription":"...","videoDescription":"...","suggestedDuration":10,"includeProduct":true}',
     ].join('\n');
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.3,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt.trim() },
-      ],
-    });
+    // Run the prompt parse and (if attachments were sent) the per-image
+    // classifications in PARALLEL — total latency is bounded by whichever
+    // is slower, not the sum.
+    const attachmentList = Array.isArray(attachments)
+      ? attachments
+          .filter((a) => a && typeof a.url === 'string' && a.url.length > 0)
+          .slice(0, 4)
+      : [];
+
+    const [completion, classifiedAttachments] = await Promise.all([
+      openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        temperature: 0.3,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt.trim() },
+        ],
+      }),
+      Promise.all(
+        attachmentList.map(async (a) => ({
+          url: a.url,
+          kind: await classifyAttachment(a.url),
+        }))
+      ),
+    ]);
 
     const raw = completion.choices?.[0]?.message?.content || '{}';
     const parsed = JSON.parse(raw);
@@ -286,14 +344,32 @@ router.post('/parse-prompt', async (req, res) => {
     const rawDur = Number(parsed.suggestedDuration);
     const suggestedDuration = rawDur >= 8 ? 10 : 5;
 
+    // If the user uploaded a "both" image (creator holding product), force
+    // includeProduct on regardless of what the prompt parser inferred.
+    const hasBoth = classifiedAttachments.some((a) => a.kind === 'both');
+    const hasProductAttachment = classifiedAttachments.some(
+      (a) => a.kind === 'product' || a.kind === 'both'
+    );
+
     const result = {
       creatorDescription: (parsed.creatorDescription || '').slice(0, 500),
       productName: (parsed.productName || '').slice(0, 200),
       productDescription: (parsed.productDescription || '').slice(0, 500),
       videoDescription: (parsed.videoDescription || '').slice(0, 1000),
       suggestedDuration,
-      includeProduct: parsed.includeProduct !== false && (parsed.productName || '').trim().length > 0,
+      includeProduct:
+        hasProductAttachment ||
+        (parsed.includeProduct !== false && (parsed.productName || '').trim().length > 0),
+      attachments: classifiedAttachments,
     };
+
+    if (classifiedAttachments.length) {
+      console.log(
+        `[parse-prompt] classified ${classifiedAttachments.length} attachment(s): ` +
+          classifiedAttachments.map((a) => a.kind).join(', ') +
+          (hasBoth ? ' (both → routed to both slots)' : '')
+      );
+    }
 
     return res.json({ success: true, data: result });
   } catch (err) {
@@ -318,6 +394,7 @@ router.post('/generate', async (req, res) => {
     videoDescription,
     videoDuration,
     captionsEnabled,
+    captionPreset,
   } = req.body || {};
 
   // Either a templateId or a creatorDescription is required (direct mode)
@@ -364,6 +441,9 @@ router.post('/generate', async (req, res) => {
     // Captions default ON. The pipeline reads this off template_snapshot to
     // avoid a DB migration, same pattern we use for user_tweaks.
     const wantsCaptions = captionsEnabled !== false;
+    const captionPresetSafe = typeof captionPreset === 'string' && captionPreset.length
+      ? captionPreset.slice(0, 32)
+      : null;
 
     if (template) {
       const cleanTweaks = typeof creatorTweaks === 'string'
@@ -383,6 +463,7 @@ router.post('/generate', async (req, res) => {
         // template creator's face and identity.
         user_tweaks: cleanTweaks || null,
         captions_enabled: wantsCaptions,
+        caption_preset: captionPresetSafe,
       };
     } else {
       // Direct mode: store creator description in the snapshot so the
@@ -396,6 +477,7 @@ router.post('/generate', async (req, res) => {
         aspect_ratio: '9:16',
         duration_seconds: null,
         captions_enabled: wantsCaptions,
+        caption_preset: captionPresetSafe,
       };
     }
 
@@ -791,7 +873,9 @@ async function uploadImageBase64({ kind, userId, contentType, base64 }) {
   const ext = (contentType || '').includes('jpeg') ? 'jpg'
             : (contentType || '').includes('webp') ? 'webp'
             : 'png';
-  const subdir = kind === 'inspiration' ? 'inspirations' : 'products';
+  const subdir = kind === 'inspiration' ? 'inspirations'
+              : kind === 'attachment' ? 'attachments'
+              : 'products';
   const objectPath = `${subdir}/${userId}/${uuidv4()}.${ext}`;
   const { error: upErr } = await supabase.storage
     .from('ugc-videos')
@@ -843,6 +927,32 @@ router.post('/upload-inspiration-image', async (req, res) => {
     return res.json({ success: true, data: { url } });
   } catch (err) {
     console.error('UGC inspiration image upload error:', err);
+    return res.status(500).json({ success: false, error: 'Upload failed' });
+  }
+});
+
+/**
+ * Unified attachment upload used by the prompt composer. We don't know yet
+ * whether the image is a product, an inspiration, or both — that's decided
+ * by /parse-prompt via GPT-4o-mini vision classification once all the
+ * uploads finish. The returned signed URL is what the client passes back
+ * to /parse-prompt as `attachments: [{ url }]`.
+ */
+router.post('/upload-attachment', async (req, res) => {
+  const { contentType, base64 } = req.body || {};
+  if (!base64) {
+    return res.status(400).json({ success: false, error: 'base64 image required' });
+  }
+  try {
+    const url = await uploadImageBase64({
+      kind: 'attachment',
+      userId: req.user.id,
+      contentType,
+      base64,
+    });
+    return res.json({ success: true, data: { url } });
+  } catch (err) {
+    console.error('UGC attachment upload error:', err);
     return res.status(500).json({ success: false, error: 'Upload failed' });
   }
 });
