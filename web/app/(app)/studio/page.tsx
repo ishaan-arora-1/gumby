@@ -107,6 +107,16 @@ export default function StudioPage() {
     setError('');
   };
 
+  // Reset to a fresh studio when the user taps the Blink UGC logo in
+  // the navbar (AppShell dispatches this event on logo click when the
+  // current path is /studio — a plain re-navigation would be a no-op
+  // because Next.js wouldn't unmount this component).
+  useEffect(() => {
+    const onFresh = () => reset();
+    window.addEventListener('blinkugc:fresh-studio', onFresh);
+    return () => window.removeEventListener('blinkugc:fresh-studio', onFresh);
+  }, []);
+
   return (
     <div className="min-h-screen pb-24 md:pb-12">
       {step !== 'welcome' && (
