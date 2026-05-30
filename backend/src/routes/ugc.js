@@ -347,6 +347,7 @@ router.post('/generate', async (req, res) => {
     videoDuration,
     captionsEnabled,
     captionPreset,
+    creatorEthnicity,
   } = req.body || {};
 
   // Either a templateId or a creatorDescription is required (direct mode)
@@ -397,6 +398,16 @@ router.post('/generate', async (req, res) => {
       ? captionPreset.slice(0, 32)
       : null;
 
+    // Creator ethnicity is only meaningful in direct mode (templates
+    // already fix the creator's identity). Whitelist the allowed values
+    // — anything else is dropped so the picker can't be used to inject
+    // arbitrary prompt text.
+    const ETHNICITY_WHITELIST = new Set(['Asian American', 'Indian American', 'Asian']);
+    const ethnicitySafe = typeof creatorEthnicity === 'string'
+      && ETHNICITY_WHITELIST.has(creatorEthnicity.trim())
+      ? creatorEthnicity.trim()
+      : null;
+
     if (template) {
       const cleanTweaks = typeof creatorTweaks === 'string'
         ? creatorTweaks.trim().slice(0, 500)
@@ -430,6 +441,9 @@ router.post('/generate', async (req, res) => {
         duration_seconds: null,
         captions_enabled: wantsCaptions,
         caption_preset: captionPresetSafe,
+        // Direct-mode-only. Pipeline weaves this into the Nano Banana +
+        // Kling prompts as "a good-looking <ethnicity> creator —".
+        user_ethnicity: ethnicitySafe,
       };
     }
 

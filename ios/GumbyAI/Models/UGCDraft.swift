@@ -17,6 +17,14 @@ struct UGCDraft: Identifiable {
     /// that description. Empty when a template is used instead.
     var creatorDescription: String
 
+    /// Direct-mode-only ethnicity hint. The backend prepends
+    /// "a good-looking <ethnicity> creator — " to the creator context
+    /// before feeding it to Nano Banana / Kling. Allowed values mirror
+    /// the picker in UGCStudioCard:
+    ///   "Asian American", "Indian American", "Asian".
+    /// Ignored in template mode.
+    var creatorEthnicity: String
+
     // MARK: - Creator tweaks (template mode only)
 
     /// Optional adjustments the user wants applied on top of the chosen
@@ -103,6 +111,7 @@ struct UGCDraft: Identifiable {
             id: UUID(),
             number: number,
             creatorDescription: "",
+            creatorEthnicity: "Asian American",
             creatorTweaks: "",
             inspirationImage: nil,
             inspirationImageURL: nil,
@@ -127,6 +136,7 @@ struct UGCDraft: Identifiable {
             id: UUID(),
             number: number,
             creatorDescription: previous.creatorDescription,
+            creatorEthnicity: previous.creatorEthnicity,
             creatorTweaks: previous.creatorTweaks,
             inspirationImage: nil,            // UIImage not cloned; URL carries forward
             inspirationImageURL: previous.inspirationImageURL,

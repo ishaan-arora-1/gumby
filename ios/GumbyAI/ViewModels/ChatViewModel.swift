@@ -564,6 +564,9 @@ class ChatViewModel: ObservableObject {
                         captionsEnabled: drafts[draftIndex].captionsEnabled,
                         captionPresetId: drafts[draftIndex].captionsEnabled
                             ? drafts[draftIndex].captionPresetId
+                            : nil,
+                        creatorEthnicity: isDirectMode
+                            ? drafts[draftIndex].creatorEthnicity
                             : nil
                     )
                 )

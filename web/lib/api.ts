@@ -130,6 +130,7 @@ export const api = {
     videoDuration?: number;
     captionsEnabled?: boolean;
     captionPreset?: string;
+    creatorEthnicity?: string;
   }) =>
     request<{ success: boolean; data: any }>('/ugc/generate', {
       method: 'POST',

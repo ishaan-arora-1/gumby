@@ -117,6 +117,9 @@ final class UGCService {
         let captionsEnabled: Bool
         /// Caption style preset id — see CaptionPreset.all.
         let captionPresetId: String?
+        /// Direct-mode-only ethnicity hint ("Asian American" / "Indian
+        /// American" / "Asian"). Sent verbatim; nil in template mode.
+        let creatorEthnicity: String?
     }
 
     func startGeneration(_ req: GenerateRequest) async throws -> UGCJob {
@@ -137,6 +140,9 @@ final class UGCService {
         body["captionsEnabled"] = req.captionsEnabled
         if let preset = req.captionPresetId, !preset.isEmpty {
             body["captionPreset"] = preset
+        }
+        if let ethnicity = req.creatorEthnicity, !ethnicity.isEmpty {
+            body["creatorEthnicity"] = ethnicity
         }
         let resp: APIResponse<UGCJob> = try await api.post(path: "/ugc/generate", body: body)
         guard let job = resp.data else { throw APIError.noData }
