@@ -170,22 +170,43 @@ function buildAss({ cues, preset }) {
   const posX = Math.round(PLAY_RES_X / 2);
   const posY = Math.round(PLAY_RES_Y * preset.positionYRatio);
 
-  const fill    = hexToAss(preset.fillHex, 1);
-  const outline = hexToAss(preset.outlineHex, 1);
-  const shadow  = hexToAss(preset.shadowHex, preset.shadowAlpha);
+  // BorderStyle 1 = outline + drop shadow (current default look).
+  // BorderStyle 3 = opaque rectangle behind the text (block look). The
+  // box color comes from OutlineColour; Outline px controls horizontal
+  // padding inside the box.
+  const useBoxBackground = !!preset.boxBgHex;
 
-  // BorderStyle 1 = outline + shadow. Alignment 5 = middle-center so
-  // \pos() refers to the geometric center of the cue (multi-line grows
-  // up/down evenly, never drifts into the Reels bottom UI strip).
+  const fill = hexToAss(preset.fillHex, 1);
+  // Outline color doubles as the box color in block mode. Same hex,
+  // different role.
+  const outline = useBoxBackground
+    ? hexToAss(preset.boxBgHex, preset.boxBgAlpha ?? 1)
+    : hexToAss(preset.outlineHex, 1);
+  const back = useBoxBackground
+    ? hexToAss(preset.boxBgHex, preset.boxBgAlpha ?? 1)
+    : hexToAss(preset.shadowHex, preset.shadowAlpha);
+
+  // In block mode the "outline px" becomes box padding; in outline
+  // mode it's the stroke width.
+  const borderStyle = useBoxBackground ? 3 : 1;
+  const outlineOrPaddingPx = useBoxBackground
+    ? (preset.boxPaddingPx ?? 8)
+    : preset.outlineWidthPx;
+  // No drop shadow in block mode — looks muddy stacked on a colored box.
+  const shadowPx = useBoxBackground ? 0 : preset.shadowDyPx;
+
+  // Italic is optional and orthogonal to outline/block style.
+  const italicFlag = preset.italic ? -1 : 0;
+
   const style = [
     'Style: Caption',
     preset.font,
     preset.fontSize,
-    fill, fill, outline, shadow,
-    -1, 0, 0, 0,                                  // Bold, Italic, Underline, StrikeOut
-    100, 100, 0, 0,                               // ScaleX, ScaleY, Spacing, Angle
-    1, preset.outlineWidthPx, preset.shadowDyPx, 5, // BorderStyle, Outline px, Shadow px, Alignment
-    40, 40, 40, 1,                                // MarginL, MarginR, MarginV, Encoding
+    fill, fill, outline, back,
+    -1, italicFlag, 0, 0,                          // Bold, Italic, Underline, StrikeOut
+    100, 100, 0, 0,                                // ScaleX, ScaleY, Spacing, Angle
+    borderStyle, outlineOrPaddingPx, shadowPx, 5,  // BorderStyle, Outline px, Shadow px, Alignment
+    40, 40, 40, 1,                                 // MarginL, MarginR, MarginV, Encoding
   ].join(',');
 
   const events = cues.map((c) => {
