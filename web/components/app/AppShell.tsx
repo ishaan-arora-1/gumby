@@ -4,13 +4,13 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Logo } from '@/components/ui/Logo';
 import { useAuth } from '@/lib/auth-context';
-import { Sparkles, Film, LogOut, Users, PanelLeft, Settings as SettingsIcon } from 'lucide-react';
+import { Sparkles, History as HistoryIcon, LogOut, Users, PanelLeft, Settings as SettingsIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV = [
   { href: '/studio', label: 'Studio', icon: Sparkles },
   { href: '/templates', label: 'Creators', icon: Users },
-  { href: '/videos', label: 'My videos', icon: Film },
+  { href: '/history', label: 'History', icon: HistoryIcon },
 ];
 
 const SIDEBAR_KEY = 'gumby:sidebarCollapsed';
