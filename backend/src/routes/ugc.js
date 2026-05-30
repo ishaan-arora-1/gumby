@@ -402,7 +402,7 @@ router.post('/generate', async (req, res) => {
     // already fix the creator's identity). Whitelist the allowed values
     // — anything else is dropped so the picker can't be used to inject
     // arbitrary prompt text.
-    const ETHNICITY_WHITELIST = new Set(['Asian American', 'Indian American', 'Asian']);
+    const ETHNICITY_WHITELIST = new Set(['Indian', 'Asian American', 'Asian']);
     const ethnicitySafe = typeof creatorEthnicity === 'string'
       && ETHNICITY_WHITELIST.has(creatorEthnicity.trim())
       ? creatorEthnicity.trim()

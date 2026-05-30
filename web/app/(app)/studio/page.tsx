@@ -262,9 +262,13 @@ export default function StudioPage() {
               onRegenerate={() => setStep('studio')}
             />
             <div className="mt-10 text-center">
-              <Button variant="gradient" size="lg" onClick={reset}>
-                <Plus className="w-4 h-4" /> Make another
-              </Button>
+              <button
+                type="button"
+                onClick={reset}
+                className="inline-flex items-center justify-center h-12 px-8 rounded-btn bg-black text-white font-semibold text-[15px] border border-white/10 hover:bg-[#0a0a0a] active:scale-[0.99] transition"
+              >
+                Make another
+              </button>
             </div>
           </motion.div>
         )}
