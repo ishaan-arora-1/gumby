@@ -43,29 +43,21 @@ export function SidebarRecents({ collapsed }: { collapsed: boolean }) {
   if (collapsed) return null;
 
   return (
-    <div className="mt-4 pt-4 border-t border-white/5">
-      <div className="px-2 mb-2 flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-[0.2em] text-white/35 font-semibold">
+    <div className="mt-5 pt-5 border-t border-white/5">
+      <div className="px-2 mb-2">
+        <span className="text-[10px] uppercase tracking-[0.18em] text-white/35 font-semibold">
           Recents
         </span>
-        {jobs && jobs.length > 0 && (
-          <Link
-            href="/history"
-            className="text-[10px] text-white/40 hover:text-white/70 transition"
-          >
-            View all
-          </Link>
-        )}
       </div>
 
       {jobs === null ? (
         <SkeletonRows />
       ) : jobs.length === 0 ? (
         <div className="px-2 text-[11px] text-white/35 leading-snug">
-          No generations yet. Anything you make in the studio will show up here.
+          No generations yet.
         </div>
       ) : (
-        <div className="space-y-0.5">
+        <div className="space-y-px">
           {jobs.map((j) => (
             <RecentRow key={j.id} job={j} active={path === `/history/${j.id}`} />
           ))}
@@ -82,13 +74,13 @@ function RecentRow({ job, active }: { job: UGCJob; active: boolean }) {
       href={`/history/${job.id}`}
       title={title}
       className={cn(
-        'flex items-center gap-2.5 px-2 py-1.5 rounded-btn text-xs transition',
+        'flex items-center gap-3 px-2 py-2 rounded-btn transition',
         active
           ? 'bg-elevated text-white'
-          : 'text-white/65 hover:text-white hover:bg-white/5'
+          : 'text-white/80 hover:text-white hover:bg-white/[0.04]'
       )}
     >
-      <div className="w-7 h-9 rounded-md overflow-hidden bg-elevated/40 shrink-0 border border-white/10">
+      <div className="w-9 h-9 rounded-md overflow-hidden bg-elevated/50 shrink-0 ring-1 ring-white/10">
         {job.output_thumbnail_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -97,13 +89,16 @@ function RecentRow({ job, active }: { job: UGCJob; active: boolean }) {
             className="w-full h-full object-cover"
           />
         ) : (
-          // Subtle placeholder when the job is still rendering or failed
-          <div className="w-full h-full bg-gradient-to-br from-white/5 to-white/0" />
+          // Subtle placeholder for rendering / failed jobs — keeps the
+          // row alignment consistent without showing a broken thumbnail.
+          <div className="w-full h-full bg-gradient-to-br from-white/[0.04] to-transparent" />
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium leading-tight">{title}</div>
-        <div className="text-[10px] text-white/40 truncate mt-0.5">
+        <div className="truncate text-[13px] font-medium leading-tight">
+          {title}
+        </div>
+        <div className="text-[11px] text-white/40 truncate mt-1 leading-none">
           {formatRelativeTime(job.created_at)}
         </div>
       </div>
@@ -115,7 +110,7 @@ function SkeletonRows() {
   return (
     <div className="space-y-1">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="h-10 rounded-btn bg-elevated/40 animate-pulse" />
+        <div key={i} className="h-[52px] rounded-btn bg-elevated/40 animate-pulse" />
       ))}
     </div>
   );
