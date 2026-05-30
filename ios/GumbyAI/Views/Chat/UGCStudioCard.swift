@@ -171,6 +171,45 @@ struct UGCStudioCard: View {
                 isFocused: focused == .creator
             )
             .focused($focused, equals: .creator)
+
+            ethnicityPicker
+        }
+    }
+
+    // Three-option segmented picker shown directly under the creator
+    // description. The chosen value gets sent as `creatorEthnicity` on
+    // the generate request — the backend weaves it into the Nano Banana
+    // + Kling prompts as "a good-looking <ethnicity> creator —".
+    private static let ETHNICITY_OPTIONS: [String] = ["Asian American", "Indian American", "Asian"]
+
+    private var ethnicityPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("ETHNICITY")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.6)
+                .foregroundColor(Color(hex: "6B6B6B"))
+
+            HStack(spacing: 6) {
+                ForEach(Self.ETHNICITY_OPTIONS, id: \.self) { option in
+                    Button {
+                        chatVM.drafts[draftIndex].creatorEthnicity = option
+                    } label: {
+                        Text(option)
+                            .font(.system(size: 12, weight: .semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .foregroundColor(draft.creatorEthnicity == option
+                                             ? .black
+                                             : Color.white.opacity(0.6))
+                            .background(
+                                Capsule().fill(draft.creatorEthnicity == option
+                                               ? Color.white
+                                               : Color.white.opacity(0.06))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
     }
 

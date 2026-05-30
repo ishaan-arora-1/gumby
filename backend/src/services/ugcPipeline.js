@@ -596,9 +596,16 @@ async function runSingleShotPipeline(job, jobId) {
   const videoDuration = job.video_duration || 10;
   const aspectRatio = snapshot.aspect_ratio || '9:16';
 
-  const creatorContext = [snapshot.actor_name, snapshot.setting, snapshot.description]
+  // Direct-mode ethnicity hint. Prepended to the creator context so the
+  // Nano Banana seed image AND the Kling video both render the requested
+  // ethnicity. Empty in template mode (the template fixes identity).
+  const userEthnicity = (snapshot.user_ethnicity || '').trim();
+  const baseCreatorContext = [snapshot.actor_name, snapshot.setting, snapshot.description]
     .filter(Boolean)
     .join(', ') || 'a lifestyle creator on camera';
+  const creatorContext = userEthnicity
+    ? `a good-looking ${userEthnicity} creator — ${baseCreatorContext}`
+    : baseCreatorContext;
 
   // Optional template-mode tweaks: "same creator but on a beach", etc.
   // Passed into both Nano Banana branches so the seed image can reflect

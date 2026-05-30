@@ -44,6 +44,13 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
   const [productImageUrl, setProductImageUrl] = useState<string | null>(prefill?.productImageUrl ?? null);
   const [uploadingProduct, setUploadingProduct] = useState(false);
 
+  // Direct-mode-only ethnicity hint. Defaults to the first option so
+  // generation never blocks waiting on a click. Ignored in template mode.
+  const ETHNICITY_OPTIONS: Array<'Asian American' | 'Indian American' | 'Asian'> = [
+    'Asian American', 'Indian American', 'Asian',
+  ];
+  const [creatorEthnicity, setCreatorEthnicity] = useState<typeof ETHNICITY_OPTIONS[number]>('Asian American');
+
   // Script / scene / duration
   const [script, setScript] = useState(template?.sample_script ?? '');
   const [videoDescription, setVideoDescription] = useState(prefill?.videoDescription ?? '');
@@ -129,6 +136,7 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
       productName: includeProduct ? productName : '',
       productDescription: includeProduct ? productDesc : '',
       productImageUrl: includeProduct ? productImageUrl ?? undefined : undefined,
+      creatorEthnicity: template ? undefined : creatorEthnicity,
       script,
       videoDescription,
       videoDuration: duration,
@@ -151,6 +159,28 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
             rows={3}
             className={inputCls}
           />
+
+          <div className="mt-2 space-y-2">
+            <div className="text-[11px] uppercase tracking-[0.15em] text-white/45">
+              Ethnicity
+            </div>
+            <div className="inline-flex bg-elevated rounded-pill p-0.5 text-xs">
+              {ETHNICITY_OPTIONS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setCreatorEthnicity(option)}
+                  className={`px-3 h-8 rounded-pill font-semibold transition ${
+                    creatorEthnicity === option
+                      ? 'bg-white text-black'
+                      : 'text-white/60 hover:text-white'
+                  }`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
         </Section>
       )}
 
