@@ -10,6 +10,7 @@ const {
   KLING_TEXT_TO_VIDEO,
   IMAGE_SUBJECT_SWAP,
   IMAGE_GENERATE,
+  IMAGE_EDIT_FAST,
 } = require('../config/falModels');
 const { captionVideo } = require('./captioning');
 const { ffmpegPath } = require('../config/ffmpeg');
@@ -169,6 +170,66 @@ function nanoAspectFor(aspectRatio) {
 
 const REALISM_GUIDANCE =
   'The new person is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model, NOT a fashion-ad face. No glamour makeup, casual everyday clothing, candid natural expression. Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of a real adult creator.';
+
+/**
+ * Pre-process pass — clean product image extraction.
+ *
+ * The user's uploaded product photo often contains a model wearing or
+ * holding the product (e.g. a t-shirt on a person). Prompt-only "ignore
+ * the person" instructions in the downstream Nano Banana calls aren't
+ * reliable — the visual signal from a real human in the input image
+ * tends to override the text instruction, and the model ends up keeping
+ * that person as the creator in the final scene.
+ *
+ * So before any of the seed-image branches run, we route the user
+ * photo through one extra Nano Banana edit call that asks for a clean
+ * product-catalog photo: just the product on a neutral background, no
+ * humans, no hands, no skin. The downstream branches then operate on
+ * this clean version, which makes the "use the creator description, not
+ * the person in the photo" rule trivial to honor.
+ *
+ * Cost: one extra Nano Banana edit per generation that has a product
+ * image (~$0.15). Latency: ~5–10s. Non-fatal — the orchestrator falls
+ * back to the raw user image if extraction fails.
+ */
+async function extractCleanProductImage({
+  productImageUrl,
+  productName,
+  onProgress,
+}) {
+  const productPhrase = productName ? `"${productName}"` : 'the product';
+  // Flux Kontext prefers concise, directive prompts over long
+  // instructional ones. We get noticeably better edits with a tight
+  // "do X, preserve Y, remove Z" structure than with the prose-style
+  // bullet list we used for Nano Banana.
+  const prompt = [
+    `Show only ${productPhrase} from this image as a clean product-catalog photograph on a plain white background.`,
+    'Completely remove every person, model, mannequin, hand, face, body, hair, and skin — the output must contain zero human elements.',
+    'For apparel, present the garment as a flat-lay or ghost-mannequin shot — the garment alone, no wearer.',
+    'For other items, center the product as a standard e-commerce listing photo.',
+    'Preserve the product exactly: shape, color, fabric, print, label text, and branding all match the source.',
+    'Photorealistic, even product-photography lighting, sharp focus.',
+  ].join(' ');
+
+  // Flux Kontext API shape is different from Nano Banana — single
+  // `image_url` not an `image_urls` array, no `resolution` field, no
+  // `num_images` field (defaults to 1). Aspect "1:1" gives the product
+  // the standard square catalog crop.
+  const result = await falSubscribeWithRetry(IMAGE_EDIT_FAST, {
+    prompt,
+    image_url: productImageUrl,
+    aspect_ratio: '1:1',
+    output_format: 'jpeg',
+    safety_tolerance: '2',
+  }, 'product-extract', { onProgress });
+
+  // Flux Kontext returns the same `images: [{url}]` shape Nano Banana
+  // does, so the existing parse works.
+  const images = result?.data?.images || result?.images || [];
+  const url = images[0]?.url;
+  if (!url) throw new Error('Product extraction returned no image URL');
+  return url;
+}
 
 async function reimagineCreatorInScene({
   inspirationImageUrl,
@@ -644,7 +705,37 @@ async function runSingleShotPipeline(job, jobId) {
     let seedImageUrl = null;
     let seedKind = 'none';
 
-    const productImageUrl = job.product_image_url || null;
+    const rawProductImageUrl = job.product_image_url || null;
+
+    // ---- Step 1a: clean-extract the product if the user uploaded one ----
+    //
+    // Prompt-only "ignore the model in the product photo" instructions in
+    // the downstream branches don't reliably win against Nano Banana's
+    // visual priors. We pay one extra edit call here to get a clean
+    // product-catalog image (no humans), then feed THAT into every
+    // downstream branch. If extraction fails for any reason we fall back
+    // to the raw user image — never blocks a generation.
+    let productImageUrl = rawProductImageUrl;
+    if (rawProductImageUrl) {
+      const tick = await reportStage('preparing', 5, 12);
+      console.log(`[ugc:${jobId}] extracting clean product image from user photo`);
+      try {
+        const extractedUrl = await extractCleanProductImage({
+          productImageUrl: rawProductImageUrl,
+          productName: job.product_name,
+          onProgress: tick,
+        });
+        productImageUrl = await mirrorRemote(extractedUrl, jobId, 'image');
+        await updateJob(jobId, { product_image_clean_url: productImageUrl })
+          .catch(() => {}); // optional column — ignore if missing
+        console.log(`[ugc:${jobId}] clean product image ready → ${productImageUrl}`);
+      } catch (extractErr) {
+        console.warn(
+          `[ugc:${jobId}] product extraction failed, using raw user image:`,
+          extractErr?.message || extractErr
+        );
+      }
+    }
 
     if (inspirationImageUrl) {
       const tick = await reportStage('rendering_scene', 5, 30);
