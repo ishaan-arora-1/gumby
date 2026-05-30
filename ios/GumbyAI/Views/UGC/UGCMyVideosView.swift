@@ -167,7 +167,11 @@ struct UGCJobCard: View {
     }
 }
 
-// MARK: - Video player sheet
+// MARK: - History detail sheet
+//
+// Mirrors the web /history/[id] page: video on top in a 9:16 card,
+// scrollable list of brief sections below (Creator/Template, Ethnicity,
+// Product, Script, Scene, Captions). Save / Share live in the header.
 
 struct UGCVideoPlayerSheet: View {
     let job: UGCJob
@@ -177,70 +181,96 @@ struct UGCVideoPlayerSheet: View {
     @State private var saveMessage: String?
     @State private var showShare = false
 
+    private var isTemplate: Bool { (job.templateId ?? "").isEmpty == false }
+    private var snapshot: UGCJob.TemplateSnapshot? { job.templateSnapshot }
+    private var creatorLabel: String {
+        if isTemplate {
+            return snapshot?.actorName ?? snapshot?.name ?? "Template creator"
+        }
+        return snapshot?.actorName ?? "Creator"
+    }
+    private var captionsEnabled: Bool { snapshot?.captionsEnabled ?? true }
+    private var captionLabel: String {
+        guard captionsEnabled else { return "Off" }
+        let id = snapshot?.captionPreset ?? CaptionPreset.defaultId
+        return "On · \(CaptionPreset.get(id).label)"
+    }
+
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        ZStack(alignment: .top) {
+            Color(red: 0.04, green: 0.04, blue: 0.05).ignoresSafeArea()
 
-            if let player {
-                VideoPlayer(player: player)
-                    .ignoresSafeArea()
-                    .onAppear { player.play() }
-                    .onDisappear { player.pause() }
-            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Color.clear.frame(height: 56) // headroom for the floating top bar
 
-            VStack {
-                HStack {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 16, weight: .bold))
+                    // Title
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(job.productName.isEmpty ? "Untitled ad" : job.productName)
+                            .font(.system(size: 24, weight: .bold))
                             .foregroundColor(.white)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(.ultraThinMaterial))
+                        Text(subtitleLine)
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.5))
                     }
-                    Spacer()
-                    if let url = job.outputVideoURL, !url.isEmpty {
-                        Button { showShare = true } label: {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.white)
-                                .frame(width: 36, height: 36)
-                                .background(Circle().fill(.ultraThinMaterial))
+                    .padding(.horizontal, 20)
+
+                    // Video — 9:16 card
+                    videoCard
+                        .padding(.horizontal, 20)
+
+                    // Brief
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("THE BRIEF")
+                            .font(.system(size: 11, weight: .semibold))
+                            .tracking(0.8)
+                            .foregroundColor(.white.opacity(0.4))
+                            .padding(.bottom, 2)
+
+                        briefRow(label: isTemplate ? "Template" : "Creator", value: creatorLabel)
+                        if !isTemplate, let eth = snapshot?.userEthnicity, !eth.isEmpty {
+                            briefRow(label: "Ethnicity", value: eth)
                         }
-                        Button { Task { await saveToPhotos() } } label: {
-                            if saving {
-                                ProgressView().tint(.white).frame(width: 36, height: 36)
-                            } else {
-                                Image(systemName: "square.and.arrow.down")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .frame(width: 36, height: 36)
-                                    .background(Circle().fill(.ultraThinMaterial))
-                            }
+                        if isTemplate, let tweaks = snapshot?.userTweaks, !tweaks.isEmpty {
+                            briefRow(label: "Creator tweaks", value: tweaks, multiline: true)
                         }
-                        .disabled(saving)
+                        if !job.productName.isEmpty {
+                            briefRow(label: "Product", value: job.productName)
+                        }
+                        if !job.productDescription.isEmpty {
+                            briefRow(label: "Product details", value: job.productDescription, multiline: true)
+                        }
+                        if let imgURL = job.productImageURL, !imgURL.isEmpty {
+                            briefImageRow(label: "Product image", urlString: imgURL)
+                        }
+                        if !job.script.isEmpty {
+                            briefRow(label: "Script", value: job.script, multiline: true)
+                        }
+                        if let desc = job.videoDescription, !desc.isEmpty {
+                            briefRow(label: "Scene", value: desc, multiline: true)
+                        }
+                        briefRow(label: "Captions", value: captionLabel)
                     }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                Spacer()
-                if !job.script.isEmpty {
-                    Text(job.script)
-                        .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.95))
-                        .padding(12)
-                        .background(.ultraThinMaterial.opacity(0.85))
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .padding(16)
-                        .lineLimit(4)
+                    .padding(.horizontal, 20)
+
+                    Color.clear.frame(height: 24)
                 }
             }
+
+            // Floating top bar with close + actions
+            topBar
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
         }
         .preferredColorScheme(.dark)
         .onAppear {
             if let url = job.outputVideoURL.flatMap(URL.init(string:)) {
                 player = AVPlayer(url: url)
+                player?.isMuted = false
+                player?.play()
             }
         }
+        .onDisappear { player?.pause() }
         .sheet(isPresented: $showShare) {
             if let url = job.outputVideoURL.flatMap(URL.init(string:)) {
                 ShareSheet(items: [url])
@@ -254,6 +284,138 @@ struct UGCVideoPlayerSheet: View {
         } message: {
             Text(saveMessage ?? "")
         }
+    }
+
+    private var subtitleLine: String {
+        var parts: [String] = []
+        if let d = job.videoDuration { parts.append("\(d)s") }
+        parts.append(isTemplate ? "Template mode" : "Direct prompt")
+        return parts.joined(separator: " · ")
+    }
+
+    private var videoCard: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.black)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+
+            if let player {
+                VideoPlayer(player: player)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            } else if job.status == .completed {
+                ProgressView().tint(.white)
+            } else {
+                VStack(spacing: 10) {
+                    ProgressView().tint(.white)
+                    Text(job.status == .failed ? (job.error ?? "Failed") : "Still rendering…")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+            }
+        }
+        .aspectRatio(9.0 / 16.0, contentMode: .fit)
+        .frame(maxWidth: 320)
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var topBar: some View {
+        HStack(spacing: 8) {
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(.ultraThinMaterial))
+            }
+            Spacer()
+            if let url = job.outputVideoURL, !url.isEmpty {
+                Button { showShare = true } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(.ultraThinMaterial))
+                }
+                Button { Task { await saveToPhotos() } } label: {
+                    Group {
+                        if saving {
+                            ProgressView().tint(.white)
+                        } else {
+                            Image(systemName: "square.and.arrow.down")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(.ultraThinMaterial))
+                }
+                .disabled(saving)
+            }
+        }
+    }
+
+    // MARK: - Brief rows
+
+    private func briefRow(label: String, value: String, multiline: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.8)
+                .foregroundColor(.white.opacity(0.4))
+            Text(value)
+                .font(.system(size: 14))
+                .foregroundColor(.white.opacity(0.88))
+                .lineLimit(multiline ? nil : 2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        )
+    }
+
+    private func briefImageRow(label: String, urlString: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.8)
+                .foregroundColor(.white.opacity(0.4))
+            if let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img.resizable().scaledToFill()
+                    default:
+                        Color.white.opacity(0.05)
+                    }
+                }
+                .frame(width: 88, height: 88)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        )
     }
 
     private func saveToPhotos() async {

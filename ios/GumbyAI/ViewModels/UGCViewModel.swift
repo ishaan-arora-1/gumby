@@ -12,13 +12,13 @@ final class UGCViewModel: ObservableObject {
     enum Tab: String, CaseIterable, Hashable {
         case explore = "Explore"
         case library = "Library"
-        case myVideos = "My Videos"
+        case myVideos = "History"
 
         var iconName: String {
             switch self {
             case .explore: "person.crop.rectangle.stack"
             case .library: "sparkles"
-            case .myVideos: "play.rectangle.fill"
+            case .myVideos: "clock.arrow.circlepath"
             }
         }
     }

@@ -58,6 +58,12 @@ struct UGCJob: Codable, Identifiable, Hashable {
     let outputVideoURL: String?
     let outputThumbnailURL: String?
 
+    /// Optional brief fields used by the History detail view to recap
+    /// what the user filled in. Decoded as optional so older job rows
+    /// without these columns still parse cleanly.
+    let videoDescription: String?
+    let videoDuration: Int?
+
     let startedAt: Date?
     let completedAt: Date?
     let createdAt: Date?
@@ -74,6 +80,8 @@ struct UGCJob: Codable, Identifiable, Hashable {
         case status, progress, error
         case outputVideoURL = "output_video_url"
         case outputThumbnailURL = "output_thumbnail_url"
+        case videoDescription = "video_description"
+        case videoDuration = "video_duration"
         case startedAt = "started_at"
         case completedAt = "completed_at"
         case createdAt = "created_at"
@@ -88,6 +96,13 @@ struct UGCJob: Codable, Identifiable, Hashable {
         let aspectRatio: String?
         let durationSeconds: Int?
 
+        // Optional snapshot extras — same no-migration pattern the
+        // backend uses to stash per-job settings without adding columns.
+        let userTweaks: String?
+        let userEthnicity: String?
+        let captionsEnabled: Bool?
+        let captionPreset: String?
+
         enum CodingKeys: String, CodingKey {
             case name
             case actorName = "actor_name"
@@ -96,6 +111,10 @@ struct UGCJob: Codable, Identifiable, Hashable {
             case thumbnailURL = "thumbnail_url"
             case aspectRatio = "aspect_ratio"
             case durationSeconds = "duration_seconds"
+            case userTweaks = "user_tweaks"
+            case userEthnicity = "user_ethnicity"
+            case captionsEnabled = "captions_enabled"
+            case captionPreset = "caption_preset"
         }
     }
 }
