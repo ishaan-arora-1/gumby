@@ -155,13 +155,8 @@ struct UGCStudioCard: View {
     // MARK: - Creator (direct mode)
 
     private var creatorSection: some View {
-        let hasInspiration = draft.inspirationImage != nil || draft.inspirationImageURL != nil
-        return VStack(alignment: .leading, spacing: 14) {
-            inspirationPicker
-
-            Text(hasInspiration
-                 ? "Tell us who is on camera and any tweaks for the photo above (clothing, mood, swap the person, etc.). Always included in the prompt."
-                 : "Describe the person and the whole scene — their look, age, and setting. Always included in the prompt.")
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Describe the person and the whole scene — their look, age, and setting. Always included in the prompt.")
                 .font(.system(size: 13))
                 .foregroundColor(Color(hex: "6B6B6B"))
 
@@ -171,9 +166,7 @@ struct UGCStudioCard: View {
                     set: { chatVM.drafts[draftIndex].creatorDescription = $0 }
                 ),
                 label: "Creator description",
-                placeholder: hasInspiration
-                    ? "e.g. Same setting but a 20-year-old woman in a hoodie holding a coffee"
-                    : "e.g. 20-year-old athletic woman in a bright modern kitchen",
+                placeholder: "e.g. 20-year-old athletic woman in a bright modern kitchen",
                 minHeight: 76,
                 isFocused: focused == .creator
             )
@@ -200,47 +193,6 @@ struct UGCStudioCard: View {
                 isFocused: focused == .creatorTweaks
             )
             .focused($focused, equals: .creatorTweaks)
-        }
-    }
-
-    private var inspirationPicker: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Text("Inspiration photo")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Color(hex: "8E8E93"))
-                Text("optional")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(Color(hex: "6B6B6B"))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.white.opacity(0.06)))
-                Spacer()
-                if draft.inspirationImage != nil || draft.inspirationImageURL != nil {
-                    Button {
-                        chatVM.clearInspirationImageForActiveDraft()
-                    } label: {
-                        Text("Remove")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.white.opacity(0.55))
-                    }
-                    .buttonStyle(PressableStyle())
-                }
-            }
-
-            HStack(alignment: .top, spacing: 12) {
-                StudioInspirationPickerSection(draftIndex: draftIndex)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(draft.inspirationImage != nil || draft.inspirationImageURL != nil
-                         ? "We'll preserve this environment and swap the person to match your creator description."
-                         : "Tap to attach an image. We'll keep the setting and put your creator into it.")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(hex: "8E8E93"))
-                        .lineLimit(4)
-                }
-                Spacer(minLength: 0)
-            }
         }
     }
 
@@ -770,68 +722,3 @@ private struct StudioPhotoThumb: View {
     }
 }
 
-// MARK: - Inspiration photo picker (scoped to active draft)
-
-struct StudioInspirationPickerSection: View {
-    @EnvironmentObject var chatVM: ChatViewModel
-    let draftIndex: Int
-
-    var body: some View {
-        if chatVM.drafts.indices.contains(draftIndex) {
-            pickerBody
-        }
-    }
-
-    @ViewBuilder
-    private var pickerBody: some View {
-        let image = chatVM.drafts[draftIndex].inspirationImage
-        let urlString = chatVM.drafts[draftIndex].inspirationImageURL
-        PhotosPicker(
-            selection: Binding(
-                get: { chatVM.drafts[draftIndex].inspirationPhotoItem },
-                set: { chatVM.drafts[draftIndex].inspirationPhotoItem = $0 }
-            ),
-            matching: .images
-        ) {
-            StudioInspirationThumb(image: image, urlString: urlString)
-        }
-        .buttonStyle(PressableStyle())
-        .onChange(of: chatVM.drafts[draftIndex].inspirationPhotoItem) { _, _ in
-            Task { await chatVM.loadInspirationPhotoForActiveDraft() }
-        }
-    }
-}
-
-private struct StudioInspirationThumb: View {
-    let image: UIImage?
-    let urlString: String?
-
-    var body: some View {
-        ZStack {
-            if let img = image {
-                Image(uiImage: img).resizable().scaledToFill()
-            } else if let urlString, let url = URL(string: urlString) {
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: { Color(hex: "111111") }
-            } else {
-                VStack(spacing: 6) {
-                    Image(systemName: "sparkles.rectangle.stack")
-                        .font(.system(size: 22))
-                        .foregroundColor(UGCStudioCard.accent.opacity(0.8))
-                    Text("Add scene")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white.opacity(0.45))
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(hex: "111111"))
-            }
-        }
-        .frame(width: 110, height: 110)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-    }
-}

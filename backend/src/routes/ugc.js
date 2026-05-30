@@ -238,47 +238,11 @@ router.post('/script', async (req, res) => {
 });
 
 // ---------- Parse prompt (direct mode) ----------
-
-// Classify a single attachment URL as 'product', 'inspiration', or 'both'.
-// Used by /parse-prompt so the studio card can pre-fill the right image
-// slot without asking the user to label their upload. Always resolves —
-// on error we default to 'inspiration' (the more flexible slot) so the
-// composer never blocks on a vision API hiccup.
-async function classifyAttachment(url) {
-  if (!url || typeof url !== 'string') return 'inspiration';
-  try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0,
-      max_tokens: 6,
-      messages: [
-        {
-          role: 'system',
-          content: [
-            'You classify images uploaded to a UGC video studio. The user attaches an image alongside a text prompt. Classify the image as one of:',
-            '- "product": a packaged commercial product (bottle, tube, box, jar, gadget, garment, etc.) shown as the main subject on a simple, neutral, or product-photo background. The object dominates the frame.',
-            '- "inspiration": a scene, environment, room, lifestyle moment, mood reference, or a person where the product is NOT the focus — primarily about setting or vibe.',
-            '- "both": a photo of a person clearly using, holding, or featuring a specific product, where both the person/scene AND the product are equally prominent. Typical "creator with product" UGC shot.',
-            '',
-            'Reply with EXACTLY one word: product, inspiration, or both. No punctuation, no quotes, no explanation.',
-          ].join('\n'),
-        },
-        {
-          role: 'user',
-          content: [{ type: 'image_url', image_url: { url, detail: 'low' } }],
-        },
-      ],
-    });
-    const raw = (completion.choices?.[0]?.message?.content || '').trim().toLowerCase();
-    if (raw.includes('both')) return 'both';
-    if (raw.startsWith('product') || raw === 'product') return 'product';
-    if (raw.startsWith('inspiration') || raw === 'inspiration') return 'inspiration';
-    return 'inspiration';
-  } catch (err) {
-    console.warn('classifyAttachment failed:', err?.message || err);
-    return 'inspiration';
-  }
-}
+//
+// We used to classify composer attachments as product/inspiration/both via
+// a GPT-4o-mini vision call. The inspiration upload affordance has been
+// removed from both clients, so every attachment is now treated as a
+// product image — the vision call is gone, saving a round-trip + cost.
 
 router.post('/parse-prompt', async (req, res) => {
   const { prompt, attachments } = req.body || {};
@@ -309,32 +273,25 @@ router.post('/parse-prompt', async (req, res) => {
       'Return: {"creatorDescription":"...","productName":"...","productDescription":"...","videoDescription":"...","suggestedDuration":10,"includeProduct":true}',
     ].join('\n');
 
-    // Run the prompt parse and (if attachments were sent) the per-image
-    // classifications in PARALLEL — total latency is bounded by whichever
-    // is slower, not the sum.
+    // All attachments are products now. We don't run a vision call —
+    // we just echo the URLs back tagged as 'product' so the clients can
+    // route them into the product slot.
     const attachmentList = Array.isArray(attachments)
       ? attachments
           .filter((a) => a && typeof a.url === 'string' && a.url.length > 0)
           .slice(0, 4)
+          .map((a) => ({ url: a.url, kind: 'product' }))
       : [];
 
-    const [completion, classifiedAttachments] = await Promise.all([
-      openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt.trim() },
-        ],
-      }),
-      Promise.all(
-        attachmentList.map(async (a) => ({
-          url: a.url,
-          kind: await classifyAttachment(a.url),
-        }))
-      ),
-    ]);
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.3,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt.trim() },
+      ],
+    });
 
     const raw = completion.choices?.[0]?.message?.content || '{}';
     const parsed = JSON.parse(raw);
@@ -344,12 +301,9 @@ router.post('/parse-prompt', async (req, res) => {
     const rawDur = Number(parsed.suggestedDuration);
     const suggestedDuration = rawDur >= 8 ? 10 : 5;
 
-    // If the user uploaded a "both" image (creator holding product), force
-    // includeProduct on regardless of what the prompt parser inferred.
-    const hasBoth = classifiedAttachments.some((a) => a.kind === 'both');
-    const hasProductAttachment = classifiedAttachments.some(
-      (a) => a.kind === 'product' || a.kind === 'both'
-    );
+    // Uploading any image implies "I want a product in this video," even
+    // when the prompt text itself doesn't name one.
+    const hasProductAttachment = attachmentList.length > 0;
 
     const result = {
       creatorDescription: (parsed.creatorDescription || '').slice(0, 500),
@@ -360,14 +314,12 @@ router.post('/parse-prompt', async (req, res) => {
       includeProduct:
         hasProductAttachment ||
         (parsed.includeProduct !== false && (parsed.productName || '').trim().length > 0),
-      attachments: classifiedAttachments,
+      attachments: attachmentList,
     };
 
-    if (classifiedAttachments.length) {
+    if (attachmentList.length) {
       console.log(
-        `[parse-prompt] classified ${classifiedAttachments.length} attachment(s): ` +
-          classifiedAttachments.map((a) => a.kind).join(', ') +
-          (hasBoth ? ' (both → routed to both slots)' : '')
+        `[parse-prompt] ${attachmentList.length} attachment(s) routed to product`
       );
     }
 
