@@ -224,9 +224,10 @@ async function reimagineCreatorInScene({
 
   if (hasProduct && !singleImageBoth) {
     parts.push(
-      `The SECOND image is ${productPhrase} — the product the on-camera person is featuring.`,
-      'Integrate that exact product naturally into the scene — typically held in their hand, or being used by them, in a way that fits the scene.',
-      'The product MUST be preserved pixel-perfectly: packaging, color, label text, shape, and branding all match the second image exactly. Do not redesign, restyle, recolor, blur, or otherwise alter the product in any way.',
+      `The SECOND image is a REFERENCE for ${productPhrase} only. It may show the product on its own, or it may show a model, mannequin, or person wearing, holding, or using the product.`,
+      'EXTRACT ONLY THE PRODUCT from the second image — the garment, item, package, bottle, or object itself. COMPLETELY IGNORE any person, model, mannequin, hand, face, body, hair, or skin shown alongside the product in the second image. The on-camera person in the final image must come from the FIRST (scene reference) image and the creator description — not from anyone shown in the product reference.',
+      'Integrate that extracted product naturally into the scene — typically held in their hand, worn, or being used, in a way that fits the scene.',
+      'The product MUST be preserved pixel-perfectly: packaging, color, label text, shape, fabric, design, and branding all match the second image exactly. Do not redesign, restyle, recolor, blur, or otherwise alter the product in any way.',
       'The product should be clearly visible and recognizable in the final image — never hide it, never replace its label, never change its branding.',
     );
   } else if (!hasProduct) {
@@ -285,11 +286,18 @@ async function synthesizeCreatorScene({
   const productPhrase = productName ? `"${productName}"` : 'the product';
 
   if (hasProduct) {
+    // CRITICAL — the product photo may include a model wearing or
+    // holding the product (e.g. a t-shirt on a person). Without explicit
+    // instruction to ignore that model, Nano Banana keeps them as the
+    // creator and discards the creator description entirely. We extract
+    // ONLY the product and then build a fresh creator from the
+    // description.
     const prompt = [
       `Generate a single photorealistic still. The creator and scene MUST match this description exactly: "${cleanCreator}". The setting/location described here is mandatory — if it specifies a kitchen, bathroom mirror, gym, beach, bedroom, office, etc., the final image must be in that exact environment.`,
-      `The IMAGE provided is ${productPhrase} — the product this creator is featuring.`,
-      'Integrate the product naturally into the scene — typically held in the creator\'s hand, or being used by them.',
-      'Preserve the product pixel-perfectly: packaging, color, label text, shape, and branding all match the provided image exactly. Do not redesign, restyle, recolor, or otherwise alter the product.',
+      `The IMAGE provided is a REFERENCE for ${productPhrase} only. It may show the product on its own, or it may show a model, mannequin, or person wearing, holding, or using the product.`,
+      'EXTRACT ONLY THE PRODUCT from this image — the garment, item, package, bottle, or object itself. COMPLETELY IGNORE any person, model, mannequin, hand, face, body, hair, skin, or other human element shown in the reference. None of those human features may appear in the final image.',
+      'The creator in the final image must be a NEW person generated entirely from the creator description above. Their face, ethnicity, hair, body type, skin tone, age, and styling come ONLY from the description — not from anyone shown in the reference photo.',
+      `Place the extracted product naturally on or with this new creator — worn if it is apparel, held if it is a handheld item, used if it is a tool. Preserve the product pixel-perfectly: packaging, color, label text, shape, fabric, design, and branding all match the reference exactly. Do not redesign, restyle, recolor, or otherwise alter the product.`,
       'The product must be clearly visible and recognizable in the final image — never hide it, never blur it, never change its branding.',
       REALISM_GUIDANCE,
     ].join(' ');
@@ -377,11 +385,12 @@ async function integrateProductIntoTemplate({
 
   parts.push(
     'IMPORTANT: if the person in the first image is currently holding, wearing, or otherwise featuring any product, item, bottle, tube, box, package, or branded object, REMOVE that original object entirely. Replace whatever they were holding with the new product described below. Do not show two products. Do not show the original product anywhere in the frame.',
-    `The SECOND image is ${productPhrase} — the ONLY product that should appear in the final image.`,
-    'Place that exact product naturally into the scene — typically held in the person\'s hand, or being used by them — in a way that fits the scene.',
-    'Preserve the product pixel-perfectly: packaging, color, label text, shape, and branding all match the second image exactly. Do not redesign or alter the product.',
+    `The SECOND image is a REFERENCE for ${productPhrase} only. It may show the product on its own, or it may show a model, mannequin, or person wearing, holding, or using the product.`,
+    'EXTRACT ONLY THE PRODUCT from the second image — the garment, item, package, bottle, or object itself. COMPLETELY IGNORE any person, model, mannequin, hand, face, body, hair, or skin shown alongside the product in the second image. The on-camera person in the final image must remain the SAME person from the FIRST image — do not let any human element from the second image bleed into the final composition.',
+    'Place that extracted product naturally on or with the person from the first image — worn if it is apparel, held if it is a handheld item, used if it is a tool — in a way that fits the scene.',
+    'Preserve the product pixel-perfectly: packaging, color, label text, shape, fabric, design, and branding all match the second image exactly. Do not redesign or alter the product.',
     'The product should be clearly visible and recognizable in the final image — never hide, blur, or change its branding.',
-    'Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of the same person now holding this product, with no trace of any other product.',
+    'Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of the same person now holding this product, with no trace of any other product or any human element from the product reference.',
   );
   const prompt = parts.join(' ');
 
