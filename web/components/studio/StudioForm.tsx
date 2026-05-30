@@ -46,10 +46,10 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
 
   // Direct-mode-only ethnicity hint. Defaults to the first option so
   // generation never blocks waiting on a click. Ignored in template mode.
-  const ETHNICITY_OPTIONS: Array<'Asian American' | 'Indian American' | 'Asian'> = [
-    'Asian American', 'Indian American', 'Asian',
+  const ETHNICITY_OPTIONS: Array<'Indian' | 'Asian American' | 'Asian'> = [
+    'Indian', 'Asian American', 'Asian',
   ];
-  const [creatorEthnicity, setCreatorEthnicity] = useState<typeof ETHNICITY_OPTIONS[number]>('Asian American');
+  const [creatorEthnicity, setCreatorEthnicity] = useState<typeof ETHNICITY_OPTIONS[number]>('Indian');
 
   // Script / scene / duration
   const [script, setScript] = useState(template?.sample_script ?? '');

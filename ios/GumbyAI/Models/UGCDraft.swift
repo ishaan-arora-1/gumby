@@ -111,7 +111,7 @@ struct UGCDraft: Identifiable {
             id: UUID(),
             number: number,
             creatorDescription: "",
-            creatorEthnicity: "Asian American",
+            creatorEthnicity: "Indian",
             creatorTweaks: "",
             inspirationImage: nil,
             inspirationImageURL: nil,
