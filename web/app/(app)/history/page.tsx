@@ -31,6 +31,8 @@ export default function HistoryPage() {
     if (!confirm('Delete this video?')) return;
     await api.deleteJob(id);
     load();
+    // Bump the sidebar Recents list too so the deleted row disappears.
+    window.dispatchEvent(new Event('blinkugc:job-list-changed'));
   };
 
   return (

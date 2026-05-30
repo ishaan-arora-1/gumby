@@ -93,6 +93,9 @@ export default function StudioPage() {
       );
       setAdJob(final as UGCJob);
       setStep('ad_done');
+      // Tell the sidebar to refresh its Recents list immediately so the
+      // newly-finished video appears without waiting for a route change.
+      window.dispatchEvent(new Event('blinkugc:job-list-changed'));
     } catch (e: any) {
       setError(e.message || 'Ad generation failed');
       setStep('studio');

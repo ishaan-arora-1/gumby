@@ -50,6 +50,8 @@ export default function HistoryDetailPage() {
     if (!job) return;
     if (!confirm('Delete this video? This cannot be undone.')) return;
     await api.deleteJob(job.id);
+    // Bump the sidebar Recents list so the row disappears immediately.
+    window.dispatchEvent(new Event('blinkugc:job-list-changed'));
     router.replace('/history');
   };
 
