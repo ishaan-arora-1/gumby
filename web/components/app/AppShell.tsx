@@ -3,6 +3,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Logo } from '@/components/ui/Logo';
+import { SidebarRecents } from '@/components/app/SidebarRecents';
 import { useAuth } from '@/lib/auth-context';
 import { Sparkles, History as HistoryIcon, LogOut, Users, PanelLeft, Settings as SettingsIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -114,6 +115,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+
+          {/* ChatGPT-style inline list of recent generations. Refetches
+              on every route change and on the 'blinkugc:job-list-changed'
+              window event. Hides itself when the sidebar is collapsed. */}
+          <SidebarRecents collapsed={collapsed} />
         </nav>
         <div className="pt-4 border-t border-white/5 mt-4 space-y-1">
           <Link
