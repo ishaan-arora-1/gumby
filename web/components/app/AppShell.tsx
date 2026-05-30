@@ -42,6 +42,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     });
   };
 
+  // Tapping the Blink UGC logo always means "take me back to a fresh
+  // studio". On any other route we just navigate to /studio. When the
+  // user is already on /studio (which often has stale state — a
+  // generated video showing, a template picked) a same-route push is a
+  // no-op, so we additionally dispatch an event the StudioPage listens
+  // for and uses to reset its internal state to the welcome step.
+  const onLogoClick = () => {
+    if (path.startsWith('/studio')) {
+      window.dispatchEvent(new Event('blinkugc:fresh-studio'));
+    } else {
+      router.push('/studio');
+    }
+  };
+
   if (loading || !user) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -74,7 +88,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <PanelLeft className="w-5 h-5" />
           </button>
-          {!collapsed && <Logo href="/studio" size={26} />}
+          {!collapsed && <Logo onClick={onLogoClick} size={26} />}
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto">
           {NAV.map((n) => {
