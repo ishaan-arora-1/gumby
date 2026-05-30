@@ -271,35 +271,22 @@ class ChatViewModel: ObservableObject {
                     self.resetFunnelStateForNewRun()
                     self.pickedTemplate = nil
 
-                    // Route classified attachments into product / inspiration
-                    // slots. "both" lands in BOTH (creator-with-product); the
-                    // pipeline dedups identical URLs. First-wins per kind so
-                    // surplus attachments of the same kind are dropped.
-                    var routedProductURL: String? = nil
-                    var routedInspirationURL: String? = nil
-                    for attachment in (parsed.attachments ?? []) {
-                        switch attachment.kind {
-                        case "both":
-                            if routedProductURL == nil { routedProductURL = attachment.url }
-                            if routedInspirationURL == nil { routedInspirationURL = attachment.url }
-                        case "product":
-                            if routedProductURL == nil { routedProductURL = attachment.url }
-                        case "inspiration":
-                            if routedInspirationURL == nil { routedInspirationURL = attachment.url }
-                        default:
-                            if routedInspirationURL == nil { routedInspirationURL = attachment.url }
-                        }
-                    }
+                    // Inspiration upload was removed everywhere — any image
+                    // the user attaches in the composer goes straight to
+                    // the product slot. First-uploaded wins; extras are
+                    // dropped silently.
+                    let routedProductURL: String? = attachmentURLs.first
 
                     var draft = UGCDraft.empty()
                     draft.creatorDescription = parsed.creatorDescription
-                    draft.includeProduct = parsed.includeProduct
+                    // An uploaded image implies intent to feature a product
+                    // even when the parser didn't infer one from the text.
+                    draft.includeProduct = parsed.includeProduct || routedProductURL != nil
                     draft.productName = parsed.productName
                     draft.productDescription = parsed.productDescription
                     draft.videoDescription = parsed.videoDescription
                     draft.videoDuration = parsed.suggestedDuration
                     draft.productImageURL = routedProductURL
-                    draft.inspirationImageURL = routedInspirationURL
                     self.drafts = [draft]
                     self.activeDraftIndex = 0
 

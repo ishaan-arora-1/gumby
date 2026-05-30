@@ -67,19 +67,56 @@ struct CaptionPreviewTile: View {
 
     private var captionLayer: some View {
         let scaleX: CGFloat = popping ? preset.popSettlePct / 100 : preset.popFromPct / 100
-        return Text(sampleText)
-            .font(.custom(preset.font, size: fontPx))
-            .foregroundColor(preset.fillColor)
-            // 8-direction outline emulation
-            .shadow(color: preset.outlineColor, radius: 0, x:  outlinePx, y: 0)
-            .shadow(color: preset.outlineColor, radius: 0, x: -outlinePx, y: 0)
-            .shadow(color: preset.outlineColor, radius: 0, x: 0, y:  outlinePx)
-            .shadow(color: preset.outlineColor, radius: 0, x: 0, y: -outlinePx)
-            .shadow(color: preset.shadowAlpha > 0
-                        ? preset.shadowColor.opacity(preset.shadowAlpha)
-                        : Color.clear,
-                    radius: 0, x: 0, y: shadowOffset)
-            .scaleEffect(scaleX)
-            .opacity(popping ? 1.0 : 0.0)
+        let useBox = preset.boxBgColor != nil
+        let padding = preset.boxPaddingPx * scale
+
+        // Build the styled text. SwiftUI's `.italic()` on a custom font
+        // synthesizes a slant when there's no native italic face — same
+        // trick libass uses, so the preview matches the burn-in.
+        let baseText = Text(sampleText)
+            .font(
+                .custom(preset.font, size: fontPx)
+            )
+
+        return Group {
+            if useBox {
+                // Block mode — solid colored rectangle behind the text,
+                // no outline/shadow on the text itself. The padding makes
+                // the box hug the text with a small breathing room.
+                baseText
+                    .italic(preset.italic)
+                    .foregroundColor(preset.fillColor)
+                    .padding(.horizontal, padding)
+                    .padding(.vertical, padding * 0.6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill((preset.boxBgColor ?? .clear).opacity(preset.boxBgAlpha))
+                    )
+            } else {
+                // Outline mode — emulate a stroke with 8-direction shadows
+                // + an optional drop shadow underneath.
+                baseText
+                    .italic(preset.italic)
+                    .foregroundColor(preset.fillColor)
+                    .shadow(color: preset.outlineColor, radius: 0, x:  outlinePx, y: 0)
+                    .shadow(color: preset.outlineColor, radius: 0, x: -outlinePx, y: 0)
+                    .shadow(color: preset.outlineColor, radius: 0, x: 0, y:  outlinePx)
+                    .shadow(color: preset.outlineColor, radius: 0, x: 0, y: -outlinePx)
+                    .shadow(color: preset.shadowAlpha > 0
+                                ? preset.shadowColor.opacity(preset.shadowAlpha)
+                                : Color.clear,
+                            radius: 0, x: 0, y: shadowOffset)
+            }
+        }
+        .scaleEffect(scaleX)
+        .opacity(popping ? 1.0 : 0.0)
+    }
+}
+
+private extension Text {
+    /// Conditional italic helper so we can chain without an if/else in the
+    /// view tree (which would force two separate render paths).
+    func italic(_ enabled: Bool) -> Text {
+        enabled ? self.italic() : self
     }
 }

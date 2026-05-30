@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { api, fileToBase64 } from '@/lib/api';
 import type { UGCTemplate } from '@/lib/types';
-import { Sparkles, Upload, X, Wand2, Image as ImageIcon } from 'lucide-react';
+import { Sparkles, Upload, X, Wand2 } from 'lucide-react';
 import { CAPTION_PRESETS, DEFAULT_CAPTION_PRESET_ID } from '@/lib/captionPresets';
 import { CaptionPreview } from './CaptionPreview';
 
@@ -14,11 +14,10 @@ export interface StudioPrefill {
   productDescription?: string;
   videoDescription?: string;
   duration?: 5 | 10;
-  // Routed by the composer based on Vision classification of the
-  // attachments — same URL can appear in both fields when the user
-  // uploaded a single "creator holding product" shot.
+  // Filled in by the composer when the user attached an image — always
+  // routed to the product slot now. The inspiration upload affordance
+  // was removed across both clients.
   productImageUrl?: string | null;
-  inspirationImageUrl?: string | null;
 }
 
 interface Props {
@@ -45,10 +44,6 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
   const [productImageUrl, setProductImageUrl] = useState<string | null>(prefill?.productImageUrl ?? null);
   const [uploadingProduct, setUploadingProduct] = useState(false);
 
-  // Inspiration
-  const [inspirationImageUrl, setInspirationImageUrl] = useState<string | null>(prefill?.inspirationImageUrl ?? null);
-  const [uploadingInspiration, setUploadingInspiration] = useState(false);
-
   // Script / scene / duration
   const [script, setScript] = useState(template?.sample_script ?? '');
   const [videoDescription, setVideoDescription] = useState(prefill?.videoDescription ?? '');
@@ -73,22 +68,6 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
       alert('Upload failed');
     } finally {
       setUploadingProduct(false);
-    }
-  };
-
-  const handleInspirationImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingInspiration(true);
-    try {
-      const base64 = await fileToBase64(file);
-      const res = await api.uploadInspirationImage(file.type, base64);
-      setInspirationImageUrl(res.data.url);
-    } catch (e) {
-      console.error(e);
-      alert('Upload failed');
-    } finally {
-      setUploadingInspiration(false);
     }
   };
 
@@ -150,7 +129,6 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
       productName: includeProduct ? productName : '',
       productDescription: includeProduct ? productDesc : '',
       productImageUrl: includeProduct ? productImageUrl ?? undefined : undefined,
-      inspirationImageUrl: inspirationImageUrl ?? undefined,
       script,
       videoDescription,
       videoDuration: duration,
@@ -159,64 +137,17 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
     });
   };
 
-  const inspirationSection = (
-    <Section
-      title="Inspiration photo"
-      hint={
-        inspirationImageUrl
-          ? "We'll use this as the reference scene. Your creator description below will be applied as adjustments on top of it."
-          : 'Optional. Attach a reference photo of the scene you want. Your creator description will define the rest.'
-      }
-    >
-      <div className="flex items-center gap-3">
-        {inspirationImageUrl ? (
-          <div className="relative w-20 h-20 rounded-btn overflow-hidden border border-white/10">
-            <img src={inspirationImageUrl} alt="" className="w-full h-full object-cover" />
-            <button
-              onClick={() => setInspirationImageUrl(null)}
-              className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        ) : (
-          <label className="inline-flex items-center gap-2 px-3 h-9 rounded-pill border border-white/10 text-xs text-white/70 hover:text-white hover:border-white/30 cursor-pointer">
-            <ImageIcon className="w-3.5 h-3.5" />
-            {uploadingInspiration ? 'Uploading…' : 'Add inspiration image (optional)'}
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={handleInspirationImageUpload}
-              disabled={uploadingInspiration}
-              className="hidden"
-            />
-          </label>
-        )}
-      </div>
-    </Section>
-  );
-
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
-      {!template && inspirationSection}
-
       {!template && (
         <Section
           title="Creator"
-          hint={
-            inspirationImageUrl
-              ? 'Tell us who is on camera and any tweaks you want applied to the photo above (clothing, mood, swap the person, etc.). Always included in the prompt.'
-              : 'Describe the person and the whole scene — who they are, where they are, the vibe.'
-          }
+          hint="Describe the person and the whole scene — who they are, where they are, the vibe."
         >
           <textarea
             value={creatorDesc}
             onChange={(e) => setCreatorDesc(e.target.value)}
-            placeholder={
-              inspirationImageUrl
-                ? 'Same setting but a 20-year-old woman in a hoodie holding a coffee…'
-                : '20-year-old, friendly, in a kitchen, soft daylight…'
-            }
+            placeholder="20-year-old, friendly, in a kitchen, soft daylight…"
             rows={3}
             className={inputCls}
           />
@@ -307,8 +238,6 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
           </>
         )}
       </Section>
-
-      {template && inspirationSection}
 
       <Section title="Duration" hint="Pick this first — the AI script will be sized to fit.">
         <div className="flex bg-elevated rounded-pill p-0.5 text-sm w-fit">

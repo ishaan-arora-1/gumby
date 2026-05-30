@@ -48,36 +48,24 @@ export default function StudioPage() {
         attachmentsPayload.length ? attachmentsPayload : undefined
       );
 
-      // Route each classified attachment into the right prefill slot. A
-      // single image classified as "both" lands in product AND inspiration
-      // (creator-holding-product shot). Otherwise: first product wins the
-      // product slot, first inspiration wins the inspiration slot. Surplus
-      // images of the same kind are dropped silently.
-      const classified: Array<{ url: string; kind: 'product' | 'inspiration' | 'both' }> =
-        Array.isArray(data.attachments) ? data.attachments : [];
-      let routedProductUrl: string | null = null;
-      let routedInspirationUrl: string | null = null;
-      for (const a of classified) {
-        if (a.kind === 'both') {
-          if (!routedProductUrl) routedProductUrl = a.url;
-          if (!routedInspirationUrl) routedInspirationUrl = a.url;
-        } else if (a.kind === 'product' && !routedProductUrl) {
-          routedProductUrl = a.url;
-        } else if (a.kind === 'inspiration' && !routedInspirationUrl) {
-          routedInspirationUrl = a.url;
-        }
-      }
+      // Inspiration upload was removed everywhere — any image the user
+      // attaches in the composer goes straight to the product slot.
+      // First-uploaded wins; extras are dropped silently.
+      const routedProductUrl: string | null =
+        (opts.attachmentUrls && opts.attachmentUrls[0]) || null;
 
       setPickedTemplate(null);
       setPrefill({
         creatorDescription: data.creatorDescription || '',
-        includeProduct: !!data.includeProduct,
+        // If the user attached an image we treat it as a product even when
+        // the prompt-parser didn't infer one — the upload itself signals
+        // intent.
+        includeProduct: !!data.includeProduct || !!routedProductUrl,
         productName: data.productName || '',
         productDescription: data.productDescription || '',
         videoDescription: data.videoDescription || '',
         duration: opts.durationSeconds,
         productImageUrl: routedProductUrl,
-        inspirationImageUrl: routedInspirationUrl,
       });
       setStep('studio');
     } catch (e: any) {

@@ -42,10 +42,16 @@ export function CaptionPreview({
   const shadowOffset = preset.shadowDyPx * scale;
   const yPx = FRAME_H * preset.positionYRatio;
 
-  // Compose the text shadow string: outline emulation (8-direction)
-  // + optional drop shadow underneath. text-stroke would be cleaner
-  // but Safari support is uneven.
-  const outlineShadows = outlinePx
+  // Two render modes:
+  //   - Outline mode (boxBgHex undefined): emulate stroke with 8-direction
+  //     text-shadow + optional drop shadow underneath.
+  //   - Block mode (boxBgHex set): solid background rectangle behind the
+  //     text, no outline, no drop shadow on the text itself. Matches what
+  //     libass does with BorderStyle 3 in the burned-in version.
+  const useBoxBackground = !!preset.boxBgHex;
+  const boxPaddingPx = (preset.boxPaddingPx ?? 10) * scale;
+
+  const outlineShadows = !useBoxBackground && outlinePx
     ? [
         `${outlinePx}px 0 0 ${preset.outlineHex}`,
         `-${outlinePx}px 0 0 ${preset.outlineHex}`,
@@ -57,10 +63,22 @@ export function CaptionPreview({
         `-${outlinePx}px -${outlinePx}px 0 ${preset.outlineHex}`,
       ].join(', ')
     : '';
-  const dropShadow = preset.shadowAlpha
+  const dropShadow = !useBoxBackground && preset.shadowAlpha
     ? `0 ${shadowOffset}px 0 rgba(0,0,0,${preset.shadowAlpha})`
     : '';
   const textShadow = [outlineShadows, dropShadow].filter(Boolean).join(', ');
+
+  // hex (#RRGGBB) + alpha → rgba() — used for the box background.
+  const hexToRgba = (hex: string, alpha = 1): string => {
+    const cleaned = hex.replace('#', '');
+    const r = parseInt(cleaned.slice(0, 2), 16);
+    const g = parseInt(cleaned.slice(2, 4), 16);
+    const b = parseInt(cleaned.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
+  const boxBackground = useBoxBackground
+    ? hexToRgba(preset.boxBgHex!, preset.boxBgAlpha ?? 1)
+    : 'transparent';
 
   const popKeyframes = `cap-pop-${reactId.replace(/[^a-z0-9]/gi, '')}`;
   const popDurationMs = 2000; // full loop cycle so the user sees the pop
@@ -107,7 +125,8 @@ export function CaptionPreview({
               'radial-gradient(ellipse 70% 60% at 50% 35%, rgba(80,90,110,0.55) 0%, rgba(20,22,30,0.85) 60%, rgba(8,9,12,1) 100%)',
           }}
         />
-        {/* the caption itself */}
+        {/* the caption itself. In block mode we wrap the text in a padded
+            rectangle so the box scales with the pop animation alongside it. */}
         <div
           className="absolute left-1/2 select-none whitespace-nowrap"
           style={{
@@ -115,10 +134,14 @@ export function CaptionPreview({
             transform: 'translate(-50%, -50%)',
             fontFamily: `'${uniqueFontName}', sans-serif`,
             fontSize: fontPx,
+            fontStyle: preset.italic ? 'italic' : 'normal',
             color: preset.fillHex,
             textShadow,
             letterSpacing: '0.01em',
             lineHeight: 1,
+            background: boxBackground,
+            padding: useBoxBackground ? `${boxPaddingPx * 0.6}px ${boxPaddingPx}px` : 0,
+            borderRadius: useBoxBackground ? 4 : 0,
             animation: `${popKeyframes} ${popDurationMs}ms ease-in-out infinite`,
             willChange: 'transform, opacity',
           }}
