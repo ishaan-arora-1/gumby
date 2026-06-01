@@ -62,9 +62,10 @@ router.get('/templates', async (req, res) => {
 
   try {
     const redis = await getRedisClient();
-    // v4 cache namespace — bump whenever the schema or URL shape changes so
-    // stale Redis entries are bypassed without a manual flush.
-    const cacheKey = `ugc_templates_v4:${category || 'all'}:${page}`;
+    // v5 cache namespace — bump whenever the schema or URL shape changes so
+    // stale Redis entries are bypassed without a manual flush. (v5: curated
+    // templates now expose captioned preview video_url + clean_frame_url.)
+    const cacheKey = `ugc_templates_v5:${category || 'all'}:${page}`;
     const cached = await redis.get(cacheKey);
     if (cached) return res.json(JSON.parse(cached));
 
@@ -465,6 +466,13 @@ router.post('/generate', async (req, res) => {
         setting: template.setting,
         video_url: template.video_url,
         thumbnail_url: template.thumbnail_url,
+        // Caption-free seed still. Present only on curated templates (whose
+        // video_url is a captioned preview); the pipeline uses it as the
+        // seed frame instead of extracting one from the captioned video.
+        // NULL for history-reuse templates → pipeline falls back to frame
+        // extraction. `?? null` so older rows without the column don't blow
+        // up the snapshot.
+        clean_frame_url: template.clean_frame_url ?? null,
         aspect_ratio: template.aspect_ratio,
         duration_seconds: template.duration_seconds,
         // Optional user-provided tweaks ("same person but on a beach…").

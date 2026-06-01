@@ -184,6 +184,12 @@ CREATE TABLE IF NOT EXISTS ugc_templates (
     video_url TEXT NOT NULL,
     -- Thumbnail/cover image (first frame or a generated still)
     thumbnail_url TEXT NOT NULL,
+    -- Caption-free still used as the video-gen seed frame. Set ONLY on
+    -- curated templates whose video_url is a *captioned* preview, so the
+    -- pipeline seeds the creator image from a clean frame instead of
+    -- extracting one from the captioned video. NULL for history-reuse /
+    -- user-promoted templates → pipeline falls back to frame extraction.
+    clean_frame_url TEXT,
     -- Sample script the model is "originally" saying — shown as inspiration
     sample_script TEXT NOT NULL DEFAULT '',
     -- Default voice id from ElevenLabs (matched to the actor's gender/style)

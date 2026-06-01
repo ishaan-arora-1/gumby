@@ -786,16 +786,35 @@ async function runSingleShotPipeline(job, jobId) {
 
     if (templateVideoUrl) {
       await reportStage('preparing', 5, 15);
-      console.log(`[ugc:${jobId}] extracting seed frame from template`);
-      const { buffer: vidBuf } = await downloadToBuffer(templateVideoUrl);
-      const templatePath = path.join(workDir, 'template.mp4');
-      fs.writeFileSync(templatePath, vidBuf);
-      const framePath = path.join(workDir, 'seed.jpg');
-      await ffmpegExtractFrame(templatePath, framePath, 1.0);
-      const frameBuf = fs.readFileSync(framePath);
-      let templateFrameUrl = await uploadBufferToBucket(
-        frameBuf, 'image/jpeg', 'jpg', `jobs/${jobId}/seed`
-      );
+
+      // Two seed sources, kept strictly separate:
+      //
+      //   • Curated templates ship a pre-extracted, CAPTION-FREE still in
+      //     `clean_frame_url`. Their `video_url` is a *captioned* preview,
+      //     so we must NOT extract a frame from it (the burned-in caption
+      //     text would leak into the seed and then the generated video).
+      //     Use the clean still directly — no download, no ffmpeg.
+      //
+      //   • Everything else (templates promoted from a user's own history,
+      //     etc.) has no clean still → fall back to extracting a frame from
+      //     the template video, exactly as before.
+      const cleanFrameUrl = (snapshot.clean_frame_url || '').trim() || null;
+      let templateFrameUrl;
+      if (cleanFrameUrl) {
+        console.log(`[ugc:${jobId}] seeding from template clean_frame_url (caption-free still, no extraction)`);
+        templateFrameUrl = cleanFrameUrl;
+      } else {
+        console.log(`[ugc:${jobId}] extracting seed frame from template video`);
+        const { buffer: vidBuf } = await downloadToBuffer(templateVideoUrl);
+        const templatePath = path.join(workDir, 'template.mp4');
+        fs.writeFileSync(templatePath, vidBuf);
+        const framePath = path.join(workDir, 'seed.jpg');
+        await ffmpegExtractFrame(templatePath, framePath, 1.0);
+        const frameBuf = fs.readFileSync(framePath);
+        templateFrameUrl = await uploadBufferToBucket(
+          frameBuf, 'image/jpeg', 'jpg', `jobs/${jobId}/seed`
+        );
+      }
       await updateJob(jobId, { creator_reference_image_url: templateFrameUrl }).catch(() => {});
       seedImageUrl = templateFrameUrl;
       seedKind = 'template';
