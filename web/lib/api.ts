@@ -171,6 +171,15 @@ export const api = {
     request<{ success: boolean; data: any }>(`/ugc/jobs/${id}`),
   deleteJob: (id: string) =>
     request<{ success: boolean }>(`/ugc/jobs/${id}`, { method: 'DELETE' }),
+  // Reuse a completed UGC job as a template. The backend mints a hidden
+  // `ugc_templates` row pointing at the job's output video — once it's a
+  // template the existing flow (seed-frame extract + product integration
+  // + Kling 3.0 Pro generation) handles everything.
+  useHistoryItem: (id: string) =>
+    request<{ success: boolean; data: any }>(`/ugc/jobs/${id}/use`, {
+      method: 'POST',
+      body: '{}',
+    }),
 
   // ---- Creator (silent text-to-video) ----
   generateCreator: (body: {

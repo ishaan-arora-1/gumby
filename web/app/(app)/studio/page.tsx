@@ -27,6 +27,22 @@ export default function StudioPage() {
 
   useEffect(() => {
     api.listTemplates(1).then((r) => setTemplates(r.data)).catch(() => {});
+
+    // Hand-off from /history/[id]'s "Use creator" button. The history
+    // detail page writes the hidden template to sessionStorage and then
+    // routes here — we read it once on mount, drop the user straight
+    // into the studio form, and clear the key so a future refresh
+    // doesn't re-trigger.
+    try {
+      const raw = sessionStorage.getItem('blinkugc:pendingTemplate');
+      if (raw) {
+        const tpl = JSON.parse(raw) as UGCTemplate;
+        sessionStorage.removeItem('blinkugc:pendingTemplate');
+        setPickedTemplate(tpl);
+        setPrefill(null);
+        setStep('studio');
+      }
+    } catch {}
   }, []);
 
   const onComposerSubmit = async (

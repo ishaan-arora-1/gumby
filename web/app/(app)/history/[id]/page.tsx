@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import type { UGCJob } from '@/lib/types';
 import { LoopingVideo } from '@/components/ui/LoopingVideo';
 import { formatRelativeTime } from '@/lib/utils';
-import { ArrowLeft, Trash2, Download } from 'lucide-react';
+import { ArrowLeft, Trash2, Download, Sparkles } from 'lucide-react';
 import { getCaptionPreset } from '@/lib/captionPresets';
 
 /**
@@ -35,6 +35,7 @@ export default function HistoryDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [downloading, setDownloading] = useState(false);
+  const [reusing, setReusing] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -45,6 +46,28 @@ export default function HistoryDetailPage() {
       .catch((e: any) => setError(e?.message || 'Could not load this video'))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Reuse the creator from this finished video: the backend mints a
+  // hidden template pointing at output_video_url, we save it to
+  // sessionStorage, then bounce over to /studio which picks it up on
+  // mount via the BLINKUGC_PENDING_TEMPLATE_KEY hand-off.
+  const onUseAsTemplate = async () => {
+    if (!job || reusing) return;
+    setReusing(true);
+    try {
+      const { data: tpl } = await api.useHistoryItem(job.id);
+      try {
+        sessionStorage.setItem(
+          'blinkugc:pendingTemplate',
+          JSON.stringify(tpl)
+        );
+      } catch {}
+      router.push('/studio');
+    } catch (e: any) {
+      alert(e?.message || 'Could not reuse this video. Try again.');
+      setReusing(false);
+    }
+  };
 
   const onDelete = async () => {
     if (!job) return;
@@ -124,6 +147,25 @@ export default function HistoryDetailPage() {
           History
         </Link>
         <div className="flex items-center gap-2">
+          {job.output_video_url && (
+            <button
+              type="button"
+              onClick={onUseAsTemplate}
+              disabled={reusing}
+              className="h-9 px-3 rounded-pill bg-gradient-to-r from-[#ff2e3f] to-[#e11d2b] text-white text-xs font-semibold inline-flex items-center gap-1.5 hover:shadow-[0_8px_24px_rgba(225,29,43,0.4)] disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              {reusing ? (
+                <>
+                  <div className="w-3 h-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                  Loading…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" /> Use creator
+                </>
+              )}
+            </button>
+          )}
           {job.output_video_url && (
             <button
               type="button"
