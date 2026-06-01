@@ -137,22 +137,23 @@ export default function HistoryDetailPage() {
 
   return (
     <div className="px-6 lg:px-10 pt-8 pb-24 max-w-5xl mx-auto">
-      {/* Top bar */}
-      <div className="flex items-center justify-between mb-6">
+      {/* Top bar — back link stacks above the actions on phones so the
+          three labelled buttons never get crushed into one tight row. */}
+      <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
         <Link
           href="/history"
-          className="inline-flex items-center gap-2 text-sm text-white/55 hover:text-white transition"
+          className="inline-flex items-center gap-2 text-sm text-white/55 hover:text-white transition self-start"
         >
           <ArrowLeft className="w-4 h-4" />
           History
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {job.output_video_url && (
             <button
               type="button"
               onClick={onUseAsTemplate}
               disabled={reusing}
-              className="h-9 px-3 rounded-pill bg-gradient-to-r from-[#ff2e3f] to-[#e11d2b] text-white text-xs font-semibold inline-flex items-center gap-1.5 hover:shadow-[0_8px_24px_rgba(225,29,43,0.4)] disabled:opacity-40 disabled:cursor-not-allowed transition"
+              className="h-9 px-3 rounded-pill bg-gradient-to-r from-[#ff2e3f] to-[#e11d2b] text-white text-xs font-semibold inline-flex items-center gap-1.5 hover:shadow-[0_8px_24px_rgba(225,29,43,0.4)] disabled:opacity-40 disabled:cursor-not-allowed transition shrink-0"
             >
               {reusing ? (
                 <>
@@ -171,7 +172,7 @@ export default function HistoryDetailPage() {
               type="button"
               onClick={onDownload}
               disabled={downloading}
-              className="h-9 px-3 rounded-pill bg-white text-black text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-white/90 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              className="h-9 px-3 rounded-pill bg-white text-black text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-white/90 disabled:opacity-40 disabled:cursor-not-allowed transition shrink-0"
             >
               {downloading ? (
                 <>
@@ -189,7 +190,7 @@ export default function HistoryDetailPage() {
             type="button"
             onClick={onDelete}
             aria-label="Delete"
-            className="h-9 px-3 rounded-pill border border-white/10 text-white/60 text-xs font-semibold inline-flex items-center gap-1.5 hover:border-red-500/50 hover:text-red-400 transition"
+            className="h-9 px-3 rounded-pill border border-white/10 text-white/60 text-xs font-semibold inline-flex items-center gap-1.5 hover:border-red-500/50 hover:text-red-400 transition shrink-0"
           >
             <Trash2 className="w-3.5 h-3.5" /> Delete
           </button>

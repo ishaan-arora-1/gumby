@@ -181,7 +181,7 @@ struct UGCStudioCard: View {
     // description. The chosen value gets sent as `creatorEthnicity` on
     // the generate request — the backend weaves it into the Nano Banana
     // + Kling prompts as "a good-looking <ethnicity> creator —".
-    private static let ETHNICITY_OPTIONS: [String] = ["Indian", "Asian American", "Asian"]
+    private static let ETHNICITY_OPTIONS: [String] = ["Indian", "American", "Asian"]
 
     private var ethnicityPicker: some View {
         VStack(alignment: .leading, spacing: 8) {

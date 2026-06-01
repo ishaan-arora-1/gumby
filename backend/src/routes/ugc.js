@@ -396,14 +396,22 @@ router.post('/generate', async (req, res) => {
     captionsEnabled,
     captionPreset,
     creatorEthnicity,
+    creatorSpeaks,
   } = req.body || {};
+
+  // "Talking creator" toggle. When false, the creator stays silent — we
+  // don't require or use a script, and captions are forced off downstream.
+  // Defaults to true so older clients (which never send the flag) keep
+  // producing speaking videos.
+  const wantsSpeech = creatorSpeaks !== false;
 
   // Either a templateId or a creatorDescription is required (direct mode)
   const isDirectMode = !templateId && typeof creatorDescription === 'string' && creatorDescription.trim().length > 0;
   if (!templateId && !isDirectMode) {
     return res.status(400).json({ success: false, error: 'templateId or creatorDescription is required' });
   }
-  if (!script || !script.trim()) {
+  // A script is only required when the creator is actually speaking.
+  if (wantsSpeech && (!script || !script.trim())) {
     return res.status(400).json({ success: false, error: 'script is required' });
   }
 
@@ -434,14 +442,18 @@ router.post('/generate', async (req, res) => {
       inspiration_image_url: typeof inspirationImageUrl === 'string' && inspirationImageUrl.length
         ? inspirationImageUrl
         : null,
-      script: script.trim(),
+      // Empty string is fine when the creator isn't speaking (column is
+      // NOT NULL DEFAULT '').
+      script: typeof script === 'string' ? script.trim() : '',
       status: 'queued',
       progress: 0,
     };
 
-    // Captions default ON. The pipeline reads this off template_snapshot to
-    // avoid a DB migration, same pattern we use for user_tweaks.
-    const wantsCaptions = captionsEnabled !== false;
+    // Captions default ON, but only matter when the creator speaks — a
+    // silent video has nothing to caption. The pipeline reads this off
+    // template_snapshot to avoid a DB migration, same pattern we use for
+    // user_tweaks.
+    const wantsCaptions = wantsSpeech && captionsEnabled !== false;
     const captionPresetSafe = typeof captionPreset === 'string' && captionPreset.length
       ? captionPreset.slice(0, 32)
       : null;
@@ -450,7 +462,7 @@ router.post('/generate', async (req, res) => {
     // already fix the creator's identity). Whitelist the allowed values
     // — anything else is dropped so the picker can't be used to inject
     // arbitrary prompt text.
-    const ETHNICITY_WHITELIST = new Set(['Indian', 'Asian American', 'Asian']);
+    const ETHNICITY_WHITELIST = new Set(['Indian', 'American', 'Asian']);
     const ethnicitySafe = typeof creatorEthnicity === 'string'
       && ETHNICITY_WHITELIST.has(creatorEthnicity.trim())
       ? creatorEthnicity.trim()
@@ -482,6 +494,9 @@ router.post('/generate', async (req, res) => {
         user_tweaks: cleanTweaks || null,
         captions_enabled: wantsCaptions,
         caption_preset: captionPresetSafe,
+        // "Talking creator" toggle. When false the pipeline skips the
+        // script + audio + captions and renders a silent clip.
+        creator_speaks: wantsSpeech,
       };
     } else {
       // Direct mode: store creator description in the snapshot so the
@@ -496,6 +511,8 @@ router.post('/generate', async (req, res) => {
         duration_seconds: null,
         captions_enabled: wantsCaptions,
         caption_preset: captionPresetSafe,
+        // "Talking creator" toggle (silent clip when false).
+        creator_speaks: wantsSpeech,
         // Direct-mode-only. Pipeline weaves this into the Nano Banana +
         // Kling prompts as "a good-looking <ethnicity> creator —".
         user_ethnicity: ethnicitySafe,

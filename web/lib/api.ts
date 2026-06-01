@@ -157,6 +157,7 @@ export const api = {
     captionsEnabled?: boolean;
     captionPreset?: string;
     creatorEthnicity?: string;
+    creatorSpeaks?: boolean;
   }) =>
     request<{ success: boolean; data: any }>('/ugc/generate', {
       method: 'POST',

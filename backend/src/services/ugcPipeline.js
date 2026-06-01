@@ -391,10 +391,10 @@ async function synthesizeCreatorScene({
     // Framing instruction kept neutral — no "looking at camera" language
     // since Kling and Nano Banana both render that literally as a
     // webcam-style shot.
-    'Vertical 9:16 portrait composition, the creator framed mid-body in a natural pose, ready to speak.',
+    'Vertical 9:16 portrait composition, the creator framed mid-body in a natural, relaxed pose.',
     wantsProductByName
       ? `The creator is featuring ${productPhrase} — depict them holding or interacting with it naturally.`
-      : 'CRITICAL — NO PRODUCT. The creator\'s hands are empty and relaxed. No bottles, tubes, jars, boxes, packages, phones, gadgets, or held items of any kind. The user explicitly chose NOT to feature a product, so the creator is simply standing or sitting naturally and ready to speak.',
+      : 'CRITICAL — NO PRODUCT. The creator\'s hands are empty and relaxed. No bottles, tubes, jars, boxes, packages, phones, gadgets, or held items of any kind. The user explicitly chose NOT to feature a product, so the creator is simply standing or sitting naturally.',
     REALISM_GUIDANCE,
   ].join(' ');
 
@@ -543,25 +543,41 @@ function klingDurationEnum(seconds) {
   return Number(seconds) >= 8 ? '10' : '5';
 }
 
-const KLING_NEGATIVE_PROMPT_BASE =
-  'professional model, supermodel, fashion model, magazine cover, glamour shot, beauty advertisement, runway, studio lighting, plastic skin, doll-like, old, elderly, aged, wrinkled, weathered face, blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed hands, extra limbs, frozen still image, multiple people, split screen, scene cuts, hard cuts, silent, no audio, mute, lip movements out of sync, mouth not matching audio';
+// Style/quality negatives shared by every render, regardless of whether
+// the creator speaks or not.
+const KLING_NEGATIVE_PROMPT_CORE =
+  'professional model, supermodel, fashion model, magazine cover, glamour shot, beauty advertisement, runway, studio lighting, plastic skin, doll-like, old, elderly, aged, wrinkled, weathered face, blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed hands, extra limbs, frozen still image, multiple people, split screen, scene cuts, hard cuts';
 
-const KLING_NEGATIVE_PROMPT_NO_PRODUCT =
-  KLING_NEGATIVE_PROMPT_BASE +
+// Speaking videos: we WANT audio + tight lip-sync, so we push the model
+// away from silence and out-of-sync mouths.
+const KLING_NEGATIVE_PROMPT_SPEAKING =
+  ', silent, no audio, mute, lip movements out of sync, mouth not matching audio';
+
+// Silent videos: the creator must NOT talk. Push the model away from any
+// speaking/lip-sync behaviour so we get a clean non-speaking clip.
+const KLING_NEGATIVE_PROMPT_SILENT =
+  ', talking, speaking, mouthing words, lip movement, lip sync, open mouth mid-speech, dialogue, narration';
+
+const KLING_NEGATIVE_PROMPT_NO_PRODUCT_SUFFIX =
   ', product, bottle, tube, jar, box, package, container, branded object, item in hand, holding object, picking up object, gadget, phone, mug, cup, can';
 
-function klingNegativePrompt({ hasProduct }) {
-  return hasProduct ? KLING_NEGATIVE_PROMPT_BASE : KLING_NEGATIVE_PROMPT_NO_PRODUCT;
+function klingNegativePrompt({ hasProduct, creatorSpeaks = true }) {
+  let np = KLING_NEGATIVE_PROMPT_CORE +
+    (creatorSpeaks ? KLING_NEGATIVE_PROMPT_SPEAKING : KLING_NEGATIVE_PROMPT_SILENT);
+  if (!hasProduct) np += KLING_NEGATIVE_PROMPT_NO_PRODUCT_SUFFIX;
+  return np;
 }
 
-async function generateVideoFromImage({ seedImageUrl, prompt, durationSec = 10, aspectRatio = '9:16', hasProduct = true, onProgress }) {
+async function generateVideoFromImage({ seedImageUrl, prompt, durationSec = 10, aspectRatio = '9:16', hasProduct = true, creatorSpeaks = true, onProgress }) {
   const result = await falSubscribeWithRetry(KLING_IMAGE_TO_VIDEO, {
     prompt,
     image_url: seedImageUrl,
     duration: klingDurationEnum(durationSec),
     aspect_ratio: aspectRatio,
-    generate_audio: true,
-    negative_prompt: klingNegativePrompt({ hasProduct }),
+    // Only synthesize audio when the creator is actually speaking. A
+    // silent video skips inline audio generation entirely.
+    generate_audio: creatorSpeaks,
+    negative_prompt: klingNegativePrompt({ hasProduct, creatorSpeaks }),
     cfg_scale: 0.5,
   }, 'kling-i2v', { onProgress });
   const url = result?.data?.video?.url || result?.video?.url;
@@ -569,13 +585,13 @@ async function generateVideoFromImage({ seedImageUrl, prompt, durationSec = 10, 
   return url;
 }
 
-async function generateVideoFromText({ prompt, durationSec = 10, aspectRatio = '9:16', hasProduct = true, onProgress }) {
+async function generateVideoFromText({ prompt, durationSec = 10, aspectRatio = '9:16', hasProduct = true, creatorSpeaks = true, onProgress }) {
   const result = await falSubscribeWithRetry(KLING_TEXT_TO_VIDEO, {
     prompt,
     duration: klingDurationEnum(durationSec),
     aspect_ratio: aspectRatio,
-    generate_audio: true,
-    negative_prompt: klingNegativePrompt({ hasProduct }),
+    generate_audio: creatorSpeaks,
+    negative_prompt: klingNegativePrompt({ hasProduct, creatorSpeaks }),
     cfg_scale: 0.5,
   }, 'kling-t2v', { onProgress });
   const url = result?.data?.video?.url || result?.video?.url;
@@ -609,6 +625,7 @@ function buildKlingPrompt({
   productName,
   hasProduct,
   hasProductInSeed,
+  creatorSpeaks = true,
 }) {
   const parts = [];
   if (creatorContext) parts.push(creatorContext);
@@ -634,15 +651,23 @@ function buildKlingPrompt({
   parts.push('One continuous shot, no cuts, smooth natural motion, expressive body language and facial expression, candid everyday energy.');
   parts.push('The creator is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model and NOT a fashion ad. No glamour makeup, casual everyday clothing, authentic vibe, vertical phone-video aspect ratio.');
 
-  // The script + speak + lip-sync instructions go LAST so they read as the
-  // dominant directive. Kling generates audio inline via generate_audio,
-  // and these lines tell it exactly what audio to produce and that the
-  // mouth must track that audio precisely.
-  if (script) {
+  if (creatorSpeaks && script) {
+    // The script + speak + lip-sync instructions go LAST so they read as
+    // the dominant directive. Kling generates audio inline via
+    // generate_audio, and these lines tell it exactly what audio to
+    // produce and that the mouth must track that audio precisely.
     parts.push(
       `The creator speaks the following script aloud, clearly and naturally, with their voice audible in the final video — their lip movements MUST be perfectly synchronized with every word they say:`,
       `"${script}"`,
       'Their mouth shapes match each word, the audio is the creator\'s own voice speaking these exact lines, and the lip-sync is tight throughout — no silent video, no mismatched mouth movement.'
+    );
+  } else if (!creatorSpeaks) {
+    // Non-speaking mode. The user explicitly chose NOT to have the creator
+    // talk, so we forbid speech/lip-sync and let the scene (videoDescription)
+    // carry the clip. We don't inject a script or any dialogue.
+    parts.push(
+      'The creator does NOT speak and does NOT talk at any point — their mouth stays closed and relaxed, with no lip movement, no mouthing of words, and no dialogue.',
+      'There is no spoken voiceover. The video shows only the natural action, movement, and expression described above.'
     );
   }
   return parts.filter(Boolean).join(' ').slice(0, 1800);
@@ -668,9 +693,15 @@ async function runSingleShotPipeline(job, jobId) {
   const inspirationImageUrl = job.inspiration_image_url || null;
   const templateVideoUrl = snapshot.video_url || null;
 
+  // Non-speaking mode. When the user turns "Talking creator" off, we don't
+  // require (or use) a script — the creator stays silent and the scene
+  // carries the clip. Defaults to true so existing/older jobs behave as
+  // before.
+  const creatorSpeaks = snapshot.creator_speaks !== false;
+
   const videoDescription = (job.video_description || '').trim();
   const scriptText = (job.script || '').trim();
-  if (!scriptText) throw new Error('Script is empty');
+  if (creatorSpeaks && !scriptText) throw new Error('Script is empty');
 
   const videoDuration = job.video_duration || 10;
   const aspectRatio = snapshot.aspect_ratio || '9:16';
@@ -697,8 +728,12 @@ async function runSingleShotPipeline(job, jobId) {
   // in the frame.
   const effectiveVideoDesc = videoDescription
     || (job.product_name
-        ? `The creator holds ${job.product_name} in their hand, glances at it, smiles, and speaks naturally with relaxed body language.`
-        : 'The creator speaks naturally with relaxed body language and an expressive, warm smile.');
+        ? (creatorSpeaks
+            ? `The creator holds ${job.product_name} in their hand, glances at it, smiles, and speaks naturally with relaxed body language.`
+            : `The creator holds ${job.product_name} in their hand, glances at it, turns it to show it off, and smiles with relaxed body language.`)
+        : (creatorSpeaks
+            ? 'The creator speaks naturally with relaxed body language and an expressive, warm smile.'
+            : 'The creator moves naturally with relaxed body language and an expressive, warm smile.'));
 
   // Progress bands. Two stages now (image swap + Kling), so the Kling call
   // owns most of the bar. If there's no inspiration/template, we skip
@@ -858,7 +893,10 @@ async function runSingleShotPipeline(job, jobId) {
     // ---- Step 2: single Kling 3.0 Pro generation (with audio + lip-sync) ----
     // Captioning (optional, default ON) eats the last 6 percent of the
     // progress bar — Kling owns 32–90, captioning 90–96.
-    const captionsEnabled = snapshot.captions_enabled !== false;
+    // Captions only make sense when there's spoken dialogue to caption.
+    // A non-speaking video is always shipped clean, regardless of the
+    // stored caption preference.
+    const captionsEnabled = creatorSpeaks && snapshot.captions_enabled !== false;
     const videoTick = await reportStage('generating_video', 32, captionsEnabled ? 90 : 96);
     const hasProduct = !!productImageUrl || !!(job.product_name && job.product_name.trim());
     const klingPrompt = buildKlingPrompt({
@@ -869,8 +907,9 @@ async function runSingleShotPipeline(job, jobId) {
       productName: job.product_name,
       hasProduct,
       hasProductInSeed: !!productImageUrl && (seedKind === 'inspiration+product' || seedKind === 'template+product'),
+      creatorSpeaks,
     });
-    console.log(`[ugc:${jobId}] kling 3.0 pro ${seedImageUrl ? 'i2v' : 't2v'} (seed=${seedKind}, ${videoDuration}s, audio=on, product=${hasProduct})`);
+    console.log(`[ugc:${jobId}] kling 3.0 pro ${seedImageUrl ? 'i2v' : 't2v'} (seed=${seedKind}, ${videoDuration}s, audio=${creatorSpeaks ? 'on' : 'off'}, speaks=${creatorSpeaks}, product=${hasProduct})`);
 
     const klingVideoUrl = seedImageUrl
       ? await generateVideoFromImage({
@@ -879,6 +918,7 @@ async function runSingleShotPipeline(job, jobId) {
           durationSec: videoDuration,
           aspectRatio,
           hasProduct,
+          creatorSpeaks,
           onProgress: videoTick,
         })
       : await generateVideoFromText({
@@ -886,6 +926,7 @@ async function runSingleShotPipeline(job, jobId) {
           durationSec: videoDuration,
           aspectRatio,
           hasProduct,
+          creatorSpeaks,
           onProgress: videoTick,
         });
 
