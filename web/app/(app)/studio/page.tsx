@@ -154,7 +154,11 @@ export default function StudioPage() {
   }, []);
 
   return (
-    <div className="min-h-screen pb-24 md:pb-12">
+    // overflow-x-hidden contains the composer's decorative blue glow
+    // (w-[220%], centered) so its overhang can't create horizontal page
+    // scroll / a blank strip on the right on phones. Vertical scroll is
+    // unaffected.
+    <div className="min-h-screen pb-24 md:pb-12 overflow-x-hidden">
       <InsufficientCreditsModal
         open={!!insufficient}
         required={insufficient?.required ?? 0}
