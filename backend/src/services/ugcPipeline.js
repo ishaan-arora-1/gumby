@@ -342,7 +342,7 @@ async function synthesizeCreatorScene({
   aspectRatio = '9:16',
   onProgress,
 }) {
-  const cleanCreator = (creatorDescription || '').trim() || 'a lifestyle creator on camera';
+  const cleanCreator = (creatorDescription || '').trim() || 'a lifestyle creator in a natural everyday setting';
   const hasProduct = !!productImageUrl;
   const productPhrase = productName ? `"${productName}"` : 'the product';
 
@@ -354,7 +354,10 @@ async function synthesizeCreatorScene({
     // ONLY the product and then build a fresh creator from the
     // description.
     const prompt = [
-      `Generate a single photorealistic still. The creator and scene MUST match this description exactly: "${cleanCreator}". The setting/location described here is mandatory — if it specifies a kitchen, bathroom mirror, gym, beach, bedroom, office, etc., the final image must be in that exact environment.`,
+      // The example-list intentionally avoids "bathroom mirror" / "vanity
+      // mirror" — Nano Banana picks those up and puts a literal mirror in
+      // the frame, which then dominates the rendered video.
+      `Generate a single photorealistic still. The creator and scene MUST match this description exactly: "${cleanCreator}". The setting/location described here is mandatory — if it specifies a kitchen, bathroom, gym, beach, bedroom, office, cafe, studio, etc., the final image must be in that exact environment.`,
       `The IMAGE provided is a REFERENCE for ${productPhrase} only. It may show the product on its own, or it may show a model, mannequin, or person wearing, holding, or using the product.`,
       'EXTRACT ONLY THE PRODUCT from this image — the garment, item, package, bottle, or object itself. COMPLETELY IGNORE any person, model, mannequin, hand, face, body, hair, skin, or other human element shown in the reference. None of those human features may appear in the final image.',
       'The creator in the final image must be a NEW person generated entirely from the creator description above. Their face, ethnicity, hair, body type, skin tone, age, and styling come ONLY from the description — not from anyone shown in the reference photo.',
@@ -384,11 +387,14 @@ async function synthesizeCreatorScene({
   //       phone or mug.
   const wantsProductByName = !!(productName && productName.trim());
   const prompt = [
-    `Generate a single photorealistic still. The creator and scene MUST match this description exactly: "${cleanCreator}". The setting/location described here is mandatory — if it specifies a kitchen, bathroom mirror, gym, beach, bedroom, office, etc., the final image must be in that exact environment.`,
-    'The creator is positioned naturally for a vertical phone video — framed mid-body, looking at the camera, ready to speak.',
+    `Generate a single photorealistic still. The creator and scene MUST match this description exactly: "${cleanCreator}". The setting/location described here is mandatory — if it specifies a kitchen, bathroom, gym, beach, bedroom, office, cafe, studio, etc., the final image must be in that exact environment.`,
+    // Framing instruction kept neutral — no "looking at camera" language
+    // since Kling and Nano Banana both render that literally as a
+    // webcam-style shot.
+    'Vertical 9:16 portrait composition, the creator framed mid-body in a natural pose, ready to speak.',
     wantsProductByName
       ? `The creator is featuring ${productPhrase} — depict them holding or interacting with it naturally.`
-      : 'CRITICAL — NO PRODUCT. The creator\'s hands are empty and relaxed. No bottles, tubes, jars, boxes, packages, phones, gadgets, or held items of any kind. The user explicitly chose NOT to feature a product, so this is a pure talking-head shot.',
+      : 'CRITICAL — NO PRODUCT. The creator\'s hands are empty and relaxed. No bottles, tubes, jars, boxes, packages, phones, gadgets, or held items of any kind. The user explicitly chose NOT to feature a product, so the creator is simply standing or sitting naturally and ready to speak.',
     REALISM_GUIDANCE,
   ].join(' ');
 
@@ -620,10 +626,13 @@ function buildKlingPrompt({
       parts.push(`The creator is featuring "${productName}" naturally as part of the action.`);
     }
   } else if (!hasProduct) {
-    parts.push('The creator is NOT holding or featuring any product, bottle, tube, box, gadget, or branded object — their hands stay empty throughout. This is a pure talking-head shot, just the creator speaking to camera.');
+    parts.push('The creator is NOT holding or featuring any product, bottle, tube, box, gadget, or branded object — their hands stay empty throughout. They are simply speaking with relaxed body language.');
   }
-  parts.push('One continuous shot, no cuts, smooth motion, natural body language, expressive facial expression, talking to camera.');
-  parts.push('The on-camera person is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model and NOT a fashion ad. No glamour makeup, casual everyday clothing, candid authentic energy, shot like a vertical phone video.');
+  // Avoid camera-aware phrasing ("to camera", "on camera", "talking head")
+  // — Kling reads it literally and biases toward webcam framing. We just
+  // describe naturalistic action and let the model handle the framing.
+  parts.push('One continuous shot, no cuts, smooth natural motion, expressive body language and facial expression, candid everyday energy.');
+  parts.push('The creator is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model and NOT a fashion ad. No glamour makeup, casual everyday clothing, authentic vibe, vertical phone-video aspect ratio.');
 
   // The script + speak + lip-sync instructions go LAST so they read as the
   // dominant directive. Kling generates audio inline via generate_audio,
@@ -631,9 +640,9 @@ function buildKlingPrompt({
   // mouth must track that audio precisely.
   if (script) {
     parts.push(
-      `The on-camera person speaks the following script aloud, clearly and naturally, with their voice audible in the final video — their lip movements MUST be perfectly synchronized with every word they say:`,
+      `The creator speaks the following script aloud, clearly and naturally, with their voice audible in the final video — their lip movements MUST be perfectly synchronized with every word they say:`,
       `"${script}"`,
-      'Their mouth shapes match each word, the audio is the person\'s own voice speaking these exact lines, and the lip-sync is tight throughout — no silent video, no mismatched mouth movement.'
+      'Their mouth shapes match each word, the audio is the creator\'s own voice speaking these exact lines, and the lip-sync is tight throughout — no silent video, no mismatched mouth movement.'
     );
   }
   return parts.filter(Boolean).join(' ').slice(0, 1800);
@@ -672,7 +681,7 @@ async function runSingleShotPipeline(job, jobId) {
   const userEthnicity = (snapshot.user_ethnicity || '').trim();
   const baseCreatorContext = [snapshot.actor_name, snapshot.setting, snapshot.description]
     .filter(Boolean)
-    .join(', ') || 'a lifestyle creator on camera';
+    .join(', ') || 'a lifestyle creator in a natural everyday setting';
   const creatorContext = userEthnicity
     ? `a good-looking ${userEthnicity} creator — ${baseCreatorContext}`
     : baseCreatorContext;
@@ -682,10 +691,14 @@ async function runSingleShotPipeline(job, jobId) {
   // the user's adjustments while keeping the template creator's identity.
   const userTweaks = (snapshot.user_tweaks || '').trim();
 
+  // Fallback action when the user didn't fill in a Scene. Phrasing
+  // avoids "to camera" / "in front of mirror" — Kling renders those
+  // literally and either zooms into a webcam framing or puts a mirror
+  // in the frame.
   const effectiveVideoDesc = videoDescription
     || (job.product_name
-        ? `The creator engages naturally with ${job.product_name}, gesturing and talking to camera.`
-        : 'The creator talks directly to camera with expressive body language and a warm smile.');
+        ? `The creator holds ${job.product_name} in their hand, glances at it, smiles, and speaks naturally with relaxed body language.`
+        : 'The creator speaks naturally with relaxed body language and an expressive, warm smile.');
 
   // Progress bands. Two stages now (image swap + Kling), so the Kling call
   // owns most of the bar. If there's no inspiration/template, we skip
