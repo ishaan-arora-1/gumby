@@ -128,6 +128,18 @@ export default function InAppPricingPage() {
         </div>
       </div>
 
+      <div className="mb-6 rounded-card border border-white/10 bg-white/[0.04] px-5 py-4 text-sm text-white/80 text-center">
+        <span className="font-semibold text-white">Not in India?</span>{' '}
+        Mail us at{' '}
+        <a
+          href={`mailto:${SUPPORT_EMAIL}`}
+          className="text-white underline decoration-white/40 underline-offset-2 hover:decoration-white"
+        >
+          {SUPPORT_EMAIL}
+        </a>{' '}
+        to get special access.
+      </div>
+
       {msg && (
         <div
           className={cn(
