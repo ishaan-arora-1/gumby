@@ -15,7 +15,14 @@ import { cn } from '@/lib/utils';
  * Collapsed sidebar shrinks to a coin icon with the number; full sidebar
  * shows label + a "+" button that goes to /pricing.
  */
-export function CreditBalanceChip({ collapsed }: { collapsed: boolean }) {
+export function CreditBalanceChip({
+  collapsed = false,
+  compact = false,
+}: {
+  collapsed?: boolean;
+  /** Small inline pill for the mobile top bar. */
+  compact?: boolean;
+}) {
   const [balance, setBalance] = useState<number | null>(null);
   const path = usePathname();
 
@@ -28,6 +35,26 @@ export function CreditBalanceChip({ collapsed }: { collapsed: boolean }) {
     window.addEventListener('blinkugc:credits-changed', onCh);
     return () => window.removeEventListener('blinkugc:credits-changed', onCh);
   }, []);
+
+  if (compact) {
+    return (
+      <Link
+        href="/pricing"
+        aria-label={balance == null ? 'Credits' : `${balance} credits — top up`}
+        className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 hover:bg-white/[0.08] transition"
+      >
+        <Coins className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+        <span
+          className={cn(
+            'text-[13px] font-semibold tabular-nums leading-none',
+            balance != null && balance < 50 ? 'text-amber-300' : 'text-white'
+          )}
+        >
+          {balance == null ? '—' : balance.toLocaleString()}
+        </span>
+      </Link>
+    );
+  }
 
   if (collapsed) {
     return (
