@@ -6,6 +6,7 @@ const { getRedisClient } = require('../config/redis');
 const { v4: uuidv4 } = require('uuid');
 const OpenAI = require('openai');
 const authMiddleware = require('../middleware/auth');
+const { aiLimiter } = require('../middleware/rateLimit');
 const { fetchPreferences, savePreferences, mergeAnswers } = require('./user');
 
 const IMAGE_BUCKET = 'chat-images';
@@ -261,7 +262,7 @@ function extractAnswersFromUserMessage(text) {
   return out;
 }
 
-router.post('/send', async (req, res) => {
+router.post('/send', aiLimiter, async (req, res) => {
   const { conversationId, message, imageUrls, mode, aspectRatio } = req.body;
   const userId = req.user.id;
   const userAspect = USER_ASPECT_TO_INTERNAL[aspectRatio] || null;

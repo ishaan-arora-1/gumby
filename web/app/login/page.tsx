@@ -124,7 +124,7 @@ function LoginInner() {
             <Logo size={36} />
           </div>
           <div className="glass rounded-card p-8 text-center">
-            <div className="w-14 h-14 rounded-full bg-brand-gradient mx-auto mb-6 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-full bg-white/10 border border-white/15 mx-auto mb-6 flex items-center justify-center">
               <Mail className="w-6 h-6 text-white" />
             </div>
             <h1 className="font-display font-bold text-2xl tracking-tight mb-2">
@@ -147,7 +147,7 @@ function LoginInner() {
             )}
             <div className="space-y-2">
               <Button
-                variant="gradient"
+                variant="primary"
                 size="lg"
                 onClick={resend}
                 disabled={loading}

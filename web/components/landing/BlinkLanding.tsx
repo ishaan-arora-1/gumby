@@ -666,9 +666,21 @@ function VideoWall({
       {Array.from({ length: layout.cols }).map((_, c) => {
         const dir = c % 2 === 0 ? 'blink-col-up' : 'blink-col-down';
         const slow = c % 3 === 0 ? 'blink-slow' : '';
-        const colTiles = tiles.slice(c * layout.perCol, c * layout.perCol + layout.perCol);
+        // Rotate each column's tile slice by `c` so adjacent same-direction
+        // columns (e.g. col 0 and col 2 on mobile) don't show the same
+        // videos lined up side-by-side.
+        const baseTiles = tiles.slice(c * layout.perCol, c * layout.perCol + layout.perCol);
+        const shift = c % baseTiles.length;
+        const colTiles = [...baseTiles.slice(shift), ...baseTiles.slice(0, shift)];
+        // Negative animation-delay desynchronises the vertical scroll phase
+        // so even-direction columns aren't moving in lockstep.
+        const phaseDelay = `${-2.3 * c}s`;
         return (
-          <div key={c} className={`flex flex-col gap-3.5 ${dir} ${slow}`}>
+          <div
+            key={c}
+            className={`flex flex-col gap-3.5 ${dir} ${slow}`}
+            style={{ animationDelay: phaseDelay }}
+          >
             {[...colTiles, ...colTiles].map((tile, i) => (
               <VTile key={`${c}-${i}`} tile={tile} />
             ))}
