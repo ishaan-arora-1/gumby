@@ -21,7 +21,7 @@ struct UGCDraft: Identifiable {
     /// "a good-looking <ethnicity> creator — " to the creator context
     /// before feeding it to Nano Banana / Kling. Allowed values mirror
     /// the picker in UGCStudioCard:
-    ///   "Asian American", "Indian American", "Asian".
+    ///   "Indian", "American", "Asian".
     /// Ignored in template mode.
     var creatorEthnicity: String
 

@@ -120,7 +120,7 @@ function TemplatePreviewModal({
         onClick={(e) => e.stopPropagation()}
         className="relative animate-[popIn_0.22s_ease-out]"
       >
-        <div className="aspect-[9/16] w-[min(90vw,420px)] max-h-[88vh] rounded-card overflow-hidden bg-black border border-white/10 shadow-2xl shadow-black/60">
+        <div className="aspect-[9/16] w-[min(90vw,420px)] max-h-[70vh] sm:max-h-[88vh] rounded-card overflow-hidden bg-black border border-white/10 shadow-2xl shadow-black/60">
           {template.video_url ? (
             <LoopingVideo
               src={template.video_url}

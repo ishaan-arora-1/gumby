@@ -84,14 +84,11 @@ export function CaptionPreview({
   const popDurationMs = 2000; // full loop cycle so the user sees the pop
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`group relative shrink-0 text-left transition ${
-        selected ? 'opacity-100' : 'opacity-80 hover:opacity-100'
-      }`}
-      aria-pressed={!!selected}
-    >
+    <>
+      {/* Style is hoisted OUT of the <button>. A <style> element nested
+          directly inside a <button> is invalid markup and mobile Safari
+          mis-handles hit-testing on it, which made caption tiles
+          un-tappable on phones. */}
       <style>{`
         @font-face {
           font-family: '${uniqueFontName}';
@@ -107,53 +104,63 @@ export function CaptionPreview({
           100% { transform: translate(-50%, -50%) scale(${preset.popFromPct / 100}); opacity: 0; }
         }
       `}</style>
-      <div
-        className={`relative overflow-hidden rounded-btn border bg-[#0e0e10] transition ${
-          selected
-            ? 'border-accent2 ring-2 ring-accent2/40'
-            : 'border-white/10 group-hover:border-white/25'
+      <button
+        type="button"
+        onClick={onSelect}
+        style={{ touchAction: 'manipulation' }}
+        className={`group relative shrink-0 cursor-pointer select-none text-left transition ${
+          selected ? 'opacity-100' : 'opacity-80 hover:opacity-100'
         }`}
-        style={{ width: FRAME_W, height: FRAME_H }}
+        aria-pressed={!!selected}
       >
-        {/* faux UGC background — soft radial gradient so the white caption
-            isn't sitting on pure black */}
         <div
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            background:
-              'radial-gradient(ellipse 70% 60% at 50% 35%, rgba(80,90,110,0.55) 0%, rgba(20,22,30,0.85) 60%, rgba(8,9,12,1) 100%)',
-          }}
-        />
-        {/* the caption itself. In block mode we wrap the text in a padded
-            rectangle so the box scales with the pop animation alongside it. */}
-        <div
-          className="absolute left-1/2 select-none whitespace-nowrap"
-          style={{
-            top: yPx,
-            transform: 'translate(-50%, -50%)',
-            fontFamily: `'${uniqueFontName}', sans-serif`,
-            fontSize: fontPx,
-            fontStyle: preset.italic ? 'italic' : 'normal',
-            color: preset.fillHex,
-            textShadow,
-            letterSpacing: '0.01em',
-            lineHeight: 1,
-            background: boxBackground,
-            padding: useBoxBackground ? `${boxPaddingPx * 0.6}px ${boxPaddingPx}px` : 0,
-            borderRadius: useBoxBackground ? 4 : 0,
-            animation: `${popKeyframes} ${popDurationMs}ms ease-in-out infinite`,
-            willChange: 'transform, opacity',
-          }}
+          className={`pointer-events-none relative overflow-hidden rounded-btn border bg-[#0e0e10] transition ${
+            selected
+              ? 'border-accent2 ring-2 ring-accent2/40'
+              : 'border-white/10 group-hover:border-white/25'
+          }`}
+          style={{ width: FRAME_W, height: FRAME_H }}
         >
-          {sampleText}
+          {/* faux UGC background — soft radial gradient so the white caption
+              isn't sitting on pure black */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(ellipse 70% 60% at 50% 35%, rgba(80,90,110,0.55) 0%, rgba(20,22,30,0.85) 60%, rgba(8,9,12,1) 100%)',
+            }}
+          />
+          {/* the caption itself. In block mode we wrap the text in a padded
+              rectangle so the box scales with the pop animation alongside it. */}
+          <div
+            className="pointer-events-none absolute left-1/2 select-none whitespace-nowrap"
+            style={{
+              top: yPx,
+              transform: 'translate(-50%, -50%)',
+              fontFamily: `'${uniqueFontName}', sans-serif`,
+              fontSize: fontPx,
+              fontStyle: preset.italic ? 'italic' : 'normal',
+              color: preset.fillHex,
+              textShadow,
+              letterSpacing: '0.01em',
+              lineHeight: 1,
+              background: boxBackground,
+              padding: useBoxBackground ? `${boxPaddingPx * 0.6}px ${boxPaddingPx}px` : 0,
+              borderRadius: useBoxBackground ? 4 : 0,
+              animation: `${popKeyframes} ${popDurationMs}ms ease-in-out infinite`,
+              willChange: 'transform, opacity',
+            }}
+          >
+            {sampleText}
+          </div>
         </div>
-      </div>
-      <div className={`mt-2 text-[11px] font-semibold tracking-wide ${
-        selected ? 'text-white' : 'text-white/70'
-      }`}>
-        {preset.label}
-      </div>
-    </button>
+        <div className={`pointer-events-none mt-2 text-[11px] font-semibold tracking-wide ${
+          selected ? 'text-white' : 'text-white/70'
+        }`}>
+          {preset.label}
+        </div>
+      </button>
+    </>
   );
 }

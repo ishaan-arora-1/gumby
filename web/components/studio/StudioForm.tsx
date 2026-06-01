@@ -46,8 +46,8 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
 
   // Direct-mode-only ethnicity hint. Defaults to the first option so
   // generation never blocks waiting on a click. Ignored in template mode.
-  const ETHNICITY_OPTIONS: Array<'Indian' | 'Asian American' | 'Asian'> = [
-    'Indian', 'Asian American', 'Asian',
+  const ETHNICITY_OPTIONS: Array<'Indian' | 'American' | 'Asian'> = [
+    'Indian', 'American', 'Asian',
   ];
   const [creatorEthnicity, setCreatorEthnicity] = useState<typeof ETHNICITY_OPTIONS[number]>('Indian');
 
@@ -56,6 +56,12 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
   const [videoDescription, setVideoDescription] = useState(prefill?.videoDescription ?? '');
   const [duration, setDuration] = useState<5 | 10>(prefill?.duration ?? 10);
   const [genScript, setGenScript] = useState(false);
+
+  // "Talking creator" toggle. On by default — the creator speaks the
+  // script. When off, the creator stays silent: we hide the script and
+  // captions entirely and the backend renders a clean, no-audio clip
+  // driven purely by the scene.
+  const [creatorSpeaks, setCreatorSpeaks] = useState(true);
 
   // Captions — on by default. Backend burns word-by-word TikTok-style
   // captions in the Reels safe zone via whisper + libass when enabled.
@@ -121,14 +127,17 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
       alert('Add a product name (or turn off "Include product")');
       return;
     }
-    if (!script.trim()) {
-      alert('Write or generate a script');
-      return;
-    }
     if (!videoDescription.trim()) {
       alert("Describe the scene (what's the creator doing)");
       return;
     }
+    if (creatorSpeaks && !script.trim()) {
+      alert('Write or generate a script (or turn off "Talking creator")');
+      return;
+    }
+    // When the creator stays silent there's no script, no audio and no
+    // captions — we send empty/false so the backend renders a clean clip.
+    const speaks = creatorSpeaks;
     onSubmit({
       templateId: template?.id ?? null,
       creatorDescription: template ? undefined : creatorDesc,
@@ -137,11 +146,12 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
       productDescription: includeProduct ? productDesc : '',
       productImageUrl: includeProduct ? productImageUrl ?? undefined : undefined,
       creatorEthnicity: template ? undefined : creatorEthnicity,
-      script,
+      creatorSpeaks: speaks,
+      script: speaks ? script : '',
       videoDescription,
       videoDuration: duration,
-      captionsEnabled,
-      captionPreset: captionsEnabled ? captionPresetId : undefined,
+      captionsEnabled: speaks ? captionsEnabled : false,
+      captionPreset: speaks && captionsEnabled ? captionPresetId : undefined,
     });
   };
 
@@ -203,20 +213,11 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
         title="Product"
         hint={includeProduct ? 'What are you selling?' : 'Talking-head video — no product.'}
         action={
-          <button
-            type="button"
-            onClick={() => setIncludeProduct((v) => !v)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-              includeProduct ? 'bg-accent2' : 'bg-white/15'
-            }`}
-            aria-label="Include product"
-          >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
-                includeProduct ? 'translate-x-5' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
+          <Toggle
+            on={includeProduct}
+            onToggle={() => setIncludeProduct((v) => !v)}
+            label="Include product"
+          />
         }
       >
         {includeProduct && (
@@ -285,29 +286,6 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
         </div>
       </Section>
 
-      <Section
-        title="Script"
-        hint={`What does the creator say? Keep it tight — ${duration}s of speech.`}
-        action={
-          <button
-            onClick={generateScriptAI}
-            disabled={genScript}
-            className="text-xs inline-flex items-center gap-1.5 text-accent2 hover:text-white"
-          >
-            <Wand2 className="w-3.5 h-3.5" />
-            {genScript ? 'Writing…' : 'Generate with AI'}
-          </button>
-        }
-      >
-        <textarea
-          value={script}
-          onChange={(e) => setScript(e.target.value)}
-          placeholder="Okay so I just got this thing and honestly…"
-          rows={5}
-          className={inputCls}
-        />
-      </Section>
-
       <Section title="Scene" hint="What's the creator doing?">
         <textarea
           value={videoDescription}
@@ -319,42 +297,83 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
       </Section>
 
       <Section
-        title="Captions"
+        title="Talking creator"
         hint={
-          captionsEnabled
-            ? 'Pick the look. Captions burn into the Reels safe zone.'
-            : 'Clean video with no captions on screen.'
+          creatorSpeaks
+            ? 'The creator speaks a script on camera.'
+            : 'Silent video — the creator won’t speak. No script, no captions. Just the scene above.'
         }
         action={
-          <button
-            type="button"
-            onClick={() => setCaptionsEnabled((v) => !v)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-              captionsEnabled ? 'bg-accent2' : 'bg-white/15'
-            }`}
-            aria-label="Toggle captions"
-          >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
-                captionsEnabled ? 'translate-x-5' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
+          <Toggle
+            on={creatorSpeaks}
+            onToggle={() => setCreatorSpeaks((v) => !v)}
+            label="Toggle talking creator"
+          />
         }
       >
-        {captionsEnabled ? (
-          <div className="flex flex-wrap gap-4">
-            {CAPTION_PRESETS.map((p) => (
-              <CaptionPreview
-                key={p.id}
-                preset={p}
-                selected={captionPresetId === p.id}
-                onSelect={() => setCaptionPresetId(p.id)}
+        {creatorSpeaks && (
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] uppercase tracking-[0.15em] text-white/45">
+                  Script
+                </div>
+                <button
+                  type="button"
+                  onClick={generateScriptAI}
+                  disabled={genScript}
+                  className="text-xs inline-flex items-center gap-1.5 text-accent2 hover:text-white"
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  {genScript ? 'Writing…' : 'Generate with AI'}
+                </button>
+              </div>
+              <div className="text-xs text-white/45 -mt-1">
+                What does the creator say? Keep it tight — {duration}s of speech.
+              </div>
+              <textarea
+                value={script}
+                onChange={(e) => setScript(e.target.value)}
+                placeholder="Okay so I just got this thing and honestly…"
+                rows={5}
+                className={inputCls}
               />
-            ))}
+            </div>
+
+            <div className="space-y-2 pt-1 border-t border-white/[0.06]">
+              <div className="flex items-center justify-between pt-3">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.15em] text-white/45">
+                    Captions
+                  </div>
+                  <div className="text-xs text-white/45 mt-1">
+                    {captionsEnabled
+                      ? 'Pick the look. Captions burn into the Reels safe zone.'
+                      : 'Clean video with no captions on screen.'}
+                  </div>
+                </div>
+                <Toggle
+                  on={captionsEnabled}
+                  onToggle={() => setCaptionsEnabled((v) => !v)}
+                  label="Toggle captions"
+                />
+              </div>
+              {captionsEnabled ? (
+                <div className="flex flex-wrap gap-4 pt-1">
+                  {CAPTION_PRESETS.map((p) => (
+                    <CaptionPreview
+                      key={p.id}
+                      preset={p}
+                      selected={captionPresetId === p.id}
+                      onSelect={() => setCaptionPresetId(p.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-white/45">Off</div>
+              )}
+            </div>
           </div>
-        ) : (
-          <div className="text-xs text-white/45">Off</div>
         )}
       </Section>
 
@@ -372,6 +391,44 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
 
 const inputCls =
   'w-full bg-composerInner border border-white/[0.06] rounded-btn px-4 py-3 text-sm placeholder:text-placeholder focus:outline-none focus:border-accent2/50 resize-none';
+
+/**
+ * Pill toggle switch shared by every on/off control in the form
+ * (product, talking creator, captions).
+ *
+ * `touchAction: 'manipulation'` + a generous tap target keep it reliably
+ * tappable on mobile Safari/Chrome, where the previous inline buttons
+ * sometimes swallowed taps.
+ */
+function Toggle({
+  on,
+  onToggle,
+  label,
+}: {
+  on: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={onToggle}
+      style={{ touchAction: 'manipulation' }}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition select-none ${
+        on ? 'bg-accent2' : 'bg-white/15'
+      }`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white transition ${
+          on ? 'translate-x-5' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
+  );
+}
 
 function Section({
   title,

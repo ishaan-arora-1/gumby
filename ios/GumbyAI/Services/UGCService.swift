@@ -117,8 +117,8 @@ final class UGCService {
         let captionsEnabled: Bool
         /// Caption style preset id — see CaptionPreset.all.
         let captionPresetId: String?
-        /// Direct-mode-only ethnicity hint ("Asian American" / "Indian
-        /// American" / "Asian"). Sent verbatim; nil in template mode.
+        /// Direct-mode-only ethnicity hint ("Indian" / "American" /
+        /// "Asian"). Sent verbatim; nil in template mode.
         let creatorEthnicity: String?
     }
 
