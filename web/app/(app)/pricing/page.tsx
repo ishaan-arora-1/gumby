@@ -117,7 +117,7 @@ export default function InAppPricingPage() {
             Bigger packs land at a per-credit discount. Credits never expire.
           </p>
         </div>
-        <div className="text-right">
+        <div className="w-full text-left sm:w-auto sm:text-right">
           <div className="text-[11px] uppercase tracking-[0.2em] text-white/40">
             Current balance
           </div>
