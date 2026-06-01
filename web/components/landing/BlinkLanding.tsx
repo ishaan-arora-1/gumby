@@ -354,19 +354,17 @@ function PricingSection() {
           </p>
         </div>
 
-        {isInternational && (
-          <div className="mx-auto mb-10 max-w-[680px] rounded-[16px] border border-white/10 bg-white/[0.04] px-5 py-4 text-center text-[13.5px] leading-[1.55] text-white/80">
-            <span className="font-semibold text-white">International payments go live next week.</span>{' '}
-            For early access, mail us at{' '}
-            <a
-              href={earlyAccessMailto}
-              className="text-white underline decoration-white/40 underline-offset-2 hover:decoration-white"
-            >
-              {SUPPORT_EMAIL}
-            </a>
-            .
-          </div>
-        )}
+        <div className="mx-auto mb-10 max-w-[680px] rounded-[16px] border border-white/10 bg-white/[0.04] px-5 py-4 text-center text-[13.5px] leading-[1.55] text-white/80">
+          <span className="font-semibold text-white">Not in India?</span>{' '}
+          Mail us at{' '}
+          <a
+            href={earlyAccessMailto}
+            className="text-white underline decoration-white/40 underline-offset-2 hover:decoration-white"
+          >
+            {SUPPORT_EMAIL}
+          </a>{' '}
+          to get special access.
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[18px]">
           {packs.map((p) => {
@@ -419,7 +417,12 @@ function PricingSection() {
 
                 <ul className="mt-5 space-y-2 text-[13px] text-white/70 flex-1">
                   <LandingFeature>{Math.floor(p.credits / 50)} × 5-second videos</LandingFeature>
-                  <LandingFeature>{Math.floor(p.credits / 100)} × 10-second videos</LandingFeature>
+                  <LandingFeature>
+                    {Math.floor(p.credits / 100)} × 10-second videos
+                    {p.credits % 100 >= 50
+                      ? ` + ${Math.floor((p.credits % 100) / 50)} × 5-second video`
+                      : ''}
+                  </LandingFeature>
                   <LandingFeature>Captions baked in</LandingFeature>
                   <LandingFeature>Credits never expire</LandingFeature>
                 </ul>
@@ -482,8 +485,8 @@ function PromoBar() {
          style={{ background: 'linear-gradient(90deg, #e11d2b, #ff2e3f)' }}>
       <span>
         <span aria-hidden>🔥</span>{' '}
-        <span className="hidden sm:inline">Kling 3.0 Pro is <b className="font-bold">LIVE</b> — create your first AI ad for just <b className="font-bold">$1</b></span>
-        <span className="sm:hidden">Your first AI ad for just <b className="font-bold">$1</b></span>
+        <span className="hidden sm:inline">Kling 3.0 Pro is <b className="font-bold">LIVE</b> — create your first AI ad now</span>
+        <span className="sm:hidden">Create your first AI ad now</span>
       </span>
       <a
         href="#cta-main"
@@ -619,7 +622,7 @@ function Hero({ tiles, layout }: { tiles: Tile[]; layout: WallLayout }) {
               boxShadow: '0 14px 44px rgba(225,29,43,0.5), inset 0 1px 0 rgba(255,255,255,0.2)',
             }}
           >
-            <span className="relative z-[2]">Create Your Ad For $1 →</span>
+            <span className="relative z-[2]">Create Your Ad →</span>
           </Link>
         </div>
 
@@ -781,7 +784,7 @@ function HowItWorks() {
 ============================================================ */
 function FeatureBreakdown() {
   const items: {
-    kicker: 0 | 1 | 2;
+    kicker: number;
     title: string;
     desc: string;
     Mockup: () => JSX.Element;
@@ -790,25 +793,41 @@ function FeatureBreakdown() {
     {
       kicker: 0,
       title: 'Write or generate your script',
-      desc: 'Enter your hook or let AI write three variations in your brand voice — in under 10 seconds.',
+      desc: 'Enter your hook or let AI write three variations in your brand voice — in seconds.',
       Mockup: ScriptMockup,
       mockupRight: true,
     },
     {
       kicker: 1,
-      title: 'Choose from 200+ AI creators',
-      desc: 'Pick a hyper-real presenter from our library — or generate a brand-new one from a single prompt.',
+      title: 'Choose from a creator template',
+      desc: 'Pick a hyper-real presenter from our template library — or generate a brand-new creator from a single prompt.',
       Mockup: ActorsMockup,
       mockupRight: false,
     },
     {
       kicker: 2,
+      title: 'Add your product',
+      desc: 'Drop in your product name, a few details, or a photo. Blink weaves it naturally into the script and the scene.',
+      Mockup: ProductMockup,
+      mockupRight: true,
+    },
+    {
+      kicker: 3,
       title: 'Generate your video',
-      desc: 'Combine creator and script to ship 9:16 lip-synced ads in 60 seconds — ready for TikTok and Reels.',
+      desc: 'Combine creator, script, and product into a 9:16 lip-synced ad — ready for TikTok and Reels.',
       Mockup: VideoMockup,
+      mockupRight: false,
+    },
+    {
+      kicker: 4,
+      title: 'Add captions, your way',
+      desc: 'Burn in captions with one tap. Choose from 10 ready-made styles — bold, hype, clean, block, pink-pop and more.',
+      Mockup: CaptionsMockup,
       mockupRight: true,
     },
   ];
+
+  const totalSteps = items.length;
 
   return (
     <section
@@ -836,7 +855,7 @@ function FeatureBreakdown() {
             ].join(' ')}
           >
             <div className={`flex border-b border-white/10 md:border-b-0 ${it.mockupRight ? 'md:border-r md:border-white/10' : 'md:order-2'}`}>
-              <FeatureTextCard kicker={it.kicker} title={it.title} desc={it.desc} />
+              <FeatureTextCard kicker={it.kicker} total={totalSteps} title={it.title} desc={it.desc} />
             </div>
             <div className={`flex ${it.mockupRight ? '' : 'md:order-1 md:border-r md:border-white/10'}`}>
               <FeatureMockupCard>
@@ -850,10 +869,10 @@ function FeatureBreakdown() {
   );
 }
 
-function FeatureTextCard({ kicker, title, desc }: { kicker: 0 | 1 | 2; title: string; desc: string }) {
+function FeatureTextCard({ kicker, total, title, desc }: { kicker: number; total: number; title: string; desc: string }) {
   return (
     <div className="relative flex w-full min-h-[220px] flex-col bg-white/[0.03] p-6 text-left transition-colors duration-300 ease-out hover:bg-white/[0.05] sm:p-7 md:min-h-[340px]">
-      <StepIndicator active={kicker} />
+      <StepIndicator active={kicker} total={total} />
       <div className="mt-auto pt-8">
         <h3 className="font-display-blink text-[20px] font-bold leading-tight sm:text-[22px]">{title}</h3>
         <p className="mt-2 text-[14px] leading-[1.55] text-white/60 sm:text-[15px]">{desc}</p>
@@ -876,10 +895,10 @@ function FeatureMockupCard({ children }: { children: React.ReactNode }) {
   );
 }
 
-function StepIndicator({ active, className = '' }: { active: 0 | 1 | 2; className?: string }) {
+function StepIndicator({ active, total = 3, className = '' }: { active: number; total?: number; className?: string }) {
   return (
     <div className={`flex gap-1.5 ${className}`}>
-      {[0, 1, 2].map((i) => (
+      {Array.from({ length: total }, (_, i) => i).map((i) => (
         <span
           key={i}
           className="h-[3px] w-7 rounded-full"
@@ -1053,6 +1072,109 @@ function VideoMockup() {
   );
 }
 
+/* ----- Mockup 3: Add your product ----- */
+function ProductMockup() {
+  return (
+    <div className="w-full max-w-[420px]">
+      <div
+        className="rounded-2xl border border-white/10 bg-[#0a0b10] p-4 text-left"
+        style={{ boxShadow: '0 28px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)' }}
+      >
+        <div className="flex items-center gap-3">
+          {/* Reuse a real template poster as a stand-in product shot */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={TILE_VIDEOS[1].poster}
+            alt=""
+            className="h-14 w-14 shrink-0 rounded-xl border border-white/10 object-cover"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/35">Product name</div>
+            <div className="mt-1 truncate text-[14px] font-semibold text-white">Lumi Glow Serum</div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-white/35">Details</div>
+          <p className="mt-1.5 text-[12.5px] leading-[1.5] text-white/60">
+            Vitamin-C serum that brightens dull skin in two weeks. Lightweight, vegan, fragrance-free.
+          </p>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <MockChip>
+            <Plus className="h-3 w-3" /> Add photo
+          </MockChip>
+          <MockChip>
+            <Plus className="h-3 w-3" /> Paste product URL
+          </MockChip>
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white"
+                style={{ background: 'linear-gradient(135deg, #4d82ff, #7a4dff 60%, #ff2e3f)' }}>
+            <Check className="h-3 w-3" /> Linked to script
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ----- Mockup 5: Caption presets ----- */
+function CaptionsMockup() {
+  const styles: { label: string; fill: string; box?: string; outline?: boolean }[] = [
+    { label: 'Bold', fill: '#ffffff', outline: true },
+    { label: 'Hype', fill: '#ffffff', outline: true },
+    { label: 'Yellow', fill: '#facc15', outline: true },
+    { label: 'Block Blue', fill: '#ffffff', box: '#3b82f6' },
+    { label: 'Pink Pop', fill: '#ffffff', box: '#ec4899' },
+    { label: 'Block Black', fill: '#ffffff', box: '#000000' },
+  ];
+  return (
+    <div className="w-full max-w-[420px]">
+      <div
+        className="rounded-2xl border border-white/10 bg-[#0a0b10] p-4 text-left"
+        style={{ boxShadow: '0 28px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)' }}
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-[12px] font-semibold text-white">Caption style</span>
+          <span className="text-[11px] text-white/35">10 presets</span>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {styles.map((s, i) => (
+            <div
+              key={s.label}
+              className={[
+                'flex h-12 items-center justify-center rounded-lg border text-center text-[12px] font-black uppercase',
+                i === 3 ? 'border-[#4d82ff] ring-1 ring-[#4d82ff]/60' : 'border-white/10',
+              ].join(' ')}
+              style={{ background: 'rgba(255,255,255,0.03)' }}
+            >
+              <span
+                style={{
+                  color: s.fill,
+                  background: s.box,
+                  padding: s.box ? '2px 5px' : undefined,
+                  borderRadius: s.box ? 3 : undefined,
+                  textShadow: s.outline && !s.box ? '0 1px 0 #000, 0 0 2px #000' : undefined,
+                }}
+              >
+                {s.label.split(' ')[0]}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex items-center gap-1.5 border-t border-white/5 pt-3">
+          <MockChip>Auto-timed</MockChip>
+          <MockChip>Burned in</MockChip>
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white"
+                style={{ background: 'linear-gradient(135deg, #4d82ff, #7a4dff 60%, #ff2e3f)' }}>
+            <Check className="h-3 w-3" /> Applied
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============================================================
    SHOWCASE (cards w/ live video thumbs)
 ============================================================ */
@@ -1065,7 +1187,7 @@ function Showcase() {
       video: SHOWCASE_VIDEOS[0],
     },
     {
-      t: 'Script → video in 60s',
+      t: 'Script → video, fast',
       d: 'Paste a hook, pick a voice, hit generate. Ten variations before your coffee cools.',
       b: 'FAST',
       video: SHOWCASE_VIDEOS[1],
@@ -1073,7 +1195,7 @@ function Showcase() {
     {
       t: 'Built for ads',
       d: '9:16 native, captions baked in, ready to upload straight to TikTok & Reels.',
-      b: '$1',
+      b: 'ADS',
       video: SHOWCASE_VIDEOS[2],
     },
   ];
@@ -1137,19 +1259,19 @@ function ShowcaseVideo({ src, poster }: { src: string; poster: string }) {
 function SpeedSection() {
   const beats = [
     {
-      time: '~10s',
-      title: 'Script in seconds',
-      desc: 'AI Script writer drafts three hook variations in your brand voice — paste a product, get copy.',
+      time: 'Cast',
+      title: 'Creator templates',
+      desc: 'Choose a hyper-real presenter from our creator-template library — or generate a brand-new one from a single prompt.',
     },
     {
-      time: '~60s',
-      title: 'Video in a minute',
-      desc: 'Kling 3.0 Pro renders a 9:16 lip-synced ad with baked-in captions, ready to upload.',
+      time: '10',
+      title: 'Caption presets',
+      desc: 'Ten ready-made caption styles — bold, hype, clean, yellow, block, pink-pop and more — burned in and auto-timed to your script.',
     },
     {
-      time: 'In parallel',
-      title: 'Iterate, don’t wait',
-      desc: 'Queue ten variations at once and let the renders fan out. Pick winners by the time your coffee cools.',
+      time: '9:16',
+      title: 'Post-ready exports',
+      desc: 'Every ad renders native vertical with captions baked in — upload straight to TikTok, Reels and Shorts.',
     },
   ];
 
@@ -1162,8 +1284,8 @@ function SpeedSection() {
         Generate at the <span className="blink-accent-text">speed of thought.</span>
       </h2>
       <p className="mx-auto mt-5 max-w-[600px] text-center text-[17px] leading-[1.6] text-white/60">
-        No render queues. No waiting room. Type your idea and watch the ad render in real time —
-        then iterate again, and again, until the data picks a winner.
+        Type your idea, pick a template, and watch the ad come together — then iterate again,
+        and again, until the data picks a winner.
       </p>
 
       <div className="mx-auto mt-16 grid max-w-[1080px] grid-cols-1 gap-[22px] md:grid-cols-3">
@@ -1204,15 +1326,11 @@ function Faq() {
     },
     {
       q: 'How long does a video take to generate?',
-      a: 'About 60 seconds for a 9:16 ad. You can queue ten variations and let them all render in parallel.',
+      a: 'Just a short wait for a 9:16 ad. You can queue ten variations and let them all render in parallel.',
     },
     {
       q: 'Can I bring my own creator?',
       a: 'Yes. Generate a brand-new AI creator from a single prompt, or promote any generation to a reusable template.',
-    },
-    {
-      q: 'How does the $1 first ad work?',
-      a: 'Sign up and your first generation is $1 — no subscription, no credit card needed to try the product.',
     },
     {
       q: 'Where do I post the videos?',
@@ -1283,7 +1401,7 @@ function FinalCta() {
         className="font-display-blink font-black"
         style={{ fontSize: 'clamp(34px, 5.5vw, 68px)', letterSpacing: '-0.03em', lineHeight: 1 }}
       >
-        Your first ad costs <span style={{ color: '#ff2e3f' }}>$1.</span>
+        Make your first ad <span style={{ color: '#ff2e3f' }}>today.</span>
       </h2>
       <p className="mx-auto mt-[22px] max-w-[480px] text-[17px] text-white/60">
         Stop guessing what converts. Generate ten variations before lunch and let the data decide.
@@ -1297,7 +1415,7 @@ function FinalCta() {
             boxShadow: '0 14px 44px rgba(225,29,43,0.5), inset 0 1px 0 rgba(255,255,255,0.2)',
           }}
         >
-          <span className="relative z-[2]">Create Your Ad For $1 →</span>
+          <span className="relative z-[2]">Create Your Ad →</span>
         </Link>
         <a
           href="#showcase"
