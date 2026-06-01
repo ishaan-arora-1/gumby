@@ -376,7 +376,7 @@ struct UGCStudioCard: View {
 
     private var sceneSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Describe what you want the creator doing on camera. We'll handle the rest.")
+            Text("Describe what the creator is doing in the scene — the action, the body language, the vibe.")
                 .font(.system(size: 13))
                 .foregroundColor(Color(hex: "8E8E93"))
 
@@ -387,8 +387,8 @@ struct UGCStudioCard: View {
                 ),
                 label: "Scene",
                 placeholder: draft.includeProduct
-                    ? "e.g. Creator picks up the product, shows it to camera, uses it and reacts"
-                    : "e.g. Creator talks to camera, gestures expressively, smiles and leans in",
+                    ? "e.g. Creator picks up the product, glances at it, smiles, and uses it naturally"
+                    : "e.g. Creator gestures expressively, smiles, and speaks with relaxed energy",
                 minHeight: 90,
                 isFocused: focused == .video
             )

@@ -126,7 +126,7 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
       return;
     }
     if (!videoDescription.trim()) {
-      alert("Describe the scene (what's happening on camera)");
+      alert("Describe the scene (what's the creator doing)");
       return;
     }
     onSubmit({
@@ -308,11 +308,11 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
         />
       </Section>
 
-      <Section title="Scene" hint="What's happening on camera?">
+      <Section title="Scene" hint="What's the creator doing?">
         <textarea
           value={videoDescription}
           onChange={(e) => setVideoDescription(e.target.value)}
-          placeholder="Holding the bottle up, smiling, soft daylight"
+          placeholder="Holding the bottle, glancing at it, smiling, soft daylight"
           rows={2}
           className={inputCls}
         />

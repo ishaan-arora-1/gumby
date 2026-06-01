@@ -284,21 +284,36 @@ router.post('/parse-prompt', async (req, res) => {
 
   try {
     // The parser extracts three independent pieces of context from the
-    // free-form prompt: the creator, the product, AND the on-camera action
+    // free-form prompt: the creator, the product, AND the action
     // (videoDescription). videoDescription is what we feed straight to
     // Kling 3.0 Pro as the action prompt, so it has to be vivid and
     // specific. If the user didn't describe the action in their prompt,
     // we synthesize a sensible default — the user can still edit it in
     // the Studio card before generating.
+    //
+    // CRITICAL: videoDescription must NOT use camera-aware language
+    // ("looks at camera", "talks to camera", "in front of the mirror",
+    // etc.). Kling reads those phrases literally and either renders a
+    // visible camera/mirror in the frame or biases the shot toward an
+    // unflattering webcam look. We want a fly-on-the-wall description
+    // of what the creator is doing in their space — the model already
+    // knows the output is a video, so framing the action as filmed
+    // double-encodes it and breaks the result.
     const systemPrompt = [
       'You are a UGC video assistant. The user will give you a free-form prompt describing a video they want to create.',
       'The video may or may not involve a product. Extract structured fields from their prompt and return ONLY a JSON object — no prose, no markdown.',
       '',
       'Fields to extract:',
-      '- creatorDescription: Physical appearance + setting of the person in the video (e.g. "20-year-old athletic man in a modern gym"). If not specified, infer a reasonable creator. 1-2 sentences max.',
+      '- creatorDescription: Physical appearance + setting of the person in the video (e.g. "20-year-old athletic woman in a modern gym"). If not specified, infer a reasonable creator. 1-2 sentences max.',
       '- productName: The product being advertised. Use empty string "" if no product is mentioned or the video is not about a product.',
       '- productDescription: What the product does / key selling points. Empty string if no product.',
-      '- videoDescription: A concrete description of what the creator should DO on camera — the action, movement, body language, and interactions. Should describe one continuous shot (no scene cuts). If the user did not specify the action, infer a natural action that matches the creator and product. Be vivid and specific. 1-3 sentences.',
+      '- videoDescription: A concrete description of what the creator IS DOING in the scene — the action, the movement, the body language, the interaction with the product (if any). Describe it as if you were watching the moment happen naturally in front of you. One continuous shot (no cuts).',
+      '   STRICT RULES for videoDescription:',
+      '   - DO NOT use camera or recording language. NEVER write "to camera", "on camera", "at the camera", "for the viewer", "directly at us", "for the audience".',
+      '   - DO NOT use mirror or reflection language. NEVER write "in front of the mirror", "looking in the mirror", "mirror selfie", "vanity mirror selfie".',
+      '   - DO NOT describe the shot itself. NEVER write "the shot opens with", "the camera pans", "close-up of", "we see", "phone video".',
+      '   - DO write what the creator does, where they look, what they touch, how they move, what their face does. Example: "She picks up the bottle, holds it close to her face, smells it, smiles slightly, then sets it down on the counter."',
+      '   - 1-3 sentences. Specific, vivid, present-tense.',
       '- suggestedDuration: 5 or 10 seconds. Default 10. Use 5 only for very simple single-beat concepts.',
       '- includeProduct: boolean — true if the user mentioned a specific product to feature, false otherwise.',
       '',
