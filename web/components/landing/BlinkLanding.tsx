@@ -992,7 +992,9 @@ function MockIconBtn({ children, accent }: { children: React.ReactNode; accent?:
 function ActorsMockup() {
   // Reuse the same Cloudinary template posters as the hero wall so the
   // mockup feels real, not stocky. Poster only — no extra <video> decoders.
-  const cards = TILE_VIDEOS.slice(0, 5);
+  // Switch the 2nd and 3rd pictures (indices 1 and 2).
+  const base = TILE_VIDEOS.slice(0, 5);
+  const cards = [base[0], base[2], base[1], base[3], base[4]];
   const names = ['Angela', 'Mike', 'Saman', 'Mila', 'Jason'];
   const layout = [
     { x: -120, y: 22, rot: -10, z: 1, scale: 0.9 },
@@ -1035,7 +1037,13 @@ function ActorsMockup() {
 
 /* ----- Mockup 3: Final video result ----- */
 function VideoMockup() {
-  const c = [TILE_VIDEOS[5], TILE_VIDEOS[4], TILE_VIDEOS[3]];
+  // left, center, right
+  const phoneIds = [
+    'v1780166202/f0eeb973-9fec-4ac3-949a-43eef1379277_2_mlt9hy', // left
+    'v1780320561/01-skincare-daylight-bold_o2q2d7',              // center
+    'v1779194268/gym_wjiimf',                                    // right
+  ];
+  const c = phoneIds.map((id) => ({ src: cldVideo(id, 480), poster: cldPoster(id, 480) }));
   const layout = [
     { x: -95, y: 14, rot: -8, z: 1, scale: 0.92 },
     { x: 0, y: -12, rot: 0, z: 3, scale: 1.08 },
@@ -1081,23 +1089,22 @@ function ProductMockup() {
         style={{ boxShadow: '0 28px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)' }}
       >
         <div className="flex items-center gap-3">
-          {/* Reuse a real template poster as a stand-in product shot */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={TILE_VIDEOS[1].poster}
+            src="https://res.cloudinary.com/dgx0o3xfx/image/upload/f_auto,q_auto,w_120/v1780344460/download_ljd2qd.webp"
             alt=""
             className="h-14 w-14 shrink-0 rounded-xl border border-white/10 object-cover"
           />
           <div className="min-w-0 flex-1">
             <div className="text-[10px] uppercase tracking-[0.18em] text-white/35">Product name</div>
-            <div className="mt-1 truncate text-[14px] font-semibold text-white">Lumi Glow Serum</div>
+            <div className="mt-1 truncate text-[14px] font-semibold text-white">Diamond Tops</div>
           </div>
         </div>
 
         <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
           <div className="text-[10px] uppercase tracking-[0.18em] text-white/35">Details</div>
           <p className="mt-1.5 text-[12.5px] leading-[1.5] text-white/60">
-            Vitamin-C serum that brightens dull skin in two weeks. Lightweight, vegan, fragrance-free.
+            Brilliant-cut diamond studs set in 18k gold. Everyday sparkle — hypoallergenic, certified, lifetime warranty.
           </p>
         </div>
 
@@ -1188,7 +1195,7 @@ function Showcase() {
     },
     {
       t: 'Script → video, fast',
-      d: 'Paste a hook, pick a voice, hit generate. Ten variations before your coffee cools.',
+      d: 'Make your creator do anything with just a prompt.',
       b: 'FAST',
       video: SHOWCASE_VIDEOS[1],
     },
