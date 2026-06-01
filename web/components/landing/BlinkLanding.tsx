@@ -813,16 +813,16 @@ function FeatureBreakdown() {
     },
     {
       kicker: 3,
-      title: 'Generate your video',
-      desc: 'Combine creator, script, and product into a 9:16 lip-synced ad — ready for TikTok and Reels.',
-      Mockup: VideoMockup,
+      title: 'Add captions, your way',
+      desc: 'Burn in captions with one tap. Choose from 10 ready-made styles — bold, hype, clean, block, pink-pop and more.',
+      Mockup: CaptionsMockup,
       mockupRight: false,
     },
     {
       kicker: 4,
-      title: 'Add captions, your way',
-      desc: 'Burn in captions with one tap. Choose from 10 ready-made styles — bold, hype, clean, block, pink-pop and more.',
-      Mockup: CaptionsMockup,
+      title: 'Generate your video',
+      desc: 'Combine creator, script, and product into a 9:16 lip-synced ad — ready for TikTok and Reels.',
+      Mockup: VideoMockup,
       mockupRight: true,
     },
   ];
@@ -1151,7 +1151,7 @@ function CaptionsMockup() {
               key={s.label}
               className={[
                 'flex h-12 items-center justify-center rounded-lg border text-center text-[12px] font-black uppercase',
-                i === 3 ? 'border-[#4d82ff] ring-1 ring-[#4d82ff]/60' : 'border-white/10',
+                i === 0 ? 'border-[#4d82ff] ring-1 ring-[#4d82ff]/60' : 'border-white/10',
               ].join(' ')}
               style={{ background: 'rgba(255,255,255,0.03)' }}
             >
