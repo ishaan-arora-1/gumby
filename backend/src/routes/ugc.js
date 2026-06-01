@@ -144,66 +144,78 @@ router.post('/script', async (req, res) => {
     targetSeconds: requestedSeconds,
   } = req.body || {};
 
-  const tplName = template?.name || 'casual UGC';
   const tplActor = template?.actor_name || 'a creator';
   const tplSetting = template?.setting || '';
   const tplSampleScript = template?.sample_script || '';
   const hasProduct = productName && productName.trim().length > 0;
-  // Target the voice-over length to match the video duration the user
-  // selected (5 or 10s). Kling 3.0 Pro renders fixed-length clips, so an
-  // overlong script forces the TTS to speed up and the lip-sync to clip
-  // the tail. We size the script to ~2.0 spoken words per second with a
-  // hard upper bound, which leaves the creator room to breathe and land
-  // the last beat cleanly.
-  const targetSeconds = Math.min(15, Math.max(5, Number(requestedSeconds) || 10));
-  const wordTarget = Math.round(targetSeconds * 2.0);
-  const wordMax = Math.round(targetSeconds * 2.4);
 
-  // We are NOT writing ad copy. We are writing what a real person would
-  // actually say into their phone camera while filming a casual video for
-  // their followers. The previous prompt drifted into ad-copy territory
-  // ("check this out", "here's what it does") which reads as obviously
-  // AI-written. The rewrite below forces a personal-story angle:
-  // creator talks about *their own* experience, not the product's
-  // features.
+  // Word budget tuned per duration. 5s clips don't fit the old 2.0/2.4
+  // wps budget — the model would write 10 words and the safety-net trim
+  // would chop the CTA off, leaving fragments like "I have been using
+  // this for two days". Bumping to 2.4/2.8 wps for short clips gives
+  // room for a proper 3-beat script (reaction → reason → soft CTA),
+  // while 10s+ keeps the slower 2.0/2.4 cadence that feels natural.
+  const targetSeconds = Math.min(15, Math.max(5, Number(requestedSeconds) || 10));
+  const wpsTarget = targetSeconds <= 5 ? 2.4 : 2.0;
+  const wpsMax    = targetSeconds <= 5 ? 2.8 : 2.4;
+  const wordTarget = Math.round(targetSeconds * wpsTarget);
+  const wordMax    = Math.round(targetSeconds * wpsMax);
+
+  // Voice rules: punchy UGC creator. Excited, complete, confident. The
+  // previous version banned excited adjectives and CTAs which forced the
+  // model into stilted "personal essay" output — that's not how short
+  // UGC reads. Gen Z punchy + a soft CTA is the right vibe.
   const sys = [
-    "You write what a real person would say into their phone camera — NOT ad copy, NOT marketing copy, NOT a product pitch.",
-    "Imagine a friend casually telling their followers about something they discovered. They are not selling — they are sharing.",
-    "Output ONE script ONLY. Plain text. No headings, no quotes, no stage directions, no parentheses, no labels, no asterisks.",
+    "You write a short UGC ad script — what a Gen Z creator would actually say into their phone camera.",
+    "Output ONE script ONLY. Plain text. No headings, no quotes, no stage directions, no parentheses, no labels, no asterisks, no emojis, no hashtags.",
     "",
-    "VOICE RULES (these matter — break any of these and the output sounds AI-written):",
-    "- First-person personal experience. Lead with what happened to YOU, how YOU feel, what YOU noticed. Examples: 'I recently got something I'm kind of obsessed with…', 'Okay so I've been using this for a few weeks and…', 'I genuinely did not expect to like this as much as I do…'.",
-    "- Conversational, mid-sentence energy. Use contractions everywhere (I've, I'm, that's, don't, kinda, gonna). Use casual filler the way humans actually do: 'honestly', 'like', 'okay so', 'real talk', 'kind of', 'lowkey', 'I mean'. Don't overdo it — one or two per script.",
-    "- Specific over generic. Mention a tiny concrete detail (a moment, a feeling, a side-effect, a place you used it). Generic adjectives like 'amazing', 'incredible', 'life-changing', 'game-changer' are BANNED.",
-    "- No marketing verbs. NEVER use 'check this out', 'you have to try', 'introducing', 'this product', 'this brand', 'features', 'benefits', 'shop now', 'link in bio', 'get yours', 'sponsored', 'partnership'. NEVER address the audience as 'guys' more than once.",
-    "- No corporate transitions. NEVER use 'but here's the thing', 'spoiler alert', 'plot twist'.",
-    "- The 'CTA' should be a soft personal nudge a friend would say, not ad copy. Good: 'if you've been on the fence I'd just try it', 'do with that what you will', 'felt rude not to share'. Bad: 'click the link', 'shop now', 'don't miss out'.",
-    "- Sound mid-thought. It is fine — preferred, even — to start with 'so', 'okay', 'I', or a fragment.",
-    "- Vary sentence length. Some short. Some medium. Avoid three same-length sentences in a row.",
-    "- No emojis, no hashtags, no brackets, no asterisks. Never mention scripts, AI, ads, or video.",
+    "VIBE:",
+    "- Excited. Confident. Like you just discovered something great and have to tell a friend.",
+    "- First-person. 'I love this', 'I'm obsessed', 'I cannot stop using it' — that energy.",
+    "- Gen Z language is welcome: 'honestly', 'literally', 'lowkey', 'no but', 'okay so', 'for real', 'I am obsessed', 'this slaps', 'trust me'. Use 1-2 per script max — sprinkled, not stuffed.",
+    "- Specific details land harder than generic praise. Mention a small concrete thing (the shade, the smell, the feel, a moment you noticed). But don't ban excited adjectives — 'so good', 'amazing', 'obsessed' all read as natural in this register.",
     "",
-    `LENGTH IS A HARD CONSTRAINT. The creator has exactly ${targetSeconds} seconds on camera.`,
-    `Write ${wordTarget} words. Absolute maximum ${wordMax} words. Count your words before responding.`,
-    `If you go over, the TTS will speed up unnaturally and the lip-sync will clip the ending. Shorter is always better than longer.`,
-    `For a ${targetSeconds}-second video: ${targetSeconds <= 5 ? 'one tight sentence, maybe two short fragments. A single beat.' : 'two or three sentences max. One setup, one payoff. No third beat.'}`,
+    "STRUCTURE:",
+    `- For a ${targetSeconds}-second video: ${
+      targetSeconds <= 5
+        ? '2 to 3 SHORT complete sentences in a [reaction] → [reason / detail] → [soft CTA] shape.'
+        : '3 to 4 sentences in a [hook / personal moment] → [reason / detail] → [soft CTA] shape.'
+    }`,
+    "- Soft CTAs are GOOD and expected. End with: 'get it', 'you need this', 'trust me', 'add to cart', 'do it', 'go grab one', 'just buy it'. NEVER use corporate phrases like 'shop now', 'click the link', 'link in bio', 'sponsored', 'limited time', 'don't miss out'.",
+    "- COMPLETE SENTENCES ONLY. Every sentence must finish. The script MUST land — the last sentence is the CTA and it has to be there. Mid-thought fragments are WRONG output.",
+    "",
+    "EXAMPLES of the energy / length for a 5-second video (use as tone reference, NOT to copy):",
+    "- 'This lip gloss is everything. The shade hits different. Get it.'",
+    "- 'Lowkey obsessed with this protein. So clean and actually works. You need it.'",
+    "- 'This serum literally changed my skin. I am not even kidding. Trust me, grab one.'",
+    "",
+    "EXAMPLES for a 10-second video:",
+    "- 'Okay so I have been wearing this gloss every day for a week and the color is insane. Compliments nonstop. If you have been on the fence, just get it.'",
+    "- 'This protein powder is literally the cleanest I have tried — mixes perfectly, tastes amazing, no bloat. Honestly, get it as soon as you can.'",
+    "",
+    `LENGTH IS A HARD CONSTRAINT. ${wordTarget} words is the sweet spot. ${wordMax} words absolute maximum. Count your words mentally before responding — overlong scripts make the TTS speed up and the lip-sync clips the ending.`,
   ].join('\n');
 
   const userPrompt = hasProduct
     ? [
-        `Creator vibe: ${tplActor} filming casually in ${tplSetting}.`,
-        tplSampleScript ? `Creator's normal voice (just a tone reference, do NOT copy): "${tplSampleScript}"` : '',
-        `What they're talking about: ${productName}`,
-        productDescription ? `Context (for YOU, do not parrot this back — translate it into a personal moment): ${productDescription}` : '',
-        tone ? `Tone the brand is going for: ${tone}` : '',
+        `Creator vibe: ${tplActor} filming casually in ${tplSetting || 'a clean phone-shot setting'}.`,
+        tplSampleScript ? `Creator's normal voice (tone reference, do NOT copy verbatim): "${tplSampleScript}"` : '',
+        `Product being featured: ${productName}`,
+        productDescription ? `Why it's good (translate into excited natural reactions — don't recite this verbatim): ${productDescription}` : '',
+        tone ? `Brand tone hint: ${tone}` : '',
         '',
-        'Write what this person would actually say into their phone. They are sharing a personal experience with something they like — they are not pitching it. Lead with their own moment ("I recently…", "I\'ve been…", "Okay so I…"). Talk about how it fits into their life, not what the product is or does. End with a casual personal nudge, never an ad CTA.',
+        `Write a complete punchy UGC script for this product. ${
+          targetSeconds <= 5
+            ? '2-3 short sentences. Reaction → reason → soft CTA. End with something like "get it" or "you need this".'
+            : '3-4 sentences. Hook → detail → CTA. End with a soft "get it" / "trust me" / "go grab one" line.'
+        } The final sentence MUST be the CTA — never trail off into a fragment.`,
       ].filter(Boolean).join('\n')
     : [
-        `Creator vibe: ${tplActor} filming casually in ${tplSetting}.`,
-        tplSampleScript ? `Creator's normal voice (just a tone reference, do NOT copy): "${tplSampleScript}"` : '',
+        `Creator vibe: ${tplActor} filming casually in ${tplSetting || 'a clean phone-shot setting'}.`,
+        tplSampleScript ? `Creator's normal voice (tone reference): "${tplSampleScript}"` : '',
         tone ? `Tone: ${tone}` : '',
         '',
-        'Write what this person would actually say to their followers — a casual personal moment, a small story, an opinion, or something they\'ve been thinking about. First-person. Specific, not generic. Ends on a real human thought, not a CTA. No product placement.',
+        'Write what this person would casually say to their followers — a small personal moment, opinion, or thought. First-person, complete sentences, lands on a real ending. No product placement.',
       ].filter(Boolean).join('\n');
 
   try {
@@ -216,27 +228,46 @@ router.post('/script', async (req, res) => {
       ],
     });
     let script = (completion.choices?.[0]?.message?.content || '').trim();
-    // Safety net: if the model overshoots the hard cap, trim to the last
-    // sentence boundary that fits. Keeps the script playable inside the
-    // fixed video duration even when the prompt instructions drift.
-    const words = script.split(/\s+/);
-    if (words.length > wordMax) {
-      const trimmed = words.slice(0, wordMax).join(' ');
-      const lastStop = Math.max(
-        trimmed.lastIndexOf('.'),
-        trimmed.lastIndexOf('!'),
-        trimmed.lastIndexOf('?')
-      );
-      script = lastStop > wordMax * 3
-        ? trimmed.slice(0, lastStop + 1).trim()
-        : trimmed.trim();
-    }
+    script = trimScriptToWordBudget(script, wordMax);
     return res.json({ success: true, data: { script } });
   } catch (err) {
     console.error('UGC script error:', err);
     return res.status(500).json({ success: false, error: 'Failed to generate script' });
   }
 });
+
+/**
+ * Safety net for when the model overshoots the word budget.
+ *
+ * The old version sliced the FIRST `wordMax` words then trimmed to the
+ * last sentence boundary inside that slice — which reliably chopped the
+ * CTA (which sits at the end of the script) and left a half-formed
+ * fragment like "I've been wearing this for two days." That's exactly
+ * the "cut-short" output users were reporting.
+ *
+ * New approach: drop earlier sentences one at a time until the script
+ * fits the word budget, preserving the LAST sentence (the CTA). If even
+ * one sentence is over budget, return it as-is — the TTS will speed up
+ * but the script stays a complete thought, which is what matters.
+ */
+function trimScriptToWordBudget(script, wordMax) {
+  const words = script.split(/\s+/).filter(Boolean);
+  if (words.length <= wordMax) return script;
+
+  const sentences = (script.match(/[^.!?]+[.!?]+/g) || [])
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (sentences.length <= 1) return script.trim();
+
+  let kept = [...sentences];
+  while (
+    kept.length > 1 &&
+    kept.join(' ').split(/\s+/).filter(Boolean).length > wordMax
+  ) {
+    kept.shift();
+  }
+  return kept.join(' ').trim();
+}
 
 // ---------- Parse prompt (direct mode) ----------
 //
@@ -630,6 +661,88 @@ router.delete('/jobs/:id', async (req, res) => {
   } catch (err) {
     console.error('UGC job delete error:', err);
     return res.status(500).json({ success: false, error: 'Failed to delete job' });
+  }
+});
+
+/**
+ * Reuse a completed UGC job as a template.
+ *
+ * Same idea as `/creator/jobs/:id/promote-to-template` but sourced from
+ * a finished ad instead of a standalone creator clip. The user taps
+ * "Use" on a history item — we mint a hidden ugc_templates row pointing
+ * at the job's output_video_url, and the existing template pipeline
+ * does the rest (extract seed frame, integrate the new product, etc.).
+ *
+ * Idempotent on a per-job basis: if the same job has already been
+ * promoted, returns the same template instead of creating a duplicate.
+ */
+router.post('/jobs/:id/use', async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const { data: job, error: jobErr } = await supabase
+      .from('ugc_jobs')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('user_id', userId)
+      .single();
+    if (jobErr || !job) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+    if (job.status !== 'completed' || !job.output_video_url) {
+      return res.status(400).json({
+        success: false,
+        error: 'Video is not ready to reuse yet',
+      });
+    }
+
+    // Idempotency — if a template was already minted for this job, return it.
+    const reuseTag = `reuse:${job.id}`;
+    {
+      const { data: existing } = await supabase
+        .from('ugc_templates')
+        .select('*')
+        .contains('tags', [reuseTag])
+        .eq('owner_user_id', userId)
+        .maybeSingle();
+      if (existing) return res.json({ success: true, data: existing });
+    }
+
+    const snapshot = job.template_snapshot || {};
+    const actorName = snapshot.actor_name || snapshot.name || 'Your creator';
+    const setting = snapshot.setting || 'Generated from your previous video';
+
+    const tpl = {
+      id: uuidv4(),
+      name: job.product_name ? `${actorName} · ${job.product_name}` : actorName,
+      actor_name: actorName,
+      actor_avatar_url: job.output_thumbnail_url || null,
+      description: (job.product_name || job.script || '').slice(0, 240),
+      setting,
+      video_url: job.output_video_url,
+      thumbnail_url: job.output_thumbnail_url || job.output_video_url,
+      // The previous script is a useful starting point — the user can
+      // rewrite or keep it. AI script rewrites still work normally.
+      sample_script: job.script || 'Honestly, I have been obsessed with this and I had to tell you.',
+      aspect_ratio: snapshot.aspect_ratio || '9:16',
+      duration_seconds: job.video_duration || snapshot.duration_seconds || 10,
+      tags: ['custom', reuseTag],
+      category: 'custom',
+      sort_order: 999,
+      is_active: false,
+      is_user_generated: true,
+      owner_user_id: userId,
+    };
+    const { data: inserted, error: insErr } = await supabase
+      .from('ugc_templates')
+      .insert(tpl)
+      .select()
+      .single();
+    if (insErr) throw insErr;
+
+    return res.json({ success: true, data: inserted });
+  } catch (err) {
+    console.error('UGC job reuse error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to reuse video' });
   }
 });
 
