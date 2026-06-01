@@ -183,9 +183,9 @@ export default function StudioPage() {
         {step === 'welcome' && (
           <motion.div
             key="welcome"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="px-6 lg:px-10 pt-32 lg:pt-40"
           >
             <div className="text-center mb-14 lg:mb-16 max-w-2xl mx-auto">
@@ -225,9 +225,9 @@ export default function StudioPage() {
         {step === 'studio' && (
           <motion.div
             key="studio"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="px-6 lg:px-10 pt-6"
           >
             {pickedTemplate && (
@@ -267,9 +267,9 @@ export default function StudioPage() {
         {step === 'generating_ad' && (
           <motion.div
             key="gen-ad"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="px-6 lg:px-10 pt-10"
           >
             <div className="text-center mb-8 max-w-xl mx-auto">
@@ -299,9 +299,9 @@ export default function StudioPage() {
         {step === 'ad_done' && adJob?.output_video_url && (
           <motion.div
             key="ad-done"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="px-6 lg:px-10 pt-10"
           >
             <div className="text-center mb-8 max-w-xl mx-auto">
