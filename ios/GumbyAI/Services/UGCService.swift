@@ -229,6 +229,22 @@ final class UGCService {
         return tpl
     }
 
+    /// Reuse a completed UGC job as a template.
+    ///
+    /// Server mints a hidden `ugc_templates` row pointing at the job's
+    /// `output_video_url`. The existing template flow then handles the
+    /// rest — seed-frame extraction, product integration, Kling 3.0 Pro
+    /// generation. Returned template can be fed straight into
+    /// `chatVM.pickTemplate(_:)`.
+    func useHistoryItem(jobId: String) async throws -> UGCTemplate {
+        let resp: APIResponse<UGCTemplate> = try await api.post(
+            path: "/ugc/jobs/\(jobId)/use",
+            body: [:]
+        )
+        guard let tpl = resp.data else { throw APIError.noData }
+        return tpl
+    }
+
     // MARK: - Image uploads
 
     func uploadProductImage(_ image: UIImage) async throws -> String {

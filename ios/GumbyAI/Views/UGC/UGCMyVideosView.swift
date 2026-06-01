@@ -6,6 +6,12 @@ struct UGCMyVideosView: View {
     @EnvironmentObject var ugcVM: UGCViewModel
     @State private var openJob: UGCJob?
 
+    /// Bubbled up from `UGCVideoPlayerSheet`'s "Use creator" button.
+    /// The History destination wires this to picking the new template on
+    /// `ChatViewModel` and navigating to `.chat` — mirrors web's
+    /// /history/[id] → /studio hand-off.
+    var onUseTemplate: ((UGCTemplate) -> Void)? = nil
+
     private var gridColumns: [GridItem] {
         [
             GridItem(.flexible(), spacing: 8),
@@ -42,7 +48,18 @@ struct UGCMyVideosView: View {
             }
         }
         .sheet(item: $openJob) { job in
-            UGCVideoPlayerSheet(job: job)
+            UGCVideoPlayerSheet(
+                job: job,
+                onUseTemplate: onUseTemplate.map { handler in
+                    { tpl in
+                        // Close the sheet before bubbling the template up
+                        // so the navigation into Studio doesn't fight
+                        // with the sheet dismissal animation.
+                        openJob = nil
+                        handler(tpl)
+                    }
+                }
+            )
         }
         // Deep-link from the sidebar's Recents list. When the user taps a
         // recent video, the sidebar sets `focusedJobId` on the shared VM,
@@ -204,11 +221,17 @@ struct UGCJobCard: View {
 
 struct UGCVideoPlayerSheet: View {
     let job: UGCJob
+    /// Optional hook the parent uses to wire "Use creator" through to
+    /// `chatVM.pickTemplate(_:)` and a navigation jump back to Studio.
+    var onUseTemplate: ((UGCTemplate) -> Void)? = nil
+
     @Environment(\.dismiss) private var dismiss
     @State private var player: AVPlayer?
     @State private var saving = false
     @State private var saveMessage: String?
     @State private var showShare = false
+    @State private var reusing = false
+    @State private var reuseError: String?
 
     private var isTemplate: Bool { (job.templateId ?? "").isEmpty == false }
     private var snapshot: UGCJob.TemplateSnapshot? { job.templateSnapshot }
@@ -247,6 +270,17 @@ struct UGCVideoPlayerSheet: View {
                     // Video — 9:16 card
                     videoCard
                         .padding(.horizontal, 20)
+
+                    // Use-creator CTA — only available once the video is
+                    // ready AND the parent wired up the callback (i.e.
+                    // when shown from the History destination, not from
+                    // some hypothetical preview elsewhere).
+                    if onUseTemplate != nil,
+                       job.status == .completed,
+                       (job.outputVideoURL ?? "").isEmpty == false {
+                        useCreatorButton
+                            .padding(.horizontal, 20)
+                    }
 
                     // Brief
                     VStack(alignment: .leading, spacing: 10) {
@@ -320,6 +354,76 @@ struct UGCVideoPlayerSheet: View {
         if let d = job.videoDuration { parts.append("\(d)s") }
         parts.append(isTemplate ? "Template mode" : "Direct prompt")
         return parts.joined(separator: " · ")
+    }
+
+    // MARK: - Use creator (history → reusable template)
+    //
+    // Tap → backend mints a hidden ugc_templates row from this job's
+    // output video → we bubble that template up to the parent which
+    // picks it on ChatViewModel and switches the destination to
+    // .chat. Identical UX to web's /history/[id] "Use creator" button.
+
+    private var useCreatorButton: some View {
+        Button {
+            Task { await useCreator() }
+        } label: {
+            HStack(spacing: 8) {
+                if reusing {
+                    ProgressView().tint(.white).scaleEffect(0.85)
+                    Text("Loading…")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundColor(.white)
+                    Text("Use this creator")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background(
+                LinearGradient(
+                    colors: [Color(red: 1.0, green: 0.18, blue: 0.25),
+                             Color(red: 0.88, green: 0.11, blue: 0.17)],
+                    startPoint: .leading, endPoint: .trailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .shadow(color: Color.black.opacity(0.35), radius: 16, y: 6)
+        }
+        .buttonStyle(.plain)
+        .disabled(reusing)
+        .overlay(alignment: .bottom) {
+            if let reuseError {
+                Text(reuseError)
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(red: 1.0, green: 0.27, blue: 0.23))
+                    .padding(.top, 56)
+            }
+        }
+    }
+
+    private func useCreator() async {
+        guard let handler = onUseTemplate else { return }
+        reusing = true
+        reuseError = nil
+        do {
+            let tpl = try await UGCService.shared.useHistoryItem(jobId: job.id)
+            await MainActor.run {
+                reusing = false
+                // Parent's handler closes the sheet AND drives navigation
+                // into the Studio. We don't call dismiss() here ourselves.
+                handler(tpl)
+            }
+        } catch {
+            await MainActor.run {
+                reusing = false
+                reuseError = error.localizedDescription
+            }
+        }
     }
 
     private var videoCard: some View {

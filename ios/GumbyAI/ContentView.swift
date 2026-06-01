@@ -57,7 +57,7 @@ struct ContentView: View {
             // points History at the UGC video grid (UGCMyVideosView), which
             // mirrors web's /history page. The standalone wrapper below
             // adds the top bar that UGCView used to provide.
-            HistoryDestinationView()
+            HistoryDestinationView(selectedDestination: $selectedDestination)
         }
     }
 }
@@ -69,6 +69,8 @@ struct ContentView: View {
 private struct HistoryDestinationView: View {
     @EnvironmentObject var sidebarVM: SidebarViewModel
     @EnvironmentObject var ugcVM: UGCViewModel
+    @EnvironmentObject var chatVM: ChatViewModel
+    @Binding var selectedDestination: NavigationDestination
 
     var body: some View {
         ZStack {
@@ -76,7 +78,15 @@ private struct HistoryDestinationView: View {
 
             VStack(spacing: 0) {
                 header
-                UGCMyVideosView()
+                // History items become reusable templates the same way
+                // /history/[id] on web does — tap "Use creator" inside the
+                // player sheet → backend mints a hidden template → we
+                // pick it on ChatViewModel and jump to the Studio.
+                UGCMyVideosView(onUseTemplate: { tpl in
+                    chatVM.newConversation()
+                    chatVM.pickTemplate(tpl)
+                    selectedDestination = .chat
+                })
             }
         }
         .task {
