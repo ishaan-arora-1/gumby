@@ -5,6 +5,7 @@ const { openai } = require('../config/openai');
 const { getRedisClient } = require('../config/redis');
 const { v4: uuidv4 } = require('uuid');
 const authMiddleware = require('../middleware/auth');
+const { aiLimiter } = require('../middleware/rateLimit');
 const { runUGCJob } = require('../services/ugcPipeline');
 const { runCreatorJob } = require('../services/creatorPipeline');
 const credits = require('../services/credits');
@@ -136,7 +137,7 @@ router.get('/templates/:id', async (req, res) => {
 
 // ---------- AI script writer ----------
 
-router.post('/script', async (req, res) => {
+router.post('/script', aiLimiter, async (req, res) => {
   const {
     productName,
     productDescription,
@@ -277,7 +278,7 @@ function trimScriptToWordBudget(script, wordMax) {
 // removed from both clients, so every attachment is now treated as a
 // product image — the vision call is gone, saving a round-trip + cost.
 
-router.post('/parse-prompt', async (req, res) => {
+router.post('/parse-prompt', aiLimiter, async (req, res) => {
   const { prompt, attachments } = req.body || {};
   if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 6) {
     return res.status(400).json({ success: false, error: 'Prompt is too short' });
@@ -380,7 +381,7 @@ router.post('/parse-prompt', async (req, res) => {
 
 // ---------- Jobs ----------
 
-router.post('/generate', async (req, res) => {
+router.post('/generate', aiLimiter, async (req, res) => {
   const userId = req.user.id;
   const {
     templateId,
@@ -798,7 +799,7 @@ router.post('/jobs/:id/use', async (req, res) => {
 const MAX_CREATOR_DURATION_S = 10; // Kling 3.0 enum is "5" | "10"
 const MIN_PROMPT_LEN = 6;
 
-router.post('/creator/generate', async (req, res) => {
+router.post('/creator/generate', aiLimiter, async (req, res) => {
   const userId = req.user.id;
   const {
     prompt,
