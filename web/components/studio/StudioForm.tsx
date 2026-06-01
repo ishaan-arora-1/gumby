@@ -7,6 +7,10 @@ import { Sparkles, Upload, X, Wand2 } from 'lucide-react';
 import { CAPTION_PRESETS, DEFAULT_CAPTION_PRESET_ID } from '@/lib/captionPresets';
 import { CaptionPreview } from './CaptionPreview';
 
+// Credit cost per video duration — mirrors COST_PER_VIDEO in the backend
+// (backend/src/services/credits.js). 5s = 50, 10s = 100.
+const CREDIT_COST: Record<5 | 10, number> = { 5: 50, 10: 100 };
+
 export interface StudioPrefill {
   creatorDescription?: string;
   includeProduct?: boolean;
@@ -281,6 +285,7 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
               }`}
             >
               {d}s
+              <span className="ml-1.5 font-normal opacity-60">· {CREDIT_COST[d]} credits</span>
             </button>
           ))}
         </div>
@@ -381,9 +386,18 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
         type="button"
         onClick={submit}
         disabled={loading}
-        className="w-full h-14 rounded-btn bg-black text-white font-semibold text-base border border-white/10 hover:bg-[#0a0a0a] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition"
+        className="w-full h-14 rounded-btn bg-black text-white font-semibold text-base border border-white/10 hover:bg-[#0a0a0a] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition inline-flex items-center justify-center gap-2"
       >
-        {loading ? 'Generating…' : 'Generate'}
+        {loading ? (
+          'Generating…'
+        ) : (
+          <>
+            <span>Generate</span>
+            <span className="text-xs font-medium text-white/70 bg-white/10 rounded-full px-2 py-0.5">
+              {CREDIT_COST[duration]} credits
+            </span>
+          </>
+        )}
       </button>
     </div>
   );

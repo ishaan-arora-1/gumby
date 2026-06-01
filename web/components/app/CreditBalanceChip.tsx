@@ -37,20 +37,23 @@ export function CreditBalanceChip({
   }, []);
 
   if (compact) {
+    // Only surface the pill on phones when the user actually has credits.
+    // Zero balance (or not-yet-loaded) shows nothing.
+    if (balance == null || balance <= 0) return null;
     return (
       <Link
         href="/pricing"
-        aria-label={balance == null ? 'Credits' : `${balance} credits — top up`}
+        aria-label={`${balance} credits — top up`}
         className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 hover:bg-white/[0.08] transition"
       >
         <Coins className="w-3.5 h-3.5 text-amber-300 shrink-0" />
         <span
           className={cn(
             'text-[13px] font-semibold tabular-nums leading-none',
-            balance != null && balance < 50 ? 'text-amber-300' : 'text-white'
+            balance < 50 ? 'text-amber-300' : 'text-white'
           )}
         >
-          {balance == null ? '—' : balance.toLocaleString()}
+          {balance.toLocaleString()}
         </span>
       </Link>
     );
