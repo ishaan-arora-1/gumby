@@ -56,6 +56,8 @@
 		<string>Inter-Bold.ttf</string>
 		<string>Roboto-Black.ttf</string>
 		<string>Anton-Regular.ttf</string>
+		<string>InstrumentSerif-Regular.ttf</string>
+		<string>InstrumentSerif-Italic.ttf</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>

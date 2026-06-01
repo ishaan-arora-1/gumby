@@ -44,6 +44,35 @@ struct UGCMyVideosView: View {
         .sheet(item: $openJob) { job in
             UGCVideoPlayerSheet(job: job)
         }
+        // Deep-link from the sidebar's Recents list. When the user taps a
+        // recent video, the sidebar sets `focusedJobId` on the shared VM,
+        // navigates to .history, and we pop the matching detail sheet. We
+        // clear the focused id afterwards so re-entering History doesn't
+        // auto-open it again.
+        .onAppear { presentFocusedIfAny() }
+        .onChange(of: ugcVM.focusedJobId) { _, _ in presentFocusedIfAny() }
+    }
+
+    private func presentFocusedIfAny() {
+        guard let id = ugcVM.focusedJobId else { return }
+        if let job = ugcVM.jobs.first(where: { $0.id == id }) {
+            openJob = job
+            ugcVM.focusedJobId = nil
+        } else {
+            // Job not in the cached list yet (e.g. brand-new generation
+            // before /jobs has refreshed). Fetch the row, then present.
+            Task {
+                do {
+                    let fetched = try await UGCService.shared.fetchJob(id: id)
+                    await MainActor.run {
+                        openJob = fetched
+                        ugcVM.focusedJobId = nil
+                    }
+                } catch {
+                    await MainActor.run { ugcVM.focusedJobId = nil }
+                }
+            }
+        }
     }
 
     private var emptyState: some View {

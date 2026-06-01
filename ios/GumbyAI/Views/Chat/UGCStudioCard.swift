@@ -3,7 +3,8 @@ import PhotosUI
 
 /// The combined editable form card used in the studio view. Contains all
 /// fields (product, script, video, voice) grouped into rounded sub-cards
-/// with a sticky Generate bar pinned to the bottom of the card.
+/// with a sticky Generate bar pinned to the bottom of the ==]]card.
+
 struct UGCStudioCard: View {
     @EnvironmentObject var chatVM: ChatViewModel
     let draftIndex: Int

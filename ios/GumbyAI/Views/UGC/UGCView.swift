@@ -1,28 +1,28 @@
 import SwiftUI
 
-/// Top-level Models / UGC screen — TikTok-style vertical feed of AI-actor
-/// templates plus a "My Videos" tab for generated jobs.
+/// Top-level "Creators" screen.
 ///
-/// Tapping the "Use" button on any template now hands off to the AI Chat tab,
-/// which runs the full UGC creation funnel (product → script → voice →
-/// ElevenLabs TTS → Kling lip-sync). The old bottom-sheet generation form
-/// has been retired in favor of that guided experience.
+/// Previously this had an Explore / Library tab picker and a grid/feed
+/// layout toggle. We've collapsed it down to a single History-style
+/// 2-column grid of templates — no tabs, no toggles, just a scroll of
+/// 9:16 looping creator clips. Tapping a tile opens a web-style
+/// preview sheet with a "Use as template" CTA that hands off to the
+/// chat funnel (same handoff the old flow used).
 struct UGCView: View {
     @EnvironmentObject var sidebarVM: SidebarViewModel
     @EnvironmentObject var ugcVM: UGCViewModel
     @EnvironmentObject var chatVM: ChatViewModel
     @Binding var selectedDestination: NavigationDestination
 
-    @State private var gridSelectedTemplate: UGCTemplate?
-    @State private var gridSelectedCreator: UGCCreatorJob?
+    @State private var previewTemplate: UGCTemplate?
 
     var body: some View {
         ZStack {
             AppConstants.chatCanvasBlack.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                modelsTopChrome
-                content
+                header
+                grid
             }
         }
         .task {
@@ -30,37 +30,44 @@ struct UGCView: View {
             // in-memory templates were a frequent source of "video stuck
             // on loading" reports. The HTTP layer is also no-store now.
             await ugcVM.loadTemplates(force: true)
-            await ugcVM.loadJobs()
-            await ugcVM.loadLibrary(force: true)
         }
-        .fullScreenCover(item: $gridSelectedTemplate) { template in
-            UGCReelDetailView(
+        .fullScreenCover(item: $previewTemplate) { template in
+            UGCTemplatePreviewSheet(
                 template: template,
-                onBack: { gridSelectedTemplate = nil },
-                onGenerate: {
-                    gridSelectedTemplate = nil
-                    handoffToChat(with: template)
-                }
-            )
-        }
-        .fullScreenCover(item: $gridSelectedCreator) { creator in
-            UGCLibraryReelDetailView(
-                creator: creator,
-                onBack: { gridSelectedCreator = nil },
+                onClose: { previewTemplate = nil },
                 onUse: {
-                    gridSelectedCreator = nil
-                    handoffToChat(with: creator)
+                    // Do NOT manually dismiss the cover here. Switching
+                    // the destination to .chat unmounts UGCView entirely,
+                    // which tears the cover (and its AVPlayer-backed
+                    // LoopingVideoView) down in a single pass. Setting
+                    // `previewTemplate = nil` first races that teardown
+                    // and crashes on the AVPlayer cleanup path.
+                    handoffToChat(with: template)
                 }
             )
         }
     }
 
-    // MARK: - Top chrome
+    // MARK: - Header (matches History: title centered, hamburger left, nothing right)
 
-    private var modelsTopChrome: some View {
-        VStack(spacing: 14) {
-            modelsHeader
-            modelsTabPicker
+    private var header: some View {
+        ZStack {
+            Text("Creators")
+                .font(.gumby(20, weight: .semiBold))
+                .foregroundStyle(AppConstants.textPrimary)
+
+            HStack {
+                Button(action: { sidebarVM.toggle() }) {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(AppConstants.textPrimary)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(AppConstants.chatComposerInner))
+                        .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 1))
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
         }
         .padding(.top, 6)
         .padding(.bottom, 12)
@@ -82,132 +89,288 @@ struct UGCView: View {
         }
     }
 
-    private var modelsHeader: some View {
-        ZStack {
-            Text("Models")
-                .font(.gumby(20, weight: .semiBold))
-                .foregroundStyle(AppConstants.textPrimary)
+    // MARK: - Grid
 
-            HStack {
-                modelsIconButton(systemName: "line.3.horizontal", action: { sidebarVM.toggle() })
-
-                Spacer()
-
-                if ugcVM.selectedTab == .explore || ugcVM.selectedTab == .library {
-                    modelsIconButton(
-                        systemName: ugcVM.feedLayout == .feed ? "square.grid.2x2" : "rectangle.portrait.fill",
-                        action: {
-                            withAnimation(.easeInOut(duration: 0.22)) {
-                                ugcVM.feedLayout = ugcVM.feedLayout == .feed ? .grid : .feed
-                            }
-                        }
-                    )
-                } else {
-                    Color.clear.frame(width: 38, height: 38)
-                }
-            }
-        }
-        .padding(.horizontal, 16)
-    }
-
-    private func modelsIconButton(systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(AppConstants.textPrimary)
-                .frame(width: 38, height: 38)
-                .background(Circle().fill(AppConstants.chatComposerInner))
-                .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 1))
-        }
-    }
-
-    private var modelsTabPicker: some View {
-        HStack(spacing: 4) {
-            ForEach(UGCViewModel.Tab.allCases, id: \.self) { tab in
-                Button {
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        ugcVM.selectedTab = tab
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: tab.iconName)
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(tab.rawValue)
-                            .font(.gumby(12.5, weight: ugcVM.selectedTab == tab ? .semiBold : .regular))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                    }
-                    .foregroundStyle(ugcVM.selectedTab == tab ? Color.black : Color.white.opacity(0.72))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background {
-                        if ugcVM.selectedTab == tab {
-                            Capsule(style: .continuous)
-                                .fill(Color.white)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(4)
-        .background(
-            Capsule(style: .continuous)
-                .fill(AppConstants.chatComposerInner)
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-        .padding(.horizontal, 16)
+    private var gridColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: 8),
+            GridItem(.flexible(), spacing: 8),
+        ]
     }
 
     @ViewBuilder
-    private var content: some View {
-        switch ugcVM.selectedTab {
-        case .explore:
-            if ugcVM.feedLayout == .grid {
-                UGCTemplatesGrid { template in
-                    gridSelectedTemplate = template
-                }
-            } else {
-                UGCTemplatesFeed(
-                    onGenerate: { template in
-                        handoffToChat(with: template)
+    private var grid: some View {
+        if ugcVM.isLoadingTemplates && ugcVM.templates.isEmpty {
+            ProgressView()
+                .tint(.white)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if ugcVM.templates.isEmpty {
+            emptyState
+        } else {
+            ScrollView {
+                LazyVGrid(columns: gridColumns, spacing: 8) {
+                    ForEach(ugcVM.templates) { template in
+                        UGCTemplateCard(template: template) {
+                            previewTemplate = template
+                        }
                     }
-                )
-            }
-        case .library:
-            if ugcVM.feedLayout == .grid {
-                UGCLibraryGrid { creator in
-                    gridSelectedCreator = creator
                 }
-            } else {
-                UGCLibraryFeed(
-                    onUse: { creator in
-                        handoffToChat(with: creator)
-                    }
-                )
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
             }
-        case .myVideos:
-            UGCMyVideosView()
+            .refreshable { await ugcVM.loadTemplates(force: true) }
         }
     }
 
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Spacer()
+            Image(systemName: "person.crop.rectangle.stack")
+                .font(.system(size: 48))
+                .foregroundStyle(AppConstants.accentGradient)
+            Text("No creators yet")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.white)
+            Text("New AI creators land here as we add them.")
+                .font(.system(size: 14))
+                .foregroundColor(AppConstants.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Spacer()
+        }
+    }
+
+    // MARK: - Handoff
+
     private func handoffToChat(with template: UGCTemplate) {
-        // Reset the chat to a clean state, drop the user just past template
-        // selection, and navigate. This keeps the funnel feeling like one
-        // continuous experience whether the user enters through the feed or
-        // the chat tab directly.
-        chatVM.newConversation()
+        // Drop the user just past template selection and navigate to the
+        // chat funnel. `pickTemplate` already calls
+        // `resetFunnelStateForNewRun()` (clears drafts, polling, active
+        // jobs) and then synchronously creates the first draft.
+        //
+        // IMPORTANT: do NOT also call `chatVM.newConversation()` here —
+        // it schedules a delayed Task that wipes `drafts = []` 500 ms
+        // later, which races with the draft just created by
+        // `pickTemplate` and crashes `UGCStudioView` with an
+        // index-out-of-range on `drafts[activeDraftIndex]`.
         chatVM.pickTemplate(template)
         selectedDestination = .chat
     }
+}
 
-    private func handoffToChat(with creator: UGCCreatorJob) {
-        chatVM.newConversation()
-        chatVM.useLibraryItem(creator)
-        selectedDestination = .chat
+// MARK: - Template grid card (mirrors UGCJobCard in History)
+
+private struct UGCTemplateCard: View {
+    let template: UGCTemplate
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            ZStack {
+                tileMedia
+
+                VStack {
+                    Spacer()
+                    HStack(alignment: .center, spacing: 6) {
+                        nameChip
+                        Spacer()
+                    }
+                    .padding(8)
+                    .background(
+                        LinearGradient(
+                            colors: [.clear, Color.black.opacity(0.7)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                }
+            }
+            .aspectRatio(9.0/16.0, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var tileMedia: some View {
+        if let videoURL = URL(string: template.videoURL) {
+            LoopingVideoView(url: videoURL, isActive: true, muted: true, aspectFill: true)
+        } else if let url = URL(string: template.thumbnailURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    Color(hex: "1A1A1A")
+                }
+            }
+        } else {
+            Color(hex: "1A1A1A")
+        }
+    }
+
+    private var nameChip: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(Color.white.opacity(0.85))
+                .frame(width: 6, height: 6)
+            Text(template.actorName.isEmpty ? template.name : template.actorName)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.white)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(.ultraThinMaterial))
+    }
+}
+
+// MARK: - Template preview sheet
+//
+// SwiftUI port of `web/components/studio/TemplateCard.tsx` →
+// `TemplatePreviewModal`. The user sees the clip full-bleed in a 9:16
+// card with a "Use as template" CTA floating at the bottom, an X close
+// button anchored top-right, and the creator name + description below.
+
+private struct UGCTemplatePreviewSheet: View {
+    let template: UGCTemplate
+    let onClose: () -> Void
+    let onUse: () -> Void
+
+    @State private var muted = true
+
+    var body: some View {
+        ZStack {
+            // Dim backdrop. Tap-to-dismiss outside the card, matching web.
+            Color.black.opacity(0.92)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onClose)
+
+            VStack(spacing: 16) {
+                videoCard
+
+                VStack(spacing: 4) {
+                    Text(template.actorName.isEmpty ? template.name : template.actorName)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    if !template.description.isEmpty {
+                        Text(template.description)
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.55))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .padding(.horizontal, 24)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+
+            // Top-right close button, anchored to the viewport like the
+            // web preview modal.
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Circle().fill(Color.white.opacity(0.10)))
+                            .overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 1))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                Spacer()
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var videoCard: some View {
+        ZStack {
+            // 9:16 video. The card stops the tap-to-dismiss from firing
+            // when the user taps the video itself (matching web's
+            // `e.stopPropagation()` on the inner wrapper).
+            Group {
+                if let url = URL(string: template.videoURL) {
+                    LoopingVideoView(url: url, isActive: true, muted: muted, aspectFill: true)
+                } else if let url = URL(string: template.thumbnailURL) {
+                    AsyncImage(url: url) { phase in
+                        if case .success(let image) = phase {
+                            image.resizable().scaledToFill()
+                        } else {
+                            Color(hex: "1A1A1A")
+                        }
+                    }
+                } else {
+                    Color(hex: "1A1A1A")
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+            )
+
+            // Soft bottom shade so the floating CTA always reads against
+            // any video content.
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            Color.black.opacity(0.45),
+                            Color.black.opacity(0.85),
+                        ],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .allowsHitTesting(false)
+
+            // Mute toggle, top-left of the video card.
+            VStack {
+                HStack {
+                    Button { muted.toggle() } label: {
+                        Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 32, height: 32)
+                            .background(Circle().fill(Color.black.opacity(0.45)))
+                    }
+                    Spacer()
+                }
+                .padding(10)
+                Spacer()
+            }
+
+            // Floating "Use as template" CTA — bottom-center over the video,
+            // mirroring the web preview modal.
+            VStack {
+                Spacer()
+                Button(action: onUse) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 14, weight: .bold))
+                        Text("Use as template")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 22)
+                    .frame(height: 46)
+                    .background(Capsule(style: .continuous).fill(Color.white))
+                    .shadow(color: .black.opacity(0.4), radius: 16, x: 0, y: 6)
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 18)
+            }
+        }
+        .aspectRatio(9.0/16.0, contentMode: .fit)
+        .frame(maxWidth: 420)
     }
 }
 

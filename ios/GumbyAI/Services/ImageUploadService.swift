@@ -1,6 +1,15 @@
 import Foundation
 import UIKit
 
+/// Direct-to-Supabase-Storage uploader. Currently unused (the live UGC
+/// flow uploads through the backend's `/ugc/upload-*` endpoints, which
+/// return signed URLs scoped to the user). Kept around in case we want
+/// to bring direct uploads back for non-UGC images.
+///
+/// Marked `@MainActor` because it touches `AuthService.shared`, which
+/// is itself MainActor-isolated. Under Swift 6 this is required;
+/// pre-Swift-6 it suppresses the actor-isolation warning Xcode shows.
+@MainActor
 class ImageUploadService {
     static let shared = ImageUploadService()
 
