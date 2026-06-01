@@ -4,14 +4,16 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Logo } from '@/components/ui/Logo';
 import { SidebarRecents } from '@/components/app/SidebarRecents';
+import { CreditBalanceChip } from '@/components/app/CreditBalanceChip';
 import { useAuth } from '@/lib/auth-context';
-import { Sparkles, History as HistoryIcon, LogOut, Users, PanelLeft, Settings as SettingsIcon } from 'lucide-react';
+import { Sparkles, History as HistoryIcon, LogOut, Users, PanelLeft, Settings as SettingsIcon, CreditCard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV = [
   { href: '/studio', label: 'Studio', icon: Sparkles },
   { href: '/templates', label: 'Creators', icon: Users },
   { href: '/history', label: 'History', icon: HistoryIcon },
+  { href: '/pricing', label: 'Pricing', icon: CreditCard },
 ];
 
 const SIDEBAR_KEY = 'gumby:sidebarCollapsed';
@@ -122,6 +124,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SidebarRecents collapsed={collapsed} />
         </nav>
         <div className="pt-4 border-t border-white/5 mt-4 space-y-1">
+          {/* Credit balance — sits above the account row so it's the
+              first thing the user sees on every load. */}
+          <div className={collapsed ? '' : 'mb-2'}>
+            <CreditBalanceChip collapsed={collapsed} />
+          </div>
           <Link
             href="/settings"
             title={collapsed ? 'Account' : undefined}
