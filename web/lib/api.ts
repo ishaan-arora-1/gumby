@@ -70,6 +70,32 @@ export async function fetchFeaturedTemplates(limit = 8): Promise<any[]> {
   }
 }
 
+// Public credit pack list — used by the marketing /pricing page and the
+// landing pricing section. Server returns them; the static fallback
+// below keeps the page renderable even if the backend is unreachable.
+export async function fetchPublicPacks(): Promise<CreditPack[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/credits/packs`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('non-200');
+    const j = await res.json();
+    if (Array.isArray(j.data) && j.data.length) return j.data;
+    throw new Error('empty');
+  } catch {
+    return STATIC_PACK_FALLBACK;
+  }
+}
+
+// Mirror of the seed rows in migrations 009_credits.sql + 010_credits_usd.sql
+// — used both as a fallback (offline / API down) and as the source of truth
+// in components that render before any network call lands. Keep this in
+// sync with the DB rows.
+export const STATIC_PACK_FALLBACK: CreditPack[] = [
+  { id: 'starter', label: 'Starter', credits: 250,  price_paise: 50000,   price_cents: 700,    blurb: '5 short videos to try the product',           sort_order: 1 },
+  { id: 'creator', label: 'Creator', credits: 1000, price_paise: 180000,  price_cents: 2500,   blurb: '~20 short videos · best for solo creators',   sort_order: 2 },
+  { id: 'studio',  label: 'Studio',  credits: 3000, price_paise: 540000,  price_cents: 7000,   blurb: '~60 short videos · a month of daily content', sort_order: 3 },
+  { id: 'agency',  label: 'Agency',  credits: 7500, price_paise: 1350000, price_cents: 17000,  blurb: '~150 short videos · agency-scale volume',     sort_order: 4 },
+];
+
 export const api = {
   // ---- Auth ----
   verifyUser: (name?: string) =>
@@ -191,7 +217,59 @@ export const api = {
       '/ugc/upload-attachment',
       { method: 'POST', body: JSON.stringify({ contentType, base64 }) }
     ),
+
+  // ---- Credits ----
+  getCreditBalance: () =>
+    request<{ success: boolean; data: { balance: number } }>('/credits/balance'),
+  listCreditPacks: () =>
+    request<{ success: boolean; data: CreditPack[] }>('/credits/packs'),
+  listCreditTransactions: () =>
+    request<{ success: boolean; data: CreditTransaction[] }>('/credits/transactions'),
+  createCheckout: (packId: string, currency: 'INR' | 'USD' = 'INR') =>
+    request<{ success: boolean; data: CheckoutOrder }>('/credits/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ packId, currency }),
+    }),
 };
+
+// ---- Credit types ----
+export interface CreditPack {
+  id: string;
+  label: string;
+  credits: number;
+  // Minor units. INR is in paise (₹1 = 100). USD is in cents ($1 = 100).
+  // `price_cents` is nullable on packs not offered internationally —
+  // /checkout returns 400 if the user picks USD on such a pack.
+  price_paise: number;
+  price_cents: number | null;
+  blurb: string;
+  sort_order: number;
+}
+
+export interface CreditTransaction {
+  id: string;
+  delta: number;
+  reason: 'purchase' | 'spend' | 'refund' | 'grant';
+  ref_id: string | null;
+  pack_id: string | null;
+  created_at: string;
+}
+
+export interface CheckoutOrder {
+  orderId: string;
+  amount: number;       // minor units in the chosen currency
+  currency: 'INR' | 'USD';
+  keyId: string;
+  pack: {
+    id: string;
+    label: string;
+    credits: number;
+    priceMajor: number;        // amount/100 — what the user sees
+    priceInr: number | null;   // legacy field, populated only when currency=INR
+    priceUsd: number | null;   // populated only when currency=USD
+  };
+  user: { id: string; email: string; name: string };
+}
 
 // Helper: poll a job until completed or failed
 export async function pollJob<T extends { status: string; progress?: number }>(

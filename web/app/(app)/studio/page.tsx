@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { api, pollJob } from '@/lib/api';
+import { api, pollJob, ApiError } from '@/lib/api';
 import type { UGCTemplate, UGCJob } from '@/lib/types';
 import { PromptComposer } from '@/components/studio/PromptComposer';
 import { TemplateCard } from '@/components/studio/TemplateCard';
@@ -10,6 +10,7 @@ import { GeneratingCard } from '@/components/studio/GeneratingCard';
 import { VideoResult } from '@/components/studio/VideoResult';
 import { LoopingVideo } from '@/components/ui/LoopingVideo';
 import { Button } from '@/components/ui/Button';
+import { InsufficientCreditsModal } from '@/components/app/InsufficientCreditsModal';
 import { Plus } from 'lucide-react';
 
 type Step = 'welcome' | 'studio' | 'generating_ad' | 'ad_done';
@@ -22,6 +23,7 @@ export default function StudioPage() {
   const [isParsing, setIsParsing] = useState(false);
   const [adJob, setAdJob] = useState<UGCJob | null>(null);
   const [error, setError] = useState<string>('');
+  const [insufficient, setInsufficient] = useState<{ required: number; balance: number } | null>(null);
 
   useEffect(() => {
     api.listTemplates(1).then((r) => setTemplates(r.data)).catch(() => {});
@@ -87,6 +89,10 @@ export default function StudioPage() {
       const { data } = await api.generateAd(payload);
       setAdJob(data);
       setStep('generating_ad');
+      // The /generate route just debited the user's balance — refresh
+      // the sidebar chip immediately rather than waiting for a route
+      // change to trigger its own refetch.
+      window.dispatchEvent(new Event('blinkugc:credits-changed'));
       const final = await pollJob(
         () => api.getJob(data.id),
         (j) => setAdJob(j as UGCJob)
@@ -97,6 +103,17 @@ export default function StudioPage() {
       // newly-finished video appears without waiting for a route change.
       window.dispatchEvent(new Event('blinkugc:job-list-changed'));
     } catch (e: any) {
+      // 402 = insufficient credits — pop the buy-credits modal instead
+      // of dumping a raw error string in the form.
+      if (e instanceof ApiError && e.status === 402) {
+        const required =
+          payload?.videoDuration && Number(payload.videoDuration) >= 8 ? 100 : 50;
+        let balance = 0;
+        try { balance = (await api.getCreditBalance()).data.balance; } catch {}
+        setInsufficient({ required, balance });
+        setStep('studio');
+        return;
+      }
       setError(e.message || 'Ad generation failed');
       setStep('studio');
     }
@@ -122,6 +139,12 @@ export default function StudioPage() {
 
   return (
     <div className="min-h-screen pb-24 md:pb-12">
+      <InsufficientCreditsModal
+        open={!!insufficient}
+        required={insufficient?.required ?? 0}
+        balance={insufficient?.balance ?? 0}
+        onClose={() => setInsufficient(null)}
+      />
       {step !== 'welcome' && (
         <div className="px-6 lg:px-10 pt-10 pb-6 flex items-center justify-end">
           <Button variant="ghost" size="sm" onClick={reset}>

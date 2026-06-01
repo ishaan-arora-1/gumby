@@ -13,7 +13,12 @@ import {
   ArrowUp,
   Headphones,
   Heart,
+  Check,
 } from 'lucide-react';
+import { fetchPublicPacks, STATIC_PACK_FALLBACK, type CreditPack } from '@/lib/api';
+import { isLikelyIndia } from '@/components/pricing/CurrencyToggle';
+
+const SUPPORT_EMAIL = 'support@blinkugc.com';
 
 /* ============================================================
    Blink UGC — landing page
@@ -282,10 +287,189 @@ export function BlinkLanding() {
       <Showcase />
       <FeatureBreakdown />
       <SpeedSection />
+      <PricingSection />
       <Faq />
       <FinalCta />
       <Footer />
     </div>
+  );
+}
+
+/* ============================================================
+   PRICING SECTION — credit packs sourced from the backend (with
+   a static fallback so the page renders even if the API is down).
+   Buttons route logged-out visitors to /login?next=/pricing so
+   they land directly on the in-app checkout after sign-in.
+============================================================ */
+function PricingSection() {
+  const [packs, setPacks] = useState<CreditPack[]>(STATIC_PACK_FALLBACK);
+  // `null` until the locale check runs client-side — important because
+  // SSR + hydration would otherwise flash the wrong CTA copy.
+  const [india, setIndia] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setIndia(isLikelyIndia());
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchPublicPacks().then((p) => { if (mounted && p.length) setPacks(p); });
+    return () => { mounted = false; };
+  }, []);
+
+  // While the geo-check pends, we render the India layout as the optimistic
+  // default — it's the larger market and switching the CTA copy after
+  // hydration is a non-visual change to most visitors.
+  const isInternational = india === false;
+  const mailtoSubject = encodeURIComponent('Early access — international credits');
+  const mailtoBody = encodeURIComponent(
+    "Hey Blink UGC team,\n\nI'd love to buy credits but I'm outside India. " +
+    "Can you set me up with early access?\n\nThanks!"
+  );
+  const earlyAccessMailto =
+    `mailto:${SUPPORT_EMAIL}?subject=${mailtoSubject}&body=${mailtoBody}`;
+
+  return (
+    <section
+      id="pricing"
+      className="relative z-[5] px-5 py-[110px]"
+      style={{ background: 'linear-gradient(180deg, #0b0d12, #050608)' }}
+    >
+      <div className="mx-auto max-w-[1180px]">
+        <div className="text-center mb-10 max-w-[820px] mx-auto">
+          <span
+            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60 mb-5"
+          >
+            Pricing
+          </span>
+          <h2
+            className="font-display-blink font-black"
+            style={{ fontSize: 'clamp(30px, 4.6vw, 56px)', lineHeight: 1.02, letterSpacing: '-0.025em' }}
+          >
+            Buy <span className="blink-accent-text">credits</span>, never a subscription.
+          </h2>
+          <p className="mx-auto mt-5 max-w-[620px] text-[17px] leading-[1.6] text-white/60">
+            5-second video = 50 credits. 10-second video = 100 credits. Bigger packs land
+            at a per-credit discount. Credits never expire.
+          </p>
+        </div>
+
+        {isInternational && (
+          <div className="mx-auto mb-10 max-w-[680px] rounded-[16px] border border-white/10 bg-white/[0.04] px-5 py-4 text-center text-[13.5px] leading-[1.55] text-white/80">
+            <span className="font-semibold text-white">International payments go live next week.</span>{' '}
+            For early access, mail us at{' '}
+            <a
+              href={earlyAccessMailto}
+              className="text-white underline decoration-white/40 underline-offset-2 hover:decoration-white"
+            >
+              {SUPPORT_EMAIL}
+            </a>
+            .
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[18px]">
+          {packs.map((p) => {
+            // Single currency for v1 — INR only. The USD path will light up
+            // automatically the moment we flip the geo-gate after PayPal-via-Razorpay
+            // verification clears.
+            const priceMinor = p.price_paise;
+            const major = Math.round(priceMinor / 100);
+            const perCredit = priceMinor / 100 / p.credits;
+            const perCreditLabel = `₹${perCredit.toFixed(2)}/credit`;
+            const symbol = '₹';
+            const locale = 'en-IN';
+            const featured = p.id === 'creator';
+            return (
+              <div
+                key={p.id}
+                className={[
+                  'relative rounded-[20px] p-6 flex flex-col transition-all duration-300 ease-out hover:-translate-y-1',
+                  featured
+                    ? 'border-transparent bg-gradient-to-b from-[#ff2e3f]/15 via-white/[0.02] to-white/[0.02] ring-1 ring-[#ff2e3f]/55'
+                    : 'border border-white/10 bg-white/[0.03] hover:border-[rgba(77,130,255,0.45)]',
+                ].join(' ')}
+              >
+                {featured && (
+                  <div
+                    className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-[3px] text-[10px] font-bold uppercase tracking-[1px] text-white"
+                    style={{ background: 'linear-gradient(135deg,#ff2e3f,#e11d2b)' }}
+                  >
+                    Most popular
+                  </div>
+                )}
+                <div className="text-[13px] uppercase tracking-[0.2em] text-white/45 mb-2">
+                  {p.label}
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <div
+                    className="font-display-blink font-black tabular-nums"
+                    style={{ fontSize: 'clamp(34px, 3.4vw, 44px)', letterSpacing: '-0.02em', lineHeight: 1 }}
+                  >
+                    {`${symbol}${major.toLocaleString(locale)}`}
+                  </div>
+                </div>
+                <div className="text-[12px] text-white/45 mt-2">
+                  {p.credits.toLocaleString()} credits · {perCreditLabel}
+                </div>
+
+                <p className="mt-5 text-[13.5px] leading-[1.5] text-white/75 min-h-[42px]">
+                  {p.blurb}
+                </p>
+
+                <ul className="mt-5 space-y-2 text-[13px] text-white/70 flex-1">
+                  <LandingFeature>{Math.floor(p.credits / 50)} × 5-second videos</LandingFeature>
+                  <LandingFeature>{Math.floor(p.credits / 100)} × 10-second videos</LandingFeature>
+                  <LandingFeature>Captions baked in</LandingFeature>
+                  <LandingFeature>Credits never expire</LandingFeature>
+                </ul>
+
+                {isInternational ? (
+                  <a
+                    href={earlyAccessMailto}
+                    className={[
+                      'mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-full text-[14px] font-semibold transition',
+                      featured
+                        ? 'bg-[#ff2e3f] text-white hover:bg-[#e11d2b] shadow-[0_10px_30px_rgba(225,29,43,0.35)]'
+                        : 'bg-white text-[#080808] hover:bg-white/90',
+                    ].join(' ')}
+                  >
+                    Mail for early access
+                  </a>
+                ) : (
+                  <Link
+                    href={`/login?mode=signup&next=${encodeURIComponent('/pricing')}`}
+                    className={[
+                      'mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-full text-[14px] font-semibold transition',
+                      featured
+                        ? 'bg-[#ff2e3f] text-white hover:bg-[#e11d2b] shadow-[0_10px_30px_rgba(225,29,43,0.35)]'
+                        : 'bg-white text-[#080808] hover:bg-white/90',
+                    ].join(' ')}
+                  >
+                    Get {p.label}
+                  </Link>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="mt-8 text-center text-[12px] text-white/40">
+          {isInternational
+            ? 'International checkout (PayPal & cards) going live next week — email us above for early access.'
+            : 'Secure checkout by Razorpay · UPI, cards, netbanking, wallets · One-time, no auto-renewal'}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function LandingFeature({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-2">
+      <Check className="mt-[3px] h-3.5 w-3.5 shrink-0 text-emerald-400" />
+      <span>{children}</span>
+    </li>
   );
 }
 
@@ -1079,7 +1263,7 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 function FinalCta() {
   return (
     <section
-      id="pricing"
+      id="get-started"
       className="relative z-[5] overflow-hidden px-5 py-[120px] text-center"
       style={{ background: 'radial-gradient(circle at 50% 0%, rgba(37,99,255,0.18), transparent 55%), #050608' }}
     >
