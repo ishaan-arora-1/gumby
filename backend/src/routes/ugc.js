@@ -56,15 +56,15 @@ router.get('/templates', async (req, res) => {
   res.setHeader('Expires', '0');
 
   const page = parseInt(req.query.page) || 1;
-  const limit = 20;
+  const limit = 5;
   const offset = (page - 1) * limit;
   const category = (req.query.category || '').trim();
 
   try {
     const redis = await getRedisClient();
-    // v3 cache namespace — bump whenever the schema or URL shape changes so
+    // v4 cache namespace — bump whenever the schema or URL shape changes so
     // stale Redis entries are bypassed without a manual flush.
-    const cacheKey = `ugc_templates_v3:${category || 'all'}:${page}`;
+    const cacheKey = `ugc_templates_v4:${category || 'all'}:${page}`;
     const cached = await redis.get(cacheKey);
     if (cached) return res.json(JSON.parse(cached));
 
