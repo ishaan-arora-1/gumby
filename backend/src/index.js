@@ -11,6 +11,8 @@ const exploreRoutes = require('./routes/explore');
 const calendarRoutes = require('./routes/calendar');
 const libraryRoutes = require('./routes/library');
 const ugcRoutes = require('./routes/ugc');
+const creditsRoutes = require('./routes/credits');
+const webhookRoutes = require('./routes/webhooks');
 const { router: userRoutes } = require('./routes/user');
 const { ensureBuckets } = require('./services/storageBootstrap');
 
@@ -20,6 +22,12 @@ const PORT = process.env.PORT || 3000;
 app.use(helmet());
 app.use(cors());
 app.use(morgan('dev'));
+
+// IMPORTANT: webhook routes must be mounted BEFORE express.json() so the
+// Razorpay HMAC verifier can hash the exact raw request bytes. Each
+// webhook route opts back in to `express.raw()` itself.
+app.use('/api/webhooks', webhookRoutes);
+
 app.use(express.json({ limit: '10mb' }));
 
 app.get('/health', (req, res) => {
@@ -32,6 +40,7 @@ app.use('/api/explore', exploreRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/library', libraryRoutes);
 app.use('/api/ugc', ugcRoutes);
+app.use('/api/credits', creditsRoutes);
 app.use('/api/user', userRoutes);
 
 app.use((err, req, res, next) => {

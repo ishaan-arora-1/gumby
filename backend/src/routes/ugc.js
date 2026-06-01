@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const authMiddleware = require('../middleware/auth');
 const { runUGCJob } = require('../services/ugcPipeline');
 const { runCreatorJob } = require('../services/creatorPipeline');
+const credits = require('../services/credits');
 
 // ---------- Public ----------
 // Public endpoint for the marketing site — returns a small set of active
@@ -460,12 +461,41 @@ router.post('/generate', async (req, res) => {
     const rawDuration = Number(videoDuration);
     job.video_duration = rawDuration >= 8 ? 10 : (rawDuration > 0 ? 5 : 10);
 
+    // ---- Credit preflight ----
+    // 5-second video costs 50 credits, 10-second video costs 100. We
+    // check (not debit) here so we can return a clean 402 to the client
+    // before the heavy work begins. The debit happens once the job row
+    // is inserted — that way we have a stable jobId to use as the
+    // ledger's ref_id (and we can refund against it on failure).
+    //
+    // The whole credit system is bypassed when `credits.isEnabled()`
+    // returns false (default until RAZORPAY_KEY_ID is set), so iOS +
+    // web clients keep generating videos for free during local dev.
+    const enforceCredits = credits.isEnabled();
+    let requiredCredits = 0;
+    if (enforceCredits) {
+      requiredCredits = credits.creditsForVideoDuration(job.video_duration);
+      const currentBalance = await credits.getBalance(userId);
+      if (currentBalance < requiredCredits) {
+        return res.status(402).json({
+          success: false,
+          error: 'insufficient_credits',
+          data: {
+            balance: currentBalance,
+            required: requiredCredits,
+            shortfall: requiredCredits - currentBalance,
+          },
+        });
+      }
+    }
+
     console.log(
       `[ugc:new] user=${userId.slice(0,8)} tpl=${templateId ? templateId.slice(0,8) : 'direct'} ` +
       `mode=single-shot${isDirectMode ? ' (direct)' : ''} ` +
       `inspiration=${job.inspiration_image_url ? 'yes' : 'no'} ` +
       `product_image=${productImageUrl ? 'yes' : 'no'} ` +
-      `video_dur=${job.video_duration || 'n/a'}`
+      `video_dur=${job.video_duration || 'n/a'} ` +
+      `credits=${enforceCredits ? requiredCredits : 'off'}`
     );
 
     let inserted;
@@ -504,9 +534,33 @@ router.post('/generate', async (req, res) => {
       }
     }
 
-    // Fire-and-forget the pipeline. Errors are captured into the job row.
+    // Debit credits now that we have a stable jobId for the ledger row.
+    // If this trips a race condition (concurrent jobs draining the
+    // balance), the SQL CHECK constraint fires and we surface 402.
+    // Skipped entirely when credits are disabled (no RAZORPAY_KEY_ID).
+    if (enforceCredits) {
+      try {
+        await credits.spendForJob(userId, requiredCredits, inserted.id);
+      } catch (spendErr) {
+        if (spendErr.code === 'INSUFFICIENT_CREDITS') {
+          // Roll the unused job row back so it doesn't clutter history.
+          await supabase.from('ugc_jobs').delete().eq('id', inserted.id);
+          return res.status(402).json({
+            success: false,
+            error: 'insufficient_credits',
+            data: { required: requiredCredits },
+          });
+        }
+        throw spendErr;
+      }
+    }
+
+    // Fire-and-forget the pipeline. Errors are captured into the job row
+    // and refunded by the pipeline itself when it flips to 'failed'.
+    // `creditCost: 0` tells the pipeline there's nothing to refund.
     setImmediate(() => {
-      runUGCJob(inserted).catch((e) => console.error('Background runUGCJob error:', e));
+      runUGCJob(inserted, { creditCost: enforceCredits ? requiredCredits : 0 })
+        .catch((e) => console.error('Background runUGCJob error:', e));
     });
 
     return res.status(202).json({ success: true, data: inserted });

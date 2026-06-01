@@ -931,8 +931,12 @@ async function runSingleShotPipeline(job, jobId) {
   }
 }
 
-async function runUGCJob(job) {
+async function runUGCJob(job, opts = {}) {
   const jobId = job.id;
+  // Credit cost the route already debited from the user's balance. If the
+  // pipeline ends in 'failed', we refund this amount back so the user
+  // doesn't get billed for a video they never received.
+  const creditCost = Number(opts.creditCost) || 0;
   const hasInspiration = !!job.inspiration_image_url;
   const hasTemplate = !!(job.template_snapshot && job.template_snapshot.video_url);
   const hasVideoDescription = !!(job.video_description || '').trim();
@@ -975,6 +979,18 @@ async function runUGCJob(job) {
       error: errMsg.slice(0, 500),
       completed_at: new Date().toISOString(),
     });
+    // Refund the credit spend so a failed render doesn't burn the user's
+    // balance. Idempotent — `refundForJob` checks for an existing refund
+    // ledger row before crediting.
+    if (creditCost > 0) {
+      try {
+        const credits = require('./credits');
+        await credits.refundForJob(job.user_id, creditCost, jobId);
+        console.log(`[ugc:${jobId}] refunded ${creditCost} credits to user ${job.user_id.slice(0,8)}`);
+      } catch (refundErr) {
+        console.error(`[ugc:${jobId}] refund failed:`, refundErr?.message || refundErr);
+      }
+    }
   }
 }
 
