@@ -171,7 +171,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Mobile top nav */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-black/80 backdrop-blur border-b border-white/5 px-4 flex items-center justify-between">
-        <Logo href="/studio" size={28} />
+        <Logo onClick={onLogoClick} size={28} />
         <div className="flex items-center gap-3">
           <CreditBalanceChip compact />
           <Link href="/settings" className="text-white/60" aria-label="Account">

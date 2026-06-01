@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import type { UGCJob } from '@/lib/types';
 import { LoopingVideo } from '@/components/ui/LoopingVideo';
-import { formatRelativeTime } from '@/lib/utils';
+import { formatRelativeTime, downloadVideo } from '@/lib/utils';
 import { ArrowLeft, Trash2, Download, Sparkles } from 'lucide-react';
 import { getCaptionPreset } from '@/lib/captionPresets';
 
@@ -34,7 +34,6 @@ export default function HistoryDetailPage() {
   const [job, setJob] = useState<UGCJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const [downloading, setDownloading] = useState(false);
   const [reusing, setReusing] = useState(false);
 
   useEffect(() => {
@@ -78,39 +77,12 @@ export default function HistoryDetailPage() {
     router.replace('/history');
   };
 
-  // Browsers ignore the HTML download attribute on cross-origin URLs
-  // (Supabase storage is cross-origin), so we fetch as a blob and
-  // trigger save off a same-origin blob: URL — same trick we use on
-  // the studio result screen.
-  const onDownload = async () => {
-    if (!job?.output_video_url || downloading) return;
-    setDownloading(true);
-    try {
-      const res = await fetch(job.output_video_url, { mode: 'cors', cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const filename = (() => {
-        try {
-          const u = new URL(job.output_video_url!);
-          const last = u.pathname.split('/').pop() || '';
-          if (last.includes('.')) return last;
-        } catch {}
-        return `blink-ugc-${job.id}.mp4`;
-      })();
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename;
-      a.rel = 'noopener';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-    } catch {
-      window.open(job.output_video_url, '_blank', 'noopener,noreferrer');
-    } finally {
-      setDownloading(false);
-    }
+  // Uses Supabase Storage's `download` query param (Content-Disposition:
+  // attachment) so the save works reliably across desktop and mobile —
+  // see downloadVideo() for the why.
+  const onDownload = () => {
+    if (!job?.output_video_url) return;
+    downloadVideo(job.output_video_url, `blink-ugc-${job.id}.mp4`);
   };
 
   if (loading) return <DetailSkeleton />;
@@ -171,19 +143,9 @@ export default function HistoryDetailPage() {
             <button
               type="button"
               onClick={onDownload}
-              disabled={downloading}
-              className="h-9 px-3 rounded-pill bg-white text-black text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-white/90 disabled:opacity-40 disabled:cursor-not-allowed transition shrink-0"
+              className="h-9 px-3 rounded-pill bg-white text-black text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-white/90 transition shrink-0"
             >
-              {downloading ? (
-                <>
-                  <div className="w-3 h-3 rounded-full border-2 border-black/30 border-t-black animate-spin" />
-                  Downloading…
-                </>
-              ) : (
-                <>
-                  <Download className="w-3.5 h-3.5" /> Download
-                </>
-              )}
+              <Download className="w-3.5 h-3.5" /> Download
             </button>
           )}
           <button

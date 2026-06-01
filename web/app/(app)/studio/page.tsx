@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, pollJob, ApiError } from '@/lib/api';
 import type { UGCTemplate, UGCJob } from '@/lib/types';
@@ -24,6 +24,12 @@ export default function StudioPage() {
   const [adJob, setAdJob] = useState<UGCJob | null>(null);
   const [error, setError] = useState<string>('');
   const [insufficient, setInsufficient] = useState<{ required: number; balance: number } | null>(null);
+
+  // Bumped on every reset/new-generation. An in-flight generation's poll
+  // captures the value at start and bails out of its state updates if it no
+  // longer matches — so clicking the logo (which resets to the fresh
+  // welcome page) can't be clobbered by a generation that finishes later.
+  const genRef = useRef(0);
 
   useEffect(() => {
     api.listTemplates(1).then((r) => setTemplates(r.data)).catch(() => {});
@@ -101,8 +107,10 @@ export default function StudioPage() {
 
   const onGenerateAd = async (payload: any) => {
     setError('');
+    const myGen = ++genRef.current;
     try {
       const { data } = await api.generateAd(payload);
+      if (genRef.current !== myGen) return;
       setAdJob(data);
       setStep('generating_ad');
       // The /generate route just debited the user's balance — refresh
@@ -111,14 +119,20 @@ export default function StudioPage() {
       window.dispatchEvent(new Event('blinkugc:credits-changed'));
       const final = await pollJob(
         () => api.getJob(data.id),
-        (j) => setAdJob(j as UGCJob)
+        (j) => {
+          if (genRef.current === myGen) setAdJob(j as UGCJob);
+        }
       );
+      // The user navigated away / reset (e.g. tapped the logo) while this
+      // was rendering — don't yank them back to the result.
+      if (genRef.current !== myGen) return;
       setAdJob(final as UGCJob);
       setStep('ad_done');
       // Tell the sidebar to refresh its Recents list immediately so the
       // newly-finished video appears without waiting for a route change.
       window.dispatchEvent(new Event('blinkugc:job-list-changed'));
     } catch (e: any) {
+      if (genRef.current !== myGen) return;
       // 402 = insufficient credits — pop the buy-credits modal instead
       // of dumping a raw error string in the form.
       if (e instanceof ApiError && e.status === 402) {
@@ -136,6 +150,9 @@ export default function StudioPage() {
   };
 
   const reset = () => {
+    // Invalidate any in-flight generation so its poll can't pull the user
+    // back to the result after we've returned to the fresh welcome page.
+    genRef.current++;
     setStep('welcome');
     setPickedTemplate(null);
     setPrefill(null);
@@ -293,6 +310,12 @@ export default function StudioPage() {
                   : 'Starting'
               }
             />
+
+            <p className="mx-auto mt-6 max-w-md px-2 text-center text-[13px] sm:text-sm leading-relaxed text-white/55">
+              Your video will take about two minutes to generate. You can leave
+              this page — it won&apos;t stop generating, and your video will be
+              saved to your history.
+            </p>
           </motion.div>
         )}
 
