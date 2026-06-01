@@ -37,14 +37,25 @@ struct ChatView: View {
             if chatVM.step == .studio {
                 // Clean dark canvas for the studio — no artwork, just solid dark
                 Color(hex: "0A0A0A").ignoresSafeArea()
+            } else if chatVM.step == .welcome {
+                // Web-style welcome owns its own flat canvas background.
+                // We render a full-screen canvas slab here (ignoring all
+                // safe areas, including the keyboard) so that when the
+                // keyboard opens the VStack-shrunk welcome view doesn't
+                // expose the brand artwork underneath.
+                WebTheme.Color.canvas.ignoresSafeArea()
             } else {
                 ChatBackgroundImage()
             }
 
             VStack(spacing: 0) {
+                // Welcome state owns its OWN floating header inside
+                // WebStudioWelcomeView (transparent at top → opaque on
+                // scroll, mirroring the web nav). Studio + funnel modes
+                // still render the regular fixed-position headers.
                 if chatVM.step == .studio {
                     studioHeader
-                } else {
+                } else if chatVM.step != .welcome {
                     chatHeader
                 }
 
@@ -141,17 +152,16 @@ struct ChatView: View {
         .background(Color(hex: "0A0A0A"))
     }
 
-    // MARK: - Welcome body (landing hero + pinned composer)
+    // MARK: - Welcome body
+    //
+    // Switched from the old carousel + pinned-composer layout to the
+    // web-style hero (italic serif headline + centered prompt composer +
+    // 2-col template grid). State plumbing on the VM is unchanged so the
+    // rest of the funnel (parse-prompt → studio card → generate) still
+    // works exactly as before.
 
     private var welcomeBody: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                UGCChatWelcomeBody()
-                    .padding(.bottom, 24)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            UGCChatComposerBar()
-        }
+        WebStudioWelcomeView()
     }
 
     // MARK: - Funnel body (step stack)

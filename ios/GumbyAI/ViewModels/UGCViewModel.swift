@@ -3,22 +3,24 @@ import UIKit
 
 @MainActor
 final class UGCViewModel: ObservableObject {
-    /// The Models screen has three sections:
-    ///   • Explore  — the curated 6 templates
+    /// The Creators screen has two sections — mirrors web's /templates:
+    ///   • Explore  — the curated templates
     ///   • Library  — every creator the user has personally generated
-    ///   • My Videos — completed final UGC ads
     /// Library lets users reuse a previously generated creator without
     /// regenerating one — tap "Use" and you land straight on product entry.
+    ///
+    /// "My Videos" used to live here as a third tab but was promoted to a
+    /// top-level sidebar destination (History) so iOS matches web's
+    /// AppShell nav. UGCMyVideosView is now rendered standalone from
+    /// ContentView via the `.history` destination.
     enum Tab: String, CaseIterable, Hashable {
         case explore = "Explore"
         case library = "Library"
-        case myVideos = "History"
 
         var iconName: String {
             switch self {
             case .explore: "person.crop.rectangle.stack"
             case .library: "sparkles"
-            case .myVideos: "clock.arrow.circlepath"
             }
         }
     }
@@ -49,6 +51,11 @@ final class UGCViewModel: ObservableObject {
     @Published var feedLayout: FeedLayout = .feed
     @Published var feedIndex: Int = 0
     @Published var lastJustCreatedJob: UGCJob?
+
+    /// Set by the sidebar when the user taps a recent video — UGCMyVideosView
+    /// observes this and pops the matching player sheet on appear. Cleared
+    /// after the sheet is presented so revisiting History doesn't re-open it.
+    @Published var focusedJobId: String?
 
     private let service = UGCService.shared
     private var pollTask: Task<Void, Never>?
@@ -107,6 +114,12 @@ final class UGCViewModel: ObservableObject {
     }
 
     /// Submits a new generation job and switches to the My Videos tab.
+    ///
+    /// NOTE: This is the legacy "tap a template → fill a sheet" entry
+    /// point. The live flow goes through `ChatViewModel.generateForActiveDraft`
+    /// which builds a richer GenerateRequest (creator tweaks, ethnicity,
+    /// captions, preset). We keep this method around so older call sites
+    /// still compile; it defaults the new fields to sensible values.
     func submitGeneration(
         template: UGCTemplate,
         productName: String,
@@ -122,19 +135,25 @@ final class UGCViewModel: ObservableObject {
             UGCService.GenerateRequest(
                 templateId: template.id,
                 creatorDescription: nil,
+                creatorTweaks: nil,
                 productName: productName,
                 productDescription: productDescription,
                 productImageURL: imageURL,
                 inspirationImageURL: nil,
                 script: script,
                 videoDescription: "",
-                videoDuration: 10
+                videoDuration: 10,
+                captionsEnabled: true,
+                captionPresetId: CaptionPreset.defaultId,
+                creatorEthnicity: nil
             )
         )
         // Optimistic insert; real status will get reconciled by polling.
+        // The "My Videos" tab no longer exists — History lives at the top
+        // level now, so we don't switch tabs here. Callers wanting to
+        // present the new job can navigate to the History destination.
         jobs.insert(job, at: 0)
         lastJustCreatedJob = job
-        selectedTab = .myVideos
         startPollingIfNeeded()
         return job
     }
