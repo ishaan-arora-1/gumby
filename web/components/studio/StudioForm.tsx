@@ -417,15 +417,22 @@ function Toggle({
       aria-label={label}
       onClick={onToggle}
       style={{ touchAction: 'manipulation' }}
-      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition select-none ${
-        on ? 'bg-accent2' : 'bg-white/15'
-      }`}
+      // Outer button is a full 44x44 tap target (Apple's minimum) so it's
+      // reliably hittable on small phones; the visible pill is centered
+      // inside it.
+      className="relative inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full select-none -my-2.5"
     >
       <span
-        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white transition ${
-          on ? 'translate-x-5' : 'translate-x-0.5'
+        className={`pointer-events-none relative inline-flex h-6 w-11 items-center rounded-full transition ${
+          on ? 'bg-accent2' : 'bg-white/15'
         }`}
-      />
+      >
+        <span
+          className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
+            on ? 'translate-x-5' : 'translate-x-0.5'
+          }`}
+        />
+      </span>
     </button>
   );
 }
