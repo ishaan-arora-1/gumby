@@ -1454,6 +1454,7 @@ function Footer() {
       <div className="flex items-center gap-5">
         <a href="/privacy" className="transition-colors hover:text-white">Privacy</a>
         <a href="/terms" className="transition-colors hover:text-white">Terms</a>
+        <a href="/refund" className="transition-colors hover:text-white">Refund</a>
         <a href="mailto:hi@blinkugc.com" className="transition-colors hover:text-white">Contact</a>
       </div>
       <div>© {new Date().getFullYear()} Blink UGC. The fastest way to create UGC videos.</div>
