@@ -14,6 +14,7 @@ const {
 } = require('../config/falModels');
 const { captionVideo } = require('./captioning');
 const { ffmpegPath } = require('../config/ffmpeg');
+const credits = require('./credits');
 
 const UGC_BUCKET = 'ugc-videos';
 
@@ -700,7 +701,11 @@ function buildKlingPrompt({
 // No TTS, no sync.so lipsync, no B-roll cuts. Two calls total.
 // ---------------------------------------------------------------------------
 
-async function runSingleShotPipeline(job, jobId) {
+async function runSingleShotPipeline(job, jobId, chargeOpts = {}) {
+  // `chargeAmount` > 0 means we should debit the user once the Kling
+  // generation succeeds. `chargeState.charged` is flipped to true the
+  // moment we do, so the caller can refund if a LATER step fails.
+  const { chargeAmount = 0, chargeState = { charged: false } } = chargeOpts;
   const snapshot = job.template_snapshot || {};
   const inspirationImageUrl = job.inspiration_image_url || null;
   const templateVideoUrl = snapshot.video_url || null;
@@ -942,6 +947,28 @@ async function runSingleShotPipeline(job, jobId) {
           onProgress: videoTick,
         });
 
+    // ---- Charge credits — the generation actually succeeded ----
+    // Kling returned a video, so the render genuinely happened and the
+    // cost is real. We debit HERE rather than at request time so that a
+    // generation which never reaches this point (a hung/duplicated click,
+    // a failed seed image, a Kling rejection) costs the user nothing.
+    // If the balance was drained by concurrent jobs since the preflight
+    // check, we've already paid the provider for this render, so we ship
+    // the video anyway and just log the shortfall.
+    if (chargeAmount > 0 && !chargeState.charged) {
+      try {
+        await credits.spendForJob(job.user_id, chargeAmount, jobId);
+        chargeState.charged = true;
+        console.log(`[ugc:${jobId}] charged ${chargeAmount} credits (kling generation succeeded)`);
+      } catch (chargeErr) {
+        if (chargeErr.code === 'INSUFFICIENT_CREDITS') {
+          console.warn(`[ugc:${jobId}] credit charge skipped — insufficient balance at debit time (concurrent drain); shipping video anyway`);
+        } else {
+          throw chargeErr;
+        }
+      }
+    }
+
     // Fetch the Kling MP4 to disk once. We may need to caption it next,
     // and ffmpeg works on file paths — staging to disk avoids a second
     // round-trip through Supabase to read the bytes back.
@@ -1018,10 +1045,13 @@ async function runSingleShotPipeline(job, jobId) {
 
 async function runUGCJob(job, opts = {}) {
   const jobId = job.id;
-  // Credit cost the route already debited from the user's balance. If the
-  // pipeline ends in 'failed', we refund this amount back so the user
-  // doesn't get billed for a video they never received.
-  const creditCost = Number(opts.creditCost) || 0;
+  // Amount to charge on a SUCCESSFUL generation. Credits are no longer
+  // debited at request time — the pipeline charges this only after the
+  // Kling render succeeds (see runSingleShotPipeline). `chargeState.charged`
+  // records whether that debit happened, so if a LATER step (captioning,
+  // upload) fails we refund exactly what we took and nothing more.
+  const chargeAmount = Number(opts.creditCost) || 0;
+  const chargeState = { charged: false };
   const hasInspiration = !!job.inspiration_image_url;
   const hasTemplate = !!(job.template_snapshot && job.template_snapshot.video_url);
   const hasVideoDescription = !!(job.video_description || '').trim();
@@ -1055,7 +1085,7 @@ async function runUGCJob(job, opts = {}) {
       return;
     }
 
-    await runSingleShotPipeline(job, jobId);
+    await runSingleShotPipeline(job, jobId, { chargeAmount, chargeState });
   } catch (err) {
     console.error(`[ugc:${jobId}] pipeline failed:`, err);
     const errMsg = err?.message || String(err);
@@ -1064,14 +1094,15 @@ async function runUGCJob(job, opts = {}) {
       error: errMsg.slice(0, 500),
       completed_at: new Date().toISOString(),
     });
-    // Refund the credit spend so a failed render doesn't burn the user's
-    // balance. Idempotent — `refundForJob` checks for an existing refund
-    // ledger row before crediting.
-    if (creditCost > 0) {
+    // Refund ONLY if we actually charged the user before the failure (i.e.
+    // Kling succeeded but a later step like captioning/upload blew up).
+    // Generations that fail before the Kling charge were never debited, so
+    // there's nothing to refund. Idempotent — refundForJob checks for an
+    // existing refund row first.
+    if (chargeState.charged && chargeAmount > 0) {
       try {
-        const credits = require('./credits');
-        await credits.refundForJob(job.user_id, creditCost, jobId);
-        console.log(`[ugc:${jobId}] refunded ${creditCost} credits to user ${job.user_id.slice(0,8)}`);
+        await credits.refundForJob(job.user_id, chargeAmount, jobId);
+        console.log(`[ugc:${jobId}] refunded ${chargeAmount} credits to user ${job.user_id.slice(0,8)} (post-charge failure)`);
       } catch (refundErr) {
         console.error(`[ugc:${jobId}] refund failed:`, refundErr?.message || refundErr);
       }

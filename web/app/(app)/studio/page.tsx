@@ -131,9 +131,10 @@ export default function StudioPage() {
       if (genRef.current !== myGen) return;
       setAdJob(data);
       setStep('generating_ad');
-      // The /generate route just debited the user's balance — refresh
-      // the sidebar chip immediately rather than waiting for a route
-      // change to trigger its own refetch.
+      // Nudge the balance chip to refetch. The actual debit now happens
+      // when the generation succeeds (see the completion handler below),
+      // so this is just a cheap freshness refresh — the chip updates for
+      // real once the job finishes.
       window.dispatchEvent(new Event('blinkugc:credits-changed'));
       // The job row already exists in the DB the moment /generate returns,
       // so surface it in the sidebar Recents right away — the user can
@@ -155,6 +156,10 @@ export default function StudioPage() {
       // Tell the sidebar to refresh its Recents list immediately so the
       // newly-finished video appears without waiting for a route change.
       window.dispatchEvent(new Event('blinkugc:job-list-changed'));
+      // Credits are now debited when the generation succeeds (not on the
+      // Generate click), so refresh the balance chip here — at completion —
+      // rather than relying solely on the earlier optimistic refresh.
+      window.dispatchEvent(new Event('blinkugc:credits-changed'));
     } catch (e: any) {
       if (genRef.current !== myGen) return;
       // 402 = insufficient credits — pop the buy-credits modal instead

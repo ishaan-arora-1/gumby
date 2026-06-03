@@ -16,12 +16,35 @@ function resolveApiBase(): string {
 const API_BASE = resolveApiBase();
 
 async function authHeaders(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
+  let session = (await supabase.auth.getSession()).data.session;
+  // After the studio page has been idle for a while, the cached access
+  // token can be expired (or seconds from it) and getSession() hands it
+  // back as-is. Sending a dead token makes the API reject the request,
+  // which on the studio page looks like the Generate button "doing
+  // nothing". Force a refresh when the token is within 60s of expiry so we
+  // always send a live token.
+  const expiresAtMs = session?.expires_at ? session.expires_at * 1000 : 0;
+  if (session && expiresAtMs && expiresAtMs - Date.now() < 60_000) {
+    try {
+      const refreshed = (await supabase.auth.refreshSession()).data.session;
+      if (refreshed) session = refreshed;
+    } catch {
+      // Fall through with whatever we have — the request may still 401,
+      // which surfaces a clean error rather than hanging silently.
+    }
+  }
   if (session?.access_token) {
     return { Authorization: `Bearer ${session.access_token}` };
   }
   return {};
 }
+
+// Hard ceiling on any single API call. /generate returns 202 almost
+// instantly and every other call is short, so this only ever trips on a
+// genuinely stuck request — at which point we abort and surface a clean
+// error instead of leaving the caller (and the Generate button) hanging
+// forever. Generous enough not to cut off a slow image upload.
+const REQUEST_TIMEOUT_MS = 60_000;
 
 export class ApiError extends Error {
   status: number;
@@ -40,10 +63,26 @@ async function request<T>(
     ...(await authHeaders()),
     ...((options.headers as Record<string, string>) ?? {}),
   };
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (e: any) {
+    // Network failure or our own timeout abort — normalize to an ApiError
+    // so callers (e.g. the studio Generate handler) always reset their
+    // loading state and show a message instead of staying stuck.
+    if (e?.name === 'AbortError') {
+      throw new ApiError(0, 'Request timed out. Please try again.');
+    }
+    throw new ApiError(0, e?.message || 'Network error. Please try again.');
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) {
     let msg = res.statusText;
     try {

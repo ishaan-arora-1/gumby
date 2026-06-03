@@ -606,30 +606,16 @@ router.post('/generate', aiLimiter, async (req, res) => {
       }
     }
 
-    // Debit credits now that we have a stable jobId for the ledger row.
-    // If this trips a race condition (concurrent jobs draining the
-    // balance), the SQL CHECK constraint fires and we surface 402.
-    // Skipped entirely when credits are disabled (no RAZORPAY_KEY_ID).
-    if (enforceCredits) {
-      try {
-        await credits.spendForJob(userId, requiredCredits, inserted.id);
-      } catch (spendErr) {
-        if (spendErr.code === 'INSUFFICIENT_CREDITS') {
-          // Roll the unused job row back so it doesn't clutter history.
-          await supabase.from('ugc_jobs').delete().eq('id', inserted.id);
-          return res.status(402).json({
-            success: false,
-            error: 'insufficient_credits',
-            data: { required: requiredCredits },
-          });
-        }
-        throw spendErr;
-      }
-    }
-
-    // Fire-and-forget the pipeline. Errors are captured into the job row
-    // and refunded by the pipeline itself when it flips to 'failed'.
-    // `creditCost: 0` tells the pipeline there's nothing to refund.
+    // NOTE: we deliberately do NOT debit credits here. The charge happens
+    // inside the pipeline, only AFTER the Kling generation call succeeds
+    // (see runUGCJob → runSingleShotPipeline). Debiting at request time
+    // meant a POST that never produced a real video — a hung or duplicated
+    // Generate click, an early pipeline failure — still cost the user
+    // credits. Charging on actual generation success ties the spend to a
+    // delivered render instead of to the button click. The preflight
+    // balance check above still returns a fast 402 when the user plainly
+    // can't afford the render. `creditCost` tells the pipeline how much to
+    // charge once it succeeds (0 = credits disabled, charge nothing).
     setImmediate(() => {
       runUGCJob(inserted, { creditCost: enforceCredits ? requiredCredits : 0 })
         .catch((e) => console.error('Background runUGCJob error:', e));
