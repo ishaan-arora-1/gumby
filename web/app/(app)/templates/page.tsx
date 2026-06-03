@@ -39,7 +39,20 @@ export default function TemplatesPage() {
               <TemplateCard
                 key={t.id}
                 template={t}
-                onUse={() => router.push('/studio')}
+                onUse={(tpl) => {
+                  // Hand the chosen creator off to the Studio page the same
+                  // way /history/[id]'s "Use creator" button does: stash it
+                  // in sessionStorage, which StudioPage reads on mount and
+                  // drops straight into the form. Without this, /studio
+                  // opened fresh and the selection was lost.
+                  try {
+                    sessionStorage.setItem(
+                      'blinkugc:pendingTemplate',
+                      JSON.stringify(tpl)
+                    );
+                  } catch {}
+                  router.push('/studio');
+                }}
               />
             ))}
       </div>
