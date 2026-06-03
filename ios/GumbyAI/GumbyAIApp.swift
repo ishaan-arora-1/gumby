@@ -14,7 +14,9 @@ struct GumbyAIApp: App {
     @StateObject private var historyVM = HistoryViewModel()
     @StateObject private var libraryVM = LibraryViewModel()
     @StateObject private var ugcVM = UGCViewModel()
-    
+    @StateObject private var creditsManager = CreditsManager()
+    @StateObject private var storeKit = StoreKitService()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -26,6 +28,8 @@ struct GumbyAIApp: App {
                 .environmentObject(historyVM)
                 .environmentObject(libraryVM)
                 .environmentObject(ugcVM)
+                .environmentObject(creditsManager)
+                .environmentObject(storeKit)
                 .preferredColorScheme(.dark)
                 .onOpenURL { url in
                     _ = GoogleSignInService.handle(url: url)

@@ -5,16 +5,19 @@ import SwiftUI
 /// app version, and the destructive Sign Out + Delete Account actions.
 struct ProfileView: View {
     @EnvironmentObject private var authService: AuthService
+    @EnvironmentObject private var credits: CreditsManager
     @Environment(\.dismiss) private var dismiss
 
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
+    @State private var showPaywall = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 22) {
                     accountCard
+                    creditsSection
                     legalSection
                     supportSection
                     aboutSection
@@ -50,6 +53,49 @@ struct ProfileView: View {
             }
         } message: {
             Text("This permanently deletes your Blinkugc account and all of your videos, drafts, and chat history. This action cannot be undone.")
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
+        .task { await credits.refresh() }
+    }
+
+    // MARK: - Credits
+
+    private var creditsSection: some View {
+        section(title: "Credits") {
+            HStack(spacing: 12) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppConstants.gradientColors.first ?? .white)
+                    .frame(width: 22)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(credits.balance) credits")
+                        .font(.gumby(15, weight: .semiBold))
+                        .foregroundStyle(AppConstants.textPrimary)
+                        .monospacedDigit()
+                    Text("Used to generate videos")
+                        .font(.gumby(12, weight: .regular))
+                        .foregroundStyle(AppConstants.chatMutedLabel)
+                }
+
+                Spacer()
+
+                Button {
+                    showPaywall = true
+                } label: {
+                    Text("Get credits")
+                        .font(.gumby(13, weight: .semiBold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 14)
+                        .frame(height: 34)
+                        .background(Capsule().fill(AppConstants.authPrimaryCTAFill))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
         }
     }
 

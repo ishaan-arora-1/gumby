@@ -4,6 +4,9 @@ struct ContentView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var sidebarVM: SidebarViewModel
     @EnvironmentObject var historyVM: HistoryViewModel
+    @EnvironmentObject var chatVM: ChatViewModel
+    @EnvironmentObject var creditsManager: CreditsManager
+    @EnvironmentObject var storeKit: StoreKitService
     @State private var selectedDestination: NavigationDestination = .chat
     @StateObject private var remoteImagePreview = RemoteImagePreviewController.shared
 
@@ -12,6 +15,12 @@ struct ContentView: View {
             if authService.isAuthenticated {
                 mainContent
                     .task(id: authService.currentUser?.id ?? "") {
+                        // Point the credit ledger at this user, hand it to
+                        // the chat VM for generation gating, and start the
+                        // StoreKit transaction listener (all idempotent).
+                        await creditsManager.reload(forUserID: authService.currentUser?.id)
+                        chatVM.attachCredits(creditsManager)
+                        storeKit.start(credits: creditsManager)
                         // Preload conversation history so the sidebar opens instantly.
                         await historyVM.loadHistory()
                         GeneratedImagesStore.shared.reloadForCurrentUser()

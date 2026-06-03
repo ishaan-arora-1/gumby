@@ -6,6 +6,12 @@ enum APIError: LocalizedError {
     case decodingError
     case serverError
     case unauthorized
+    /// HTTP 402 from the credit-gated `/ugc/generate` route. Carries the
+    /// server's balance/required figures when present so the UI can route
+    /// to the paywall. (Production currently runs with credits disabled,
+    /// so this is dormant until server-side credits are switched on — the
+    /// client enforces credits locally in the meantime.)
+    case insufficientCredits(balance: Int?, required: Int?)
     case custom(String)
 
     var errorDescription: String? {
@@ -15,9 +21,25 @@ enum APIError: LocalizedError {
         case .decodingError: return "Failed to decode response"
         case .serverError: return "Server error"
         case .unauthorized: return "Unauthorized"
+        case .insufficientCredits(_, let required):
+            if let required { return "You need \(required) credits to generate this video." }
+            return "You don't have enough credits."
         case .custom(let message): return message
         }
     }
+}
+
+/// Shape of the JSON error envelope the backend returns on failures, e.g.
+/// `{ "success": false, "error": "insufficient_credits",
+///    "data": { "balance": 0, "required": 100 } }`.
+private struct APIErrorEnvelope: Decodable {
+    let error: String?
+    let message: String?
+    struct Data: Decodable {
+        let balance: Int?
+        let required: Int?
+    }
+    let data: Data?
 }
 
 class APIService {
@@ -45,6 +67,22 @@ class APIService {
 
     private func getAuthToken() -> String? {
         AuthService.shared.getToken()
+    }
+
+    /// Maps a non-2xx response to a typed `APIError`, decoding the backend
+    /// JSON error envelope so callers get the server's message (and, for
+    /// 402, the balance/required figures) instead of a generic "Server
+    /// error".
+    private func mapFailure(status: Int, data: Data) -> APIError {
+        if status == 401 { return .unauthorized }
+        let env = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data)
+        if status == 402 {
+            return .insufficientCredits(balance: env?.data?.balance, required: env?.data?.required)
+        }
+        if let msg = env?.error ?? env?.message, !msg.isEmpty, msg != "insufficient_credits" {
+            return .custom(msg)
+        }
+        return .serverError
     }
 
     private func makeRequest(
@@ -86,12 +124,8 @@ class APIService {
             throw APIError.serverError
         }
 
-        if httpResponse.statusCode == 401 {
-            throw APIError.unauthorized
-        }
-
         guard (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.serverError
+            throw mapFailure(status: httpResponse.statusCode, data: data)
         }
 
         return try decoder.decode(T.self, from: data)
@@ -105,12 +139,8 @@ class APIService {
             throw APIError.serverError
         }
 
-        if httpResponse.statusCode == 401 {
-            throw APIError.unauthorized
-        }
-
         guard (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.serverError
+            throw mapFailure(status: httpResponse.statusCode, data: data)
         }
 
         return try decoder.decode(T.self, from: data)
@@ -125,7 +155,7 @@ class APIService {
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.serverError
+            throw mapFailure(status: httpResponse.statusCode, data: data)
         }
 
         return try decoder.decode(T.self, from: data)
@@ -133,14 +163,14 @@ class APIService {
 
     func delete(path: String) async throws {
         let request = try makeRequest(path: path, method: "DELETE")
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.serverError
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.serverError
+            throw mapFailure(status: httpResponse.statusCode, data: data)
         }
     }
 }

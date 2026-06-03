@@ -14,6 +14,11 @@ schemes:
         GumbyAI: all
     run:
       config: Debug
+      # Local StoreKit testing config so credit-pack purchases work in the
+      # simulator without App Store Connect. For production, create the
+      # same product IDs in App Store Connect (this file is dev-only and is
+      # not bundled into the app).
+      storeKitConfiguration: Products.storekit
     test:
       config: Debug
     profile:

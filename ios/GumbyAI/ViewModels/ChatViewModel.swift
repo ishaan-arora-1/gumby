@@ -77,6 +77,13 @@ class ChatViewModel: ObservableObject {
     @Published var isSubmittingJob: Bool = false
     @Published var submitError: String?
 
+    // MARK: - Credits / paywall
+
+    /// Presents the credit paywall when true (bound by `ChatView`).
+    @Published var showPaywall: Bool = false
+    /// Optional banner shown atop the paywall explaining why it appeared.
+    @Published var paywallContext: String?
+
     // MARK: - Studio drafts (iterative regeneration)
 
     @Published var drafts: [UGCDraft] = []
@@ -91,6 +98,23 @@ class ChatViewModel: ObservableObject {
     private let service = UGCService.shared
     private var pollTask: Task<Void, Never>?
     private var creatorPollTask: Task<Void, Never>?
+
+    /// On-device credit ledger, injected from the app on launch. The full
+    /// ad pipeline is credit-gated; the silent creator pipeline is free
+    /// (matching the backend, where only `/ugc/generate` charges).
+    weak var credits: CreditsManager?
+
+    /// Called once from the app/root view to hand the shared credit ledger
+    /// to the view model so generation can preflight + spend + refund.
+    func attachCredits(_ manager: CreditsManager) {
+        self.credits = manager
+    }
+
+    /// Opens the paywall with an optional explanatory banner.
+    func presentPaywall(context: String? = nil) {
+        paywallContext = context
+        showPaywall = true
+    }
 
     // MARK: - Init
 
@@ -524,6 +548,21 @@ class ChatViewModel: ObservableObject {
         }
         guard !drafts[activeDraftIndex].isSubmitting else { return }
 
+        // ---- Credit preflight ----
+        // The full ad pipeline costs credits (50 for ≤7s, 100 for ≥8s),
+        // mirroring the backend. Check the on-device balance before doing
+        // any work so we can route straight to the paywall. The silent
+        // creator pipeline is free and skips this entirely.
+        let durationSeconds = drafts[activeDraftIndex].videoDuration
+        let requiredCredits = credits?.cost(forSeconds: durationSeconds) ?? 0
+        if let credits, !credits.hasSufficient(forSeconds: durationSeconds) {
+            let shortfall = max(0, requiredCredits - credits.balance)
+            presentPaywall(
+                context: "This video costs \(requiredCredits) credits — you need \(shortfall) more."
+            )
+            return
+        }
+
         drafts[activeDraftIndex].isSubmitting = true
         drafts[activeDraftIndex].submitError = nil
 
@@ -571,6 +610,12 @@ class ChatViewModel: ObservableObject {
                     )
                 )
                 guard drafts.indices.contains(draftIndex) else { return }
+                // Debit credits now that we have a stable job id for the
+                // ledger ref (mirrors the backend's debit-on-accept). The
+                // matching refund happens if the job later fails.
+                if let credits, requiredCredits > 0 {
+                    try? await credits.spend(amount: requiredCredits, jobID: job.id)
+                }
                 drafts[draftIndex].isSubmitting = false
                 drafts[draftIndex].job = job
                 drafts[draftIndex].status = .generating
@@ -579,7 +624,15 @@ class ChatViewModel: ObservableObject {
             } catch {
                 guard drafts.indices.contains(draftIndex) else { return }
                 drafts[draftIndex].isSubmitting = false
-                drafts[draftIndex].submitError = error.localizedDescription
+                // If the server itself reports insufficient credits (only
+                // once server-side credits are switched on), route to the
+                // paywall instead of showing a raw error.
+                if case APIError.insufficientCredits(_, let required) = error {
+                    let need = required ?? requiredCredits
+                    presentPaywall(context: "This video costs \(need) credits.")
+                } else {
+                    drafts[draftIndex].submitError = error.localizedDescription
+                }
             }
         }
     }
@@ -609,6 +662,15 @@ class ChatViewModel: ObservableObject {
                             }
                         } else if updated.status == .failed {
                             self.drafts[draftIndex].status = .failed
+                            // Refund the credits we debited when the job
+                            // started (idempotent on job id — mirrors the
+                            // backend's refund-on-failure).
+                            if let credits = self.credits {
+                                let refundAmount = credits.cost(
+                                    forSeconds: self.drafts[draftIndex].videoDuration
+                                )
+                                Task { await credits.refund(amount: refundAmount, jobID: updated.id) }
+                            }
                         }
                     }
                     if updated.status.isTerminal { break }

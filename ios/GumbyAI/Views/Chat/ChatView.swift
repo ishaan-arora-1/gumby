@@ -73,6 +73,9 @@ struct ChatView: View {
                 to: nil, from: nil, for: nil
             )
         }
+        .sheet(isPresented: $chatVM.showPaywall) {
+            PaywallView(contextMessage: chatVM.paywallContext)
+        }
     }
 
     // MARK: - Header
