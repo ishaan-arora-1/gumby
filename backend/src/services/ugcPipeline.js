@@ -171,20 +171,14 @@ function nanoAspectFor(aspectRatio) {
 const REALISM_GUIDANCE =
   'The new person is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model, NOT a fashion-ad face. No glamour makeup, casual everyday clothing, candid natural expression. Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of a real adult creator.';
 
-// Wardrobe guardrail. Without an explicit instruction the image/video models
-// will sometimes leave the creator under-dressed (e.g. a sweater with nothing
-// underneath, underwear-only, or otherwise implied-undress) — unacceptable for
-// an ad. "Proper attire" here does NOT mean fully/conservatively covered; it
-// means the creator is genuinely dressed with both a proper top AND proper
-// bottoms appropriate for an everyday social-media video. Appended to every
-// seed-image prompt and the Kling prompt.
+// Wardrobe guardrail for the Nano Banana seed image only. The goal is NOT to
+// force full/conservative coverage — revealing or "hot" outfits are fine when
+// the user asks for them. We only want to avoid UNINTENDED undress (e.g. the
+// model rendering "girl in a bedroom" in just a sweater with nothing
+// underneath) by defaulting to normal clothing when the prompt is silent.
+// Injected only into the Nano Banana seed-image prompts — nothing Kling.
 const ATTIRE_GUIDANCE =
-  'The creator is fully and appropriately dressed for an everyday social-media video, wearing BOTH a proper top (such as a shirt, t-shirt, blouse, or top) AND proper bottoms (such as pants, jeans, a skirt, or shorts). No nudity, no underwear-only or lingerie-only looks, no bare torso, no topless or bottomless framing, and no implied undress — a sweater, jacket, or top is always worn over proper clothing underneath, never on bare skin alone.';
-
-// Negative-prompt suffix that mirrors ATTIRE_GUIDANCE — steers Kling away from
-// rendering the creator in any state of undress.
-const KLING_NEGATIVE_PROMPT_ATTIRE_SUFFIX =
-  ', nudity, nude, naked, topless, bottomless, bare torso, bare chest, underwear only, lingerie, bra only, panties, exposed skin, undressed, partially dressed, no pants, no bottoms, see-through clothing, revealing outfit';
+  "Dress the creator in an outfit that fits the user's description and the scene's vibe — follow the description for how casual, stylish, or revealing the clothing should be (revealing or 'hot' outfits are fine when the user asks for them). When the description doesn't mention an outfit, default to complete, scene-appropriate everyday clothing so the creator is never left unintentionally undressed or wearing only underwear.";
 
 /**
  * Pre-process pass — clean product image extraction.
@@ -583,8 +577,6 @@ function klingNegativePrompt({ hasProduct, creatorSpeaks = true }) {
   let np = KLING_NEGATIVE_PROMPT_CORE +
     (creatorSpeaks ? KLING_NEGATIVE_PROMPT_SPEAKING : KLING_NEGATIVE_PROMPT_SILENT);
   if (!hasProduct) np += KLING_NEGATIVE_PROMPT_NO_PRODUCT_SUFFIX;
-  // Always steer away from any state of undress — see ATTIRE_GUIDANCE.
-  np += KLING_NEGATIVE_PROMPT_ATTIRE_SUFFIX;
   return np;
 }
 
@@ -670,7 +662,6 @@ function buildKlingPrompt({
   // describe naturalistic action and let the model handle the framing.
   parts.push('One continuous shot, no cuts, smooth natural motion, expressive body language and facial expression, candid everyday energy.');
   parts.push('The creator is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model and NOT a fashion ad. No glamour makeup, casual everyday clothing, authentic vibe, vertical phone-video aspect ratio.');
-  parts.push(ATTIRE_GUIDANCE);
 
   if (creatorSpeaks && script) {
     // The script + speak + lip-sync instructions go LAST so they read as
