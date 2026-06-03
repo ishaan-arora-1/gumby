@@ -15,6 +15,10 @@ struct UGCView: View {
     @Binding var selectedDestination: NavigationDestination
 
     @State private var previewTemplate: UGCTemplate?
+    /// Set when the user taps "Use as template" inside the preview cover.
+    /// We dismiss the cover first and run the actual handoff in the
+    /// cover's `onDismiss` — see the `.fullScreenCover` below.
+    @State private var pendingHandoff: UGCTemplate?
 
     var body: some View {
         ZStack {
@@ -31,18 +35,32 @@ struct UGCView: View {
             // on loading" reports. The HTTP layer is also no-store now.
             await ugcVM.loadTemplates(force: true)
         }
-        .fullScreenCover(item: $previewTemplate) { template in
+        .fullScreenCover(item: $previewTemplate, onDismiss: {
+            // The cover (and its AVPlayer-backed LoopingVideoView) is now
+            // fully torn down. Only NOW do we switch the top-level
+            // destination to .chat. Doing the handoff here — instead of
+            // inside the button while the cover is still presented —
+            // fixes two bugs at once:
+            //   1. the navigation getting swallowed (the destination
+            //      switch used to race the cover teardown, so you'd never
+            //      land on the studio form), and
+            //   2. the AVPlayer cleanup crash that happened when the
+            //      cover dismissed and the destination switched in the
+            //      same pass.
+            if let template = pendingHandoff {
+                pendingHandoff = nil
+                handoffToChat(with: template)
+            }
+        }) { template in
             UGCTemplatePreviewSheet(
                 template: template,
                 onClose: { previewTemplate = nil },
                 onUse: {
-                    // Do NOT manually dismiss the cover here. Switching
-                    // the destination to .chat unmounts UGCView entirely,
-                    // which tears the cover (and its AVPlayer-backed
-                    // LoopingVideoView) down in a single pass. Setting
-                    // `previewTemplate = nil` first races that teardown
-                    // and crashes on the AVPlayer cleanup path.
-                    handoffToChat(with: template)
+                    // Record the choice and dismiss the cover. The actual
+                    // handoff runs in `onDismiss` above, once teardown is
+                    // complete.
+                    pendingHandoff = template
+                    previewTemplate = nil
                 }
             )
         }
