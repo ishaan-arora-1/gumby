@@ -123,6 +123,10 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
   };
 
   const submit = () => {
+    // Ignore clicks once a generation is already in flight — the parent
+    // also guards this, but bailing here keeps a queued tap from running
+    // the validation/onSubmit path a second time.
+    if (loading) return;
     if (!template && !creatorDesc.trim()) {
       alert('Describe the creator for your video');
       return;

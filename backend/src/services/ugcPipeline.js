@@ -171,6 +171,21 @@ function nanoAspectFor(aspectRatio) {
 const REALISM_GUIDANCE =
   'The new person is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model, NOT a fashion-ad face. No glamour makeup, casual everyday clothing, candid natural expression. Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of a real adult creator.';
 
+// Wardrobe guardrail. Without an explicit instruction the image/video models
+// will sometimes leave the creator under-dressed (e.g. a sweater with nothing
+// underneath, underwear-only, or otherwise implied-undress) — unacceptable for
+// an ad. "Proper attire" here does NOT mean fully/conservatively covered; it
+// means the creator is genuinely dressed with both a proper top AND proper
+// bottoms appropriate for an everyday social-media video. Appended to every
+// seed-image prompt and the Kling prompt.
+const ATTIRE_GUIDANCE =
+  'The creator is fully and appropriately dressed for an everyday social-media video, wearing BOTH a proper top (such as a shirt, t-shirt, blouse, or top) AND proper bottoms (such as pants, jeans, a skirt, or shorts). No nudity, no underwear-only or lingerie-only looks, no bare torso, no topless or bottomless framing, and no implied undress — a sweater, jacket, or top is always worn over proper clothing underneath, never on bare skin alone.';
+
+// Negative-prompt suffix that mirrors ATTIRE_GUIDANCE — steers Kling away from
+// rendering the creator in any state of undress.
+const KLING_NEGATIVE_PROMPT_ATTIRE_SUFFIX =
+  ', nudity, nude, naked, topless, bottomless, bare torso, bare chest, underwear only, lingerie, bra only, panties, exposed skin, undressed, partially dressed, no pants, no bottoms, see-through clothing, revealing outfit';
+
 /**
  * Pre-process pass — clean product image extraction.
  *
@@ -298,6 +313,7 @@ async function reimagineCreatorInScene({
   }
 
   parts.push(REALISM_GUIDANCE);
+  parts.push(ATTIRE_GUIDANCE);
 
   // Dedup the URL list when the same image carries both roles, so Nano
   // Banana sees a single input that the prompt above describes as both
@@ -364,6 +380,7 @@ async function synthesizeCreatorScene({
       `Place the extracted product naturally on or with this new creator — worn if it is apparel, held if it is a handheld item, used if it is a tool. Preserve the product pixel-perfectly: packaging, color, label text, shape, fabric, design, and branding all match the reference exactly. Do not redesign, restyle, recolor, or otherwise alter the product.`,
       'The product must be clearly visible and recognizable in the final image — never hide it, never blur it, never change its branding.',
       REALISM_GUIDANCE,
+      ATTIRE_GUIDANCE,
     ].join(' ');
 
     const result = await falSubscribeWithRetry(IMAGE_SUBJECT_SWAP, {
@@ -396,6 +413,7 @@ async function synthesizeCreatorScene({
       ? `The creator is featuring ${productPhrase} — depict them holding or interacting with it naturally.`
       : 'CRITICAL — NO PRODUCT. The creator\'s hands are empty and relaxed. No bottles, tubes, jars, boxes, packages, phones, gadgets, or held items of any kind. The user explicitly chose NOT to feature a product, so the creator is simply standing or sitting naturally.',
     REALISM_GUIDANCE,
+    ATTIRE_GUIDANCE,
   ].join(' ');
 
   const result = await falSubscribeWithRetry(IMAGE_GENERATE, {
@@ -565,6 +583,8 @@ function klingNegativePrompt({ hasProduct, creatorSpeaks = true }) {
   let np = KLING_NEGATIVE_PROMPT_CORE +
     (creatorSpeaks ? KLING_NEGATIVE_PROMPT_SPEAKING : KLING_NEGATIVE_PROMPT_SILENT);
   if (!hasProduct) np += KLING_NEGATIVE_PROMPT_NO_PRODUCT_SUFFIX;
+  // Always steer away from any state of undress — see ATTIRE_GUIDANCE.
+  np += KLING_NEGATIVE_PROMPT_ATTIRE_SUFFIX;
   return np;
 }
 
@@ -650,6 +670,7 @@ function buildKlingPrompt({
   // describe naturalistic action and let the model handle the framing.
   parts.push('One continuous shot, no cuts, smooth natural motion, expressive body language and facial expression, candid everyday energy.');
   parts.push('The creator is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model and NOT a fashion ad. No glamour makeup, casual everyday clothing, authentic vibe, vertical phone-video aspect ratio.');
+  parts.push(ATTIRE_GUIDANCE);
 
   if (creatorSpeaks && script) {
     // The script + speak + lip-sync instructions go LAST so they read as

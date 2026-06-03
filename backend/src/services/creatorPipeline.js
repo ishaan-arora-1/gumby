@@ -137,7 +137,12 @@ async function generateTextToVideo(prompt, durationSeconds, aspectRatio) {
   // not styled by a beauty agency.
   const realnessSuffix =
     ' The person is a naturally good-looking everyday adult — relatable, approachable, healthy, the kind of person you would actually see filming UGC on their phone. NOT a professional model, NOT a fashion ad, NOT a beauty campaign. Casual everyday clothing, candid natural expression, shot like a vertical phone video.';
-  const composedPrompt = `${prompt.trim()} ${realnessSuffix}`.slice(0, 1500);
+  // Wardrobe guardrail — keep the creator properly dressed (a real top AND
+  // real bottoms), never under-dressed / implied-undress, regardless of how
+  // sparse the user's prompt is. Mirrors ATTIRE_GUIDANCE in ugcPipeline.js.
+  const attireSuffix =
+    ' The creator is fully and appropriately dressed for an everyday social-media video, wearing BOTH a proper top (shirt, t-shirt, blouse, or top) AND proper bottoms (pants, jeans, skirt, or shorts). No nudity, no underwear-only or lingerie-only looks, no bare torso, and no implied undress — any sweater, jacket, or top is worn over proper clothing, never on bare skin alone.';
+  const composedPrompt = `${prompt.trim()} ${realnessSuffix}${attireSuffix}`.slice(0, 1700);
 
   const input = {
     prompt: composedPrompt,
@@ -147,7 +152,7 @@ async function generateTextToVideo(prompt, durationSeconds, aspectRatio) {
     // Negative prompt does the *no-glamour-ad* steering, plus explicit
     // anti-aging terms so realism guidance doesn't get misinterpreted
     // as "make them old / wrinkled".
-    negative_prompt: 'professional model, supermodel, fashion model, magazine cover, glamour shot, beauty advertisement, runway, studio lighting, plastic skin, cgi, doll-like, old, elderly, aged, wrinkled, wrinkles, weathered face, gaunt, sickly, unhealthy, blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed mouth, extra limbs, frozen still image',
+    negative_prompt: 'professional model, supermodel, fashion model, magazine cover, glamour shot, beauty advertisement, runway, studio lighting, plastic skin, cgi, doll-like, old, elderly, aged, wrinkled, wrinkles, weathered face, gaunt, sickly, unhealthy, blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed mouth, extra limbs, frozen still image, nudity, nude, naked, topless, bottomless, bare torso, bare chest, underwear only, lingerie, bra only, panties, exposed skin, undressed, partially dressed, no pants, no bottoms, see-through clothing, revealing outfit',
     cfg_scale: 0.5,
   };
 

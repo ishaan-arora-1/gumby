@@ -25,11 +25,22 @@ export default function StudioPage() {
   const [error, setError] = useState<string>('');
   const [insufficient, setInsufficient] = useState<{ required: number; balance: number } | null>(null);
 
+  // True from the moment Generate is clicked until the request settles.
+  // Drives the form's disabled/"Generating…" button so the user can't fire
+  // a second generation during the 2–3s the /generate POST is in flight.
+  const [isGenerating, setIsGenerating] = useState(false);
+
   // Bumped on every reset/new-generation. An in-flight generation's poll
   // captures the value at start and bails out of its state updates if it no
   // longer matches — so clicking the logo (which resets to the fresh
   // welcome page) can't be clobbered by a generation that finishes later.
   const genRef = useRef(0);
+
+  // Synchronous re-entry guard. A React state flag (isGenerating) updates on
+  // the next render, so two clicks fired in the same tick could both slip
+  // past it and POST twice. This ref flips immediately, closing that race —
+  // the very first click claims the generation and any extra clicks bail.
+  const generatingRef = useRef(false);
 
   useEffect(() => {
     api.listTemplates(1).then((r) => setTemplates(r.data)).catch(() => {});
@@ -106,6 +117,13 @@ export default function StudioPage() {
   };
 
   const onGenerateAd = async (payload: any) => {
+    // Re-entry guard — if a generation is already in flight (e.g. the user
+    // double-clicked Generate before the view switched to the rendering
+    // screen), ignore the extra click so we don't start a second job and
+    // debit credits twice.
+    if (generatingRef.current) return;
+    generatingRef.current = true;
+    setIsGenerating(true);
     setError('');
     const myGen = ++genRef.current;
     try {
@@ -146,6 +164,11 @@ export default function StudioPage() {
       }
       setError(e.message || 'Ad generation failed');
       setStep('studio');
+    } finally {
+      // Release the guard whether we ended on the result screen, an error,
+      // or the insufficient-credits modal — so the user can generate again.
+      generatingRef.current = false;
+      setIsGenerating(false);
     }
   };
 
@@ -153,6 +176,8 @@ export default function StudioPage() {
     // Invalidate any in-flight generation so its poll can't pull the user
     // back to the result after we've returned to the fresh welcome page.
     genRef.current++;
+    generatingRef.current = false;
+    setIsGenerating(false);
     setStep('welcome');
     setPickedTemplate(null);
     setPrefill(null);
@@ -277,6 +302,7 @@ export default function StudioPage() {
               template={pickedTemplate}
               prefill={prefill}
               onSubmit={onGenerateAd}
+              loading={isGenerating}
             />
           </motion.div>
         )}
