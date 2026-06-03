@@ -5,9 +5,29 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import type { UGCJob } from '@/lib/types';
 import { LoopingVideo } from '@/components/ui/LoopingVideo';
+import { GeneratingCard } from '@/components/studio/GeneratingCard';
 import { formatRelativeTime, downloadVideo } from '@/lib/utils';
 import { ArrowLeft, Trash2, Download, Sparkles } from 'lucide-react';
 import { getCaptionPreset } from '@/lib/captionPresets';
+
+// A job is still rendering until it lands on one of these terminal states.
+const isTerminalStatus = (s?: string) => s === 'completed' || s === 'failed';
+
+// Bold heading shown on the progress card while a job renders. Mirrors the
+// stages the backend pipeline moves through (ugcPipeline.js) so the user
+// sees roughly where their video is.
+function renderingLabel(status?: string): string {
+  switch (status) {
+    case 'generating_video':
+      return 'Generating video';
+    case 'rendering_scene':
+      return 'Building the scene';
+    case 'finalizing':
+      return 'Polishing';
+    default:
+      return 'Starting';
+  }
+}
 
 /**
  * History detail — opens when a user taps a tile on /history.
@@ -36,14 +56,52 @@ export default function HistoryDetailPage() {
   const [error, setError] = useState<string>('');
   const [reusing, setReusing] = useState(false);
 
+  // Load the job, then keep polling while it's still rendering so the
+  // progress bar advances and the finished video swaps in automatically —
+  // the same live experience as the studio generating screen. Polling stops
+  // on a terminal status, on unmount, or when the id changes.
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // Only fire the sidebar refresh once, when this job first reaches a
+    // terminal state — so its Recents thumbnail updates without a reload.
+    let notifiedDone = false;
     setLoading(true);
-    api
-      .getJob(id)
-      .then((r) => setJob(r.data))
-      .catch((e: any) => setError(e?.message || 'Could not load this video'))
-      .finally(() => setLoading(false));
+    setError('');
+
+    const tick = async (first: boolean) => {
+      try {
+        const { data } = await api.getJob(id);
+        if (cancelled) return;
+        setJob(data);
+        if (first) setLoading(false);
+        if (isTerminalStatus(data.status)) {
+          if (!notifiedDone) {
+            notifiedDone = true;
+            window.dispatchEvent(new Event('blinkugc:job-list-changed'));
+          }
+          return; // done — stop polling
+        }
+        timer = setTimeout(() => tick(false), 2500);
+      } catch (e: any) {
+        if (cancelled) return;
+        if (first) {
+          setError(e?.message || 'Could not load this video');
+          setLoading(false);
+        } else {
+          // Transient poll error — back off and keep trying.
+          timer = setTimeout(() => tick(false), 4000);
+        }
+      }
+    };
+
+    tick(true);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [id]);
 
   // Reuse the creator from this finished video: the backend mints a
@@ -165,16 +223,22 @@ export default function HistoryDetailPage() {
           {job.product_name || 'Untitled ad'}
         </h1>
         <p className="text-sm text-white/45 mt-1">
-          Generated {formatRelativeTime(job.created_at)}
+          {job.status === 'completed'
+            ? `Generated ${formatRelativeTime(job.created_at)}`
+            : job.status === 'failed'
+            ? 'Generation failed'
+            : `Rendering… ${Math.round(job.progress ?? 0)}%`}
           {videoDuration ? ` · ${videoDuration}s` : ''}
           {isTemplate ? ' · Template mode' : ' · Direct prompt'}
         </p>
       </div>
 
-      {/* Video on top */}
+      {/* Video on top. While the job is still rendering we show the same
+          progress card + bar as the studio generating screen, polling in
+          the background until the finished video swaps itself in. */}
       <div className="mx-auto max-w-sm">
-        <div className="aspect-[9/16] rounded-card overflow-hidden bg-black border border-white/10">
-          {job.output_video_url ? (
+        {job.output_video_url ? (
+          <div className="aspect-[9/16] rounded-card overflow-hidden bg-black border border-white/10">
             <LoopingVideo
               src={job.output_video_url}
               poster={job.output_thumbnail_url}
@@ -182,15 +246,20 @@ export default function HistoryDetailPage() {
               autoplay
               className="w-full h-full"
             />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-center px-4">
-              <div className="w-8 h-8 rounded-full border-2 border-white/20 border-t-accent2 animate-spin mb-3" />
-              <div className="text-xs text-white/60">
-                {job.status === 'failed' ? job.error || 'Failed' : 'Still rendering…'}
-              </div>
+          </div>
+        ) : job.status === 'failed' ? (
+          <div className="aspect-[9/16] rounded-card overflow-hidden bg-black border border-white/10 flex flex-col items-center justify-center text-center px-4">
+            <div className="text-xs text-red-400">
+              {job.error || 'Generation failed'}
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <GeneratingCard
+            serverProgress={job.progress}
+            estimatedSeconds={90}
+            label={renderingLabel(job.status)}
+          />
+        )}
       </div>
 
       {/* Form recap */}

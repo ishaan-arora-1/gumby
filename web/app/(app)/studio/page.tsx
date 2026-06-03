@@ -135,6 +135,12 @@ export default function StudioPage() {
       // the sidebar chip immediately rather than waiting for a route
       // change to trigger its own refetch.
       window.dispatchEvent(new Event('blinkugc:credits-changed'));
+      // The job row already exists in the DB the moment /generate returns,
+      // so surface it in the sidebar Recents right away — the user can
+      // navigate off /studio and click back into this still-rendering job
+      // to watch its progress (the history detail page polls + shows the
+      // same progress bar).
+      window.dispatchEvent(new Event('blinkugc:job-list-changed'));
       const final = await pollJob(
         () => api.getJob(data.id),
         (j) => {

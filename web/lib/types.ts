@@ -27,7 +27,20 @@ export interface UGCJob {
   product_description?: string;
   script?: string;
   voice_id?: string;
-  status: 'queued' | 'tts' | 'lipsync' | 'finalizing' | 'completed' | 'failed';
+  // Stages emitted by the single-shot pipeline (backend/src/services/
+  // ugcPipeline.js), plus the older tts/lipsync values kept for back-compat
+  // with historical rows. Non-terminal stages all carry a `progress` value.
+  status:
+    | 'queued'
+    | 'planning'
+    | 'preparing'
+    | 'rendering_scene'
+    | 'generating_video'
+    | 'finalizing'
+    | 'tts'
+    | 'lipsync'
+    | 'completed'
+    | 'failed';
   progress?: number;
   error?: string;
   audio_url?: string;
