@@ -14,11 +14,14 @@ schemes:
         GumbyAI: all
     run:
       config: Debug
-      # Local StoreKit testing config so credit-pack purchases work in the
-      # simulator without App Store Connect. For production, create the
-      # same product IDs in App Store Connect (this file is dev-only and is
-      # not bundled into the app).
-      storeKitConfiguration: Products.storekit
+      # NOTE: Do NOT set `storeKitConfiguration:` here. XcodeGen emits the
+      # scheme reference with a leading slash ("/Products.storekit"), which
+      # Xcode 26.x's workspace integrity analyzer cannot resolve — it fails
+      # an assertion and crashes Xcode ~5s after the project opens.
+      # For local StoreKit testing, select the config in Xcode instead:
+      #   Product → Scheme → Edit Scheme → Run → Options →
+      #   StoreKit Configuration → Products.storekit
+      # (The Products.storekit file still lives in ios/ for that purpose.)
     test:
       config: Debug
     profile:
