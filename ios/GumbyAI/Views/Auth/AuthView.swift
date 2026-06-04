@@ -181,11 +181,6 @@ private struct AuthLoginView: View {
                             icon: { AuthSocialGlyph.google }
                         )
                         socialButton(
-                            provider: .github,
-                            title: "Continue with GitHub",
-                            icon: { AuthSocialGlyph.github }
-                        )
-                        socialButton(
                             provider: .apple,
                             title: "Continue with Apple",
                             icon: { AuthSocialGlyph.apple }
