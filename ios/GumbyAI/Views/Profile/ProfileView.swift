@@ -209,15 +209,6 @@ struct ProfileView: View {
                     UIApplication.shared.open(url)
                 }
             }
-            divider
-            row(
-                icon: "globe",
-                label: "Website",
-                detail: "blinkugc.com",
-                accessory: .externalLink
-            ) {
-                UIApplication.shared.open(AppConstants.websiteURL)
-            }
         }
     }
 
