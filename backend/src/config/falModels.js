@@ -36,12 +36,4 @@ module.exports = {
   // a fresh creator-in-scene still purely from the prompt so Kling
   // image-to-video still has a seed frame to work from.
   IMAGE_GENERATE: 'fal-ai/nano-banana-pro',
-
-  // Flux Kontext Pro — cheap & fast instructive image editor. Used as a
-  // pre-pass to extract a clean product-catalog image from a user-
-  // uploaded product photo that may include a model wearing or holding
-  // the product. ~4× cheaper and ~2× faster than nano-banana-pro for
-  // this task. Different API shape than Nano Banana — takes `image_url`
-  // (singular) instead of `image_urls` (array).
-  IMAGE_EDIT_FAST: 'fal-ai/flux-pro/kontext',
 };

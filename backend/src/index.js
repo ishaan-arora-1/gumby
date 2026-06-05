@@ -62,7 +62,12 @@ app.use(morgan('dev'));
 // webhook route opts back in to `express.raw()` itself.
 app.use('/api/webhooks', webhookRoutes);
 
-app.use(express.json({ limit: '10mb' }));
+// 25MB JSON limit. Image uploads (product / inspiration / attachment)
+// arrive as base64 in the JSON body — base64 inflates the raw bytes by
+// ~33%, so a 25MB cap comfortably covers a ~18MB original PNG while
+// still bounding the request size. Anything bigger should be resized on
+// the client (see StudioForm's upload handlers).
+app.use(express.json({ limit: '25mb' }));
 
 // Broad per-client rate limit on the rest of the API. Mounted AFTER the
 // webhook route above so Razorpay payment callbacks are never throttled.
