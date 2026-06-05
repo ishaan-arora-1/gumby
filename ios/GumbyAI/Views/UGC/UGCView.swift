@@ -253,7 +253,12 @@ private struct UGCTemplateCard: View {
 // card with a "Use as template" CTA floating at the bottom, an X close
 // button anchored top-right, and the creator name + description below.
 
-private struct UGCTemplatePreviewSheet: View {
+/// Reusable full-screen template preview. Shows the looping 9:16 video,
+/// a creator caption, and a floating "Use as template" CTA. Used on both
+/// the Creators tab (`UGCView`) and the AI-chat bottom templates strip
+/// (`WebStudioWelcomeView`) so the "preview → use" UX is identical
+/// everywhere a template can be picked.
+struct UGCTemplatePreviewSheet: View {
     let template: UGCTemplate
     let onClose: () -> Void
     let onUse: () -> Void

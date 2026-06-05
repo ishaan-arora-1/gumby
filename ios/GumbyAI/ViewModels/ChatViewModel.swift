@@ -586,6 +586,10 @@ class ChatViewModel: ObservableObject {
 
                 let tweaks = drafts[draftIndex].creatorTweaks
                     .trimmingCharacters(in: .whitespacesAndNewlines)
+                // Mirrors web's StudioForm.submit(): a silent creator
+                // sends an empty script + captions=false, and the backend
+                // skips TTS/captions entirely.
+                let speaks = drafts[draftIndex].creatorSpeaks
                 let job = try await service.startGeneration(
                     UGCService.GenerateRequest(
                         templateId: pickedTemplate?.id,
@@ -596,17 +600,18 @@ class ChatViewModel: ObservableObject {
                         productDescription: hasProduct ? drafts[draftIndex].productDescription : "",
                         productImageURL: hasProduct ? imageURL : nil,
                         inspirationImageURL: inspirationURL,
-                        script: drafts[draftIndex].script,
+                        script: speaks ? drafts[draftIndex].script : "",
                         videoDescription: drafts[draftIndex].videoDescription
                             .trimmingCharacters(in: .whitespacesAndNewlines),
                         videoDuration: drafts[draftIndex].videoDuration,
-                        captionsEnabled: drafts[draftIndex].captionsEnabled,
-                        captionPresetId: drafts[draftIndex].captionsEnabled
+                        captionsEnabled: speaks && drafts[draftIndex].captionsEnabled,
+                        captionPresetId: (speaks && drafts[draftIndex].captionsEnabled)
                             ? drafts[draftIndex].captionPresetId
                             : nil,
                         creatorEthnicity: isDirectMode
                             ? drafts[draftIndex].creatorEthnicity
-                            : nil
+                            : nil,
+                        creatorSpeaks: speaks
                     )
                 )
                 guard drafts.indices.contains(draftIndex) else { return }

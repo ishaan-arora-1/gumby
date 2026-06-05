@@ -24,6 +24,14 @@ struct WebStudioWelcomeView: View {
     /// so the headline doesn't get covered when the page is at rest.
     private let headerHeight: CGFloat = 56
 
+    // Mirrors the Creators-tab preview flow: tapping a template card opens
+    // the full-screen preview, and the actual `pickTemplate(_:)` handoff
+    // runs in the cover's `onDismiss` AFTER teardown so the AVPlayer-backed
+    // LoopingVideoView never gets torn down concurrently with the funnel
+    // step change (which used to crash and/or swallow the navigation).
+    @State private var previewTemplate: UGCTemplate?
+    @State private var pendingHandoff: UGCTemplate?
+
     var body: some View {
         // GeometryReader gives us the viewport height so the first "page"
         // can fill the visible area and the templates section can be made
@@ -45,6 +53,25 @@ struct WebStudioWelcomeView: View {
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .background(WebTheme.Color.canvas)
+        // Full-screen preview for the templates strip. Picking happens
+        // in `onDismiss` so the cover (and its LoopingVideoView) finishes
+        // tearing down before the funnel step changes — same pattern the
+        // Creators tab uses.
+        .fullScreenCover(item: $previewTemplate, onDismiss: {
+            if let tpl = pendingHandoff {
+                pendingHandoff = nil
+                chatVM.pickTemplate(tpl)
+            }
+        }) { template in
+            UGCTemplatePreviewSheet(
+                template: template,
+                onClose: { previewTemplate = nil },
+                onUse: {
+                    pendingHandoff = template
+                    previewTemplate = nil
+                }
+            )
+        }
     }
 
     // MARK: - Scrollable content
@@ -245,7 +272,11 @@ struct WebStudioWelcomeView: View {
             } else {
                 ForEach(chatVM.templates) { tpl in
                     WebTemplateCard(template: tpl) {
-                        chatVM.pickTemplate(tpl)
+                        // Open the preview instead of going straight to
+                        // the studio form — matches the Creators tab and
+                        // lets the user see the looping creator clip
+                        // before committing.
+                        previewTemplate = tpl
                     }
                 }
             }

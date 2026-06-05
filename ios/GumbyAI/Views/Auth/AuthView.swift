@@ -40,10 +40,10 @@ private struct AuthWelcomeView: View {
 
     var body: some View {
         ZStack {
-            Image("ChatBackground")
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
+            // Solid chat-canvas color (matches Studio/AI chat screen) so
+            // the auth flow feels like part of the same app — no more
+            // mismatched lifestyle photo background.
+            AppConstants.chatCanvasBlack.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 Spacer()
@@ -142,7 +142,11 @@ private struct AuthLoginView: View {
 
     var body: some View {
         ZStack {
-            AppConstants.authScreenBackground.ignoresSafeArea()
+            // Use the same flat chat canvas as the rest of the app
+            // instead of `authScreenBackground` (a slightly different
+            // dark grey) so login looks like a continuation of the
+            // chat experience.
+            AppConstants.chatCanvasBlack.ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -223,6 +227,12 @@ private struct AuthLoginView: View {
         }
         .onChange(of: email) { _, _ in
             didSendEmailLink = false
+        }
+        // Don't carry a stale error in from a previous session/launch.
+        // Without this, a user could open Login and see "invalid token"
+        // or a leftover network error before they've tapped anything.
+        .onAppear {
+            authService.errorMessage = nil
         }
     }
 

@@ -104,6 +104,12 @@ final class PlayerController: ObservableObject {
     private var failureObserver: NSObjectProtocol?
     private var endOfPlaybackObserver: NSObjectProtocol?
     private var attachedURL: URL?
+    /// Flipped true by `tearDown()` so any in-flight observer callbacks
+    /// (KVO trampolines, notification handlers) bail before touching the
+    /// AVPlayer they no longer own. Without this, closing a template
+    /// preview while the AVPlayerItem was still mid-status-flip could
+    /// race and crash on the AVPlayer cleanup path.
+    private var torndown: Bool = false
 
     init() {
         player.automaticallyWaitsToMinimizeStalling = true
@@ -115,6 +121,7 @@ final class PlayerController: ObservableObject {
         if attachedURL == url, looper != nil { return }
         tearDown()
         attachedURL = url
+        torndown = false
 
         // Reuse a preloaded AVURLAsset when available so the moov atom /
         // track metadata don't have to be re-fetched here on the critical
@@ -132,7 +139,7 @@ final class PlayerController: ObservableObject {
 
         statusObservation = item.observe(\.status, options: [.new, .initial]) { [weak self] item, _ in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, !self.torndown else { return }
                 switch item.status {
                 case .readyToPlay:
                     self.state = .ready
@@ -159,7 +166,7 @@ final class PlayerController: ObservableObject {
         // regardless of what the item-status KVO reports.
         timeControlObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, !self.torndown else { return }
                 if player.timeControlStatus == .playing {
                     self.state = .ready
                 }
@@ -174,7 +181,10 @@ final class PlayerController: ObservableObject {
             let err = note.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
             let msg = err?.localizedDescription ?? "Failed to play to end"
             print("[LoopingVideoView] FailedToPlayToEnd:", msg)
-            Task { @MainActor in self?.state = .failed(msg) }
+            Task { @MainActor in
+                guard let self, !self.torndown else { return }
+                self.state = .failed(msg)
+            }
         }
 
         // Belt-and-suspenders manual loop. AVPlayerLooper *should* keep the
@@ -198,6 +208,10 @@ final class PlayerController: ObservableObject {
         ) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
+                // Bail if this controller has been torn down — the close
+                // path on a template preview used to race this notification
+                // and crash on the AVPlayer cleanup path.
+                guard !self.torndown else { return }
                 // Only act on this player's items, not other LoopingVideoViews.
                 guard let current = self.player.currentItem else { return }
                 current.seek(to: .zero, completionHandler: nil)
@@ -219,6 +233,14 @@ final class PlayerController: ObservableObject {
     }
 
     func tearDown() {
+        // Mark torn-down BEFORE we start tearing anything down — any
+        // observer callback that fires concurrently will see this flag
+        // and bail without touching the half-deconstructed player.
+        torndown = true
+
+        // Detach KVO + notification observers FIRST. Once these are off
+        // there's nothing left to fire callbacks against the player we're
+        // about to dismantle.
         statusObservation?.invalidate()
         statusObservation = nil
         loadedRangesObservation?.invalidate()
@@ -233,6 +255,10 @@ final class PlayerController: ObservableObject {
             NotificationCenter.default.removeObserver(observer)
             endOfPlaybackObserver = nil
         }
+
+        // Now safe to dismantle the player. Pause before disabling the
+        // looper so AVPlayerLooper doesn't try to swap in another copy
+        // of the template item while we're tearing it apart.
         player.pause()
         looper?.disableLooping()
         looper = nil

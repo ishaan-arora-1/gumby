@@ -74,18 +74,38 @@ struct UGCStudioCard: View {
                 durationSection
             }
 
-            subCard(title: "Script", systemImage: "text.alignleft", trailing: {
-                AnyView(writeWithAIButton)
-            }) {
-                scriptSection
-            }
-
             subCard(title: "Scene", systemImage: "video") {
                 sceneSection
             }
 
-            subCard(title: "Captions", systemImage: "captions.bubble") {
-                captionsSection
+            // "Talking creator" toggle. When off, the script + captions
+            // sub-cards collapse — same behaviour as the web StudioForm.
+            // Tucked above Script so the user can opt out of voice before
+            // bothering with the writing UI.
+            subCard(title: "Talking creator", systemImage: "person.wave.2", trailing: {
+                AnyView(
+                    Toggle("", isOn: Binding(
+                        get: { chatVM.drafts[draftIndex].creatorSpeaks },
+                        set: { chatVM.drafts[draftIndex].creatorSpeaks = $0 }
+                    ))
+                    .labelsHidden()
+                    .tint(Self.accent)
+                    .scaleEffect(0.8)
+                )
+            }) {
+                talkingCreatorHint
+            }
+
+            if draft.creatorSpeaks {
+                subCard(title: "Script", systemImage: "text.alignleft", trailing: {
+                    AnyView(writeWithAIButton)
+                }) {
+                    scriptSection
+                }
+
+                subCard(title: "Captions", systemImage: "captions.bubble") {
+                    captionsSection
+                }
             }
         }
         .padding(.bottom, 12)
@@ -374,6 +394,15 @@ struct UGCStudioCard: View {
         }
     }
 
+    private var talkingCreatorHint: some View {
+        Text(draft.creatorSpeaks
+             ? "The creator speaks a script on camera."
+             : "Silent video — no script, no captions. Just the scene above.")
+            .font(.system(size: 13))
+            .foregroundColor(Color(hex: "8E8E93"))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private var sceneSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Describe what the creator is doing in the scene — the action, the body language, the vibe.")
@@ -450,6 +479,7 @@ struct UGCStudioCard: View {
                 ReadinessIndicator(
                     isDirectMode: isDirectMode,
                     includeProduct: draft.includeProduct,
+                    creatorSpeaks: draft.creatorSpeaks,
                     creatorFilled: !draft.creatorDescription.isEmpty,
                     productFilled: !draft.productName.isEmpty,
                     scriptFilled: !draft.script.isEmpty,
@@ -653,16 +683,20 @@ private struct SegmentedDuration: View {
 private struct ReadinessIndicator: View {
     let isDirectMode: Bool
     let includeProduct: Bool
+    let creatorSpeaks: Bool
     let creatorFilled: Bool
     let productFilled: Bool
     let scriptFilled: Bool
     let videoFilled: Bool
 
+    /// Required fields, mirrored from `UGCDraft.canGenerate`:
+    /// creator (direct only) + product (if included) + script (if
+    /// talking) + scene (always).
     private var states: [Bool] {
         var s: [Bool] = []
         if isDirectMode { s.append(creatorFilled) }
         if includeProduct { s.append(productFilled) }
-        s.append(scriptFilled)
+        if creatorSpeaks { s.append(scriptFilled) }
         s.append(videoFilled)
         return s
     }

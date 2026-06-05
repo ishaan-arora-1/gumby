@@ -120,6 +120,11 @@ final class UGCService {
         /// Direct-mode-only ethnicity hint ("Indian" / "American" /
         /// "Asian"). Sent verbatim; nil in template mode.
         let creatorEthnicity: String?
+        /// "Talking creator" toggle — mirrors the same field on the web
+        /// StudioForm. When false, the backend skips the script + audio
+        /// + captions and renders a silent clip driven by the scene
+        /// description alone. Defaults to true on both clients.
+        let creatorSpeaks: Bool
     }
 
     func startGeneration(_ req: GenerateRequest) async throws -> UGCJob {
@@ -144,6 +149,11 @@ final class UGCService {
         if let ethnicity = req.creatorEthnicity, !ethnicity.isEmpty {
             body["creatorEthnicity"] = ethnicity
         }
+        // Always send creatorSpeaks. The backend treats omission as
+        // `true` (legacy behaviour), so for the "talking" path either
+        // form works — but sending it explicitly keeps the contract
+        // symmetric with web's StudioForm and prevents drift.
+        body["creatorSpeaks"] = req.creatorSpeaks
         let resp: APIResponse<UGCJob> = try await api.post(path: "/ugc/generate", body: body)
         guard let job = resp.data else { throw APIError.noData }
         return job

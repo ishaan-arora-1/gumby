@@ -56,6 +56,16 @@ struct UGCDraft: Identifiable {
     var productImageURL: String?
     var productPhotoItem: PhotosPickerItem?
 
+    // MARK: - Talking creator
+
+    /// Whether the creator speaks a script on camera. Mirrors the
+    /// "Talking creator" toggle on web's StudioForm. When false:
+    ///   - the script field is hidden + not required
+    ///   - captions are forced off
+    ///   - the backend renders a silent, no-audio clip driven purely
+    ///     by the scene description
+    var creatorSpeaks: Bool
+
     // MARK: - Script
 
     var script: String
@@ -99,9 +109,18 @@ struct UGCDraft: Identifiable {
         job?.outputVideoURL
     }
 
+    /// Mirrors the web `StudioForm.submit()` validation:
+    ///   - product name required only when product is included
+    ///   - script required only when the creator is speaking
+    ///   - scene (videoDescription) always required
+    ///   - creator description required in direct mode (no template) —
+    ///     callers check `pickedTemplate == nil` for that since the draft
+    ///     doesn't know which mode the funnel is in.
     var canGenerate: Bool {
-        !script.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !videoDescription.trimmingCharacters(in: .whitespaces).isEmpty
+        let sceneFilled = !videoDescription.trimmingCharacters(in: .whitespaces).isEmpty
+        let scriptOK = !creatorSpeaks || !script.trimmingCharacters(in: .whitespaces).isEmpty
+        let productOK = !includeProduct || !productName.trimmingCharacters(in: .whitespaces).isEmpty
+        return sceneFilled && scriptOK && productOK
     }
 
     // MARK: - Factories
@@ -123,6 +142,7 @@ struct UGCDraft: Identifiable {
             productImage: nil,
             productImageURL: nil,
             productPhotoItem: nil,
+            creatorSpeaks: true,
             script: "",
             videoDescription: "",
             videoDuration: 10,
@@ -148,6 +168,7 @@ struct UGCDraft: Identifiable {
             productImage: nil,  // UIImage not cloned; URL carries forward
             productImageURL: previous.productImageURL,
             productPhotoItem: nil,
+            creatorSpeaks: previous.creatorSpeaks,
             script: previous.script,
             videoDescription: previous.videoDescription,
             videoDuration: previous.videoDuration,

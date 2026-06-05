@@ -18,6 +18,13 @@ class AuthService: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
+    /// True while the very first session-restore check is still running.
+    /// `ContentView` shows a neutral splash for this window instead of
+    /// either the chat or the login screen — that's what prevents the
+    /// "chat flashes for 2s, then bounces back to login" experience when
+    /// a stored token has gone stale.
+    @Published var isBootstrapping = true
+
     private var _token: String?
     private var appleSignInCoordinator: AppleSignInCoordinator?
 
@@ -39,14 +46,44 @@ class AuthService: ObservableObject {
         loadStoredSession()
     }
 
+    /// Restore a previously-signed-in session. Crucially:
+    ///   - We do NOT flip `isAuthenticated` to true until the backend has
+    ///     confirmed the stored token is still valid. Setting it eagerly
+    ///     used to show the chat for ~2 seconds while verification ran,
+    ///     and then bounce the user back to the login screen if the token
+    ///     was stale — a confusing experience.
+    ///   - If verification fails on cold start it is silent: we sign out
+    ///     locally and surface NO error message, so the login screen
+    ///     doesn't open with "invalid token" already visible before the
+    ///     user has tapped anything.
     func loadStoredSession() {
-        if let storedToken = KeychainHelper.shared.read(key: "auth_token") {
-            self._token = storedToken
-            self.isAuthenticated = true
-            Task {
-                await verifyToken(storedToken)
-            }
+        guard let storedToken = KeychainHelper.shared.read(key: "auth_token") else {
+            // No stored token — go straight to the login screen.
+            self.isBootstrapping = false
+            return
         }
+        self._token = storedToken
+        Task { await silentlyVerifyOnLaunch(storedToken) }
+    }
+
+    private func silentlyVerifyOnLaunch(_ token: String) async {
+        do {
+            let user = try await fetchVerifiedUser(token: token, fullName: nil)
+            self.currentUser = user
+            self.isAuthenticated = true
+            self.errorMessage = nil
+        } catch {
+            // Stale / revoked / network: drop the local session without
+            // making any noise. The user will simply land on the login
+            // screen with no error displayed.
+            self._token = nil
+            KeychainHelper.shared.delete(key: "auth_token")
+            KeychainHelper.shared.delete(key: "refresh_token")
+            self.isAuthenticated = false
+            self.currentUser = nil
+            self.errorMessage = nil
+        }
+        self.isBootstrapping = false
     }
 
     func lastUsedAuthProvider() -> String? {

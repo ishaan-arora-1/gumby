@@ -12,7 +12,14 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if authService.isAuthenticated {
+            if authService.isBootstrapping {
+                // Neutral splash while the stored token is being
+                // verified. Without this we used to render the chat
+                // screen optimistically and then bounce back to the login
+                // screen if the token had gone stale — a confusing 2s
+                // flash. Now the user sees a calm logo until we know.
+                bootstrapSplash
+            } else if authService.isAuthenticated {
                 mainContent
                     .task(id: authService.currentUser?.id ?? "") {
                         // Point the credit ledger at this user, hand it to
@@ -28,6 +35,19 @@ struct ContentView: View {
             } else {
                 AuthView()
             }
+        }
+    }
+
+    /// Calm logo screen shown while `AuthService.loadStoredSession()`
+    /// verifies the keychain token on cold start.
+    private var bootstrapSplash: some View {
+        ZStack {
+            AppConstants.chatCanvasBlack.ignoresSafeArea()
+            Image("LogoCombined")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 36)
+                .accessibilityLabel("Blinkugc")
         }
     }
     

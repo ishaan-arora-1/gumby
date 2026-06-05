@@ -1,13 +1,23 @@
 import SwiftUI
 import StoreKit
 
-/// The in-app credit store. Mirrors the web `/pricing` page but uses
-/// Apple In-App Purchase instead of Razorpay (required by App Store
-/// Review Guideline 3.1.1 for in-app digital goods).
+/// In-app credit store. Mirrors the visual structure of the web
+/// `app/(app)/pricing/page.tsx` layout:
 ///
-/// Prices are never hardcoded — they come from StoreKit
-/// (`product.displayPrice`), localized to the user's App Store region and
-/// currency by Apple. We only own the credit grant and the marketing copy.
+///   • Header: "Buy credits" kicker + display headline + current balance
+///   • One pack card per pack, with:
+///       - Apple-localized price (never USD-hardcoded, even pre-tap)
+///       - Per-credit price computed from the live displayPrice
+///       - Pack blurb
+///       - Feature list: X × 5s videos, Y × 10s videos, captions, no expiry
+///       - "Buy {pack}" CTA
+///   • Footer: payment processor disclosure + Restore Purchases + legal links
+///
+/// Prices are **always** sourced from StoreKit's `displayPrice` (which
+/// returns the user's local currency formatted by Apple — e.g. "₹599" for
+/// an India sandbox/storefront, "$6.99" for US). We never read or display
+/// the local Products.storekit file's test prices, and we don't fall back
+/// to USD when products haven't loaded — we show a skeleton instead.
 struct PaywallView: View {
     /// Optional banner explaining why the paywall appeared (e.g. blocked
     /// generation). When nil this is just the store.
@@ -35,13 +45,9 @@ struct PaywallView: View {
                     if let contextMessage {
                         contextBanner(contextMessage)
                     }
-                    balanceHeader
-                    if store.isLoadingProducts && store.products.isEmpty {
-                        loadingState
-                    } else {
-                        ForEach(packs) { pack in
-                            packCard(pack)
-                        }
+                    header
+                    ForEach(packs) { pack in
+                        packCard(pack)
                     }
                     restoreButton
                     legalFooter
@@ -79,38 +85,63 @@ struct PaywallView: View {
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: banner)
     }
 
-    // MARK: - Header
+    // MARK: - Header — kicker + title + current balance (web parity)
 
-    private var balanceHeader: some View {
-        VStack(spacing: 6) {
-            Text("YOUR BALANCE")
-                .font(.gumby(11, weight: .semiBold))
-                .tracking(0.8)
-                .foregroundStyle(AppConstants.chatMutedLabel)
-            HStack(spacing: 8) {
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(AppConstants.gradientColors.first ?? .white)
-                Text("\(credits.balance)")
-                    .font(.gumby(34, weight: .bold))
-                    .foregroundStyle(AppConstants.textPrimary)
-                    .monospacedDigit()
-                Text("credits")
-                    .font(.gumby(15, weight: .regular))
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("BUY CREDITS")
+                    .font(.gumby(11, weight: .semiBold))
+                    .tracking(0.8)
                     .foregroundStyle(AppConstants.chatMutedLabel)
-                    .padding(.top, 8)
+
+                Text("Top up your studio.")
+                    .font(.gumby(28, weight: .bold))
+                    .foregroundStyle(AppConstants.textPrimary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("5-second video = 50 credits. 10-second video = 100 credits. Bigger packs land at a per-credit discount. Credits never expire.")
+                    .font(.gumby(13, weight: .regular))
+                    .foregroundStyle(AppConstants.chatMutedLabel)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+
+            // Balance pill (matches the web "Current balance" right-aligned
+            // group, but stacked under the headline on phone widths).
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("CURRENT BALANCE")
+                        .font(.gumby(11, weight: .semiBold))
+                        .tracking(0.8)
+                        .foregroundStyle(AppConstants.chatMutedLabel)
+
+                    HStack(alignment: .lastTextBaseline, spacing: 6) {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(AppConstants.gradientColors.first ?? .white)
+                        Text("\(credits.balance)")
+                            .font(.gumby(32, weight: .bold))
+                            .foregroundStyle(AppConstants.textPrimary)
+                            .monospacedDigit()
+                        Text("credits")
+                            .font(.gumby(13, weight: .regular))
+                            .foregroundStyle(AppConstants.chatMutedLabel)
+                    }
+                }
+                Spacer()
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: AppConstants.cardCornerRadius, style: .continuous)
+                    .fill(AppConstants.chatComposerSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: AppConstants.cardCornerRadius, style: .continuous)
+                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
+            )
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 18)
-        .background(
-            RoundedRectangle(cornerRadius: AppConstants.cardCornerRadius, style: .continuous)
-                .fill(AppConstants.chatComposerSurface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppConstants.cardCornerRadius, style: .continuous)
-                .stroke(Color.white.opacity(0.06), lineWidth: 1)
-        )
     }
 
     private func contextBanner(_ message: String) -> some View {
@@ -137,84 +168,168 @@ struct PaywallView: View {
 
     // MARK: - Pack card
 
-    private func packCard(_ pack: CreditPack) -> some View {
-        let priceText = store.displayPrice(for: pack)
-        let isBusy = store.purchasingProductID == pack.productID
-        let productMissing = store.product(for: pack) == nil && !store.isLoadingProducts
+    /// Per-credit price as a string in the user's local currency. We
+    /// compute this from StoreKit's `Product.price` (Decimal, in the
+    /// storefront's currency) divided by the pack's credit count, then
+    /// format with the product's locale so the symbol/grouping/decimals
+    /// match what Apple shows in `displayPrice`. Returns nil when the
+    /// product hasn't loaded.
+    private func perCreditText(for pack: CreditPack) -> String? {
+        guard let product = store.product(for: pack) else { return nil }
+        let total = product.price as NSDecimalNumber
+        let perCredit = total.dividing(by: NSDecimalNumber(value: pack.credits))
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = product.priceFormatStyle.locale
+        formatter.currencyCode = product.priceFormatStyle.currencyCode
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 3
+        return formatter.string(from: perCredit)
+    }
 
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
+    private func packCard(_ pack: CreditPack) -> some View {
+        let product = store.product(for: pack)
+        let priceText = product?.displayPrice
+        let isBusy = store.purchasingProductID == pack.productID
+        let productMissing = product == nil && !store.isLoadingProducts
+
+        let shortVideos = pack.credits / CreditCosts.costShortVideo
+        let longVideos = pack.credits / CreditCosts.costLongVideo
+
+        return VStack(alignment: .leading, spacing: 0) {
+            // Top row: pack label + "Most popular" chip
+            HStack {
                 Text(pack.label)
-                    .font(.gumby(18, weight: .semiBold))
-                    .foregroundStyle(AppConstants.textPrimary)
+                    .font(.gumby(13, weight: .regular))
+                    .foregroundStyle(AppConstants.chatMutedLabel)
+                Spacer()
                 if pack.highlighted {
-                    Text("POPULAR")
+                    Text("MOST POPULAR")
                         .font(.gumby(10, weight: .bold))
-                        .tracking(0.6)
-                        .foregroundStyle(.black)
+                        .tracking(0.8)
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(Capsule().fill(AppConstants.gradientColors.first ?? .white))
+                        .background(Capsule().fill(Color(hex: "FF2E3F")))
                 }
-                Spacer()
-                Text("\(pack.credits) credits")
-                    .font(.gumby(14, weight: .semiBold))
-                    .foregroundStyle(AppConstants.gradientColors.first ?? .white)
-                    .monospacedDigit()
             }
 
+            // Big price line — Apple-localized displayPrice.
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if let priceText {
+                    Text(priceText)
+                        .font(.gumby(34, weight: .bold))
+                        .foregroundStyle(AppConstants.textPrimary)
+                        .monospacedDigit()
+                } else if productMissing {
+                    Text("Unavailable")
+                        .font(.gumby(20, weight: .semiBold))
+                        .foregroundStyle(AppConstants.chatMutedLabel)
+                } else {
+                    // Loading skeleton — never show a fake/USD price.
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.white.opacity(0.07))
+                        .frame(width: 120, height: 32)
+                }
+            }
+            .padding(.top, 8)
+
+            // Sub-line: credits + per-credit local price
+            HStack(spacing: 6) {
+                Text("\(pack.credits) credits")
+                    .font(.gumby(12, weight: .regular))
+                    .foregroundStyle(AppConstants.chatMutedLabel)
+                if let perCredit = perCreditText(for: pack) {
+                    Text("·")
+                        .foregroundStyle(AppConstants.chatMutedLabel)
+                    Text("\(perCredit)/credit")
+                        .font(.gumby(12, weight: .regular))
+                        .foregroundStyle(AppConstants.chatMutedLabel)
+                }
+            }
+            .padding(.top, 4)
+
+            // Blurb
             Text(pack.blurb)
                 .font(.gumby(13, weight: .regular))
-                .foregroundStyle(AppConstants.chatMutedLabel)
+                .foregroundStyle(AppConstants.textPrimary.opacity(0.85))
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 14)
 
+            // Feature list — matches the web Feature() rows.
+            VStack(alignment: .leading, spacing: 8) {
+                feature("\(shortVideos) × 5-second videos")
+                feature("\(longVideos) × 10-second videos")
+                feature("Captions included")
+                feature("Credits never expire")
+            }
+            .padding(.top, 14)
+
+            // Buy CTA
             Button {
                 Task { await buy(pack) }
             } label: {
-                HStack {
+                HStack(spacing: 8) {
                     if isBusy {
-                        ProgressView().tint(.black).scaleEffect(0.9)
+                        ProgressView()
+                            .tint(pack.highlighted ? .white : .black)
+                            .scaleEffect(0.9)
+                    } else if productMissing {
+                        Text("Unavailable")
+                            .font(.gumby(15, weight: .semiBold))
+                    } else if priceText == nil {
+                        Text("Loading…")
+                            .font(.gumby(15, weight: .semiBold))
                     } else {
-                        Text(productMissing ? "Unavailable" : (priceText ?? "—"))
-                            .font(.gumby(16, weight: .semiBold))
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 12, weight: .heavy))
+                        Text("Buy \(pack.label)")
+                            .font(.gumby(15, weight: .semiBold))
                     }
                 }
-                .foregroundStyle(.black)
+                .foregroundStyle(pack.highlighted ? Color.white : Color.black)
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
                 .background(
-                    RoundedRectangle(cornerRadius: AppConstants.buttonCornerRadius, style: .continuous)
-                        .fill(productMissing ? Color.white.opacity(0.25) : AppConstants.authPrimaryCTAFill)
+                    Capsule(style: .continuous)
+                        .fill(pack.highlighted
+                              ? Color(hex: "FF2E3F")
+                              : AppConstants.authPrimaryCTAFill)
                 )
             }
             .buttonStyle(.plain)
-            .disabled(isBusy || productMissing || store.purchasingProductID != nil)
+            .disabled(isBusy || productMissing || priceText == nil || store.purchasingProductID != nil)
+            .padding(.top, 18)
         }
-        .padding(16)
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AppConstants.cardCornerRadius, style: .continuous)
-                .fill(AppConstants.chatComposerSurface)
+                .fill(pack.highlighted
+                      ? Color(hex: "FF2E3F").opacity(0.08)
+                      : AppConstants.chatComposerSurface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppConstants.cardCornerRadius, style: .continuous)
                 .stroke(
                     pack.highlighted
-                        ? (AppConstants.gradientColors.first ?? .white).opacity(0.55)
+                        ? Color(hex: "FF2E3F").opacity(0.55)
                         : Color.white.opacity(0.06),
                     lineWidth: pack.highlighted ? 1.5 : 1
                 )
         )
     }
 
-    private var loadingState: some View {
-        VStack(spacing: 12) {
-            ProgressView().tint(.white)
-            Text("Loading packs…")
+    private func feature(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color(hex: "34D399"))
+                .frame(width: 14)
+            Text(text)
                 .font(.gumby(13, weight: .regular))
-                .foregroundStyle(AppConstants.chatMutedLabel)
+                .foregroundStyle(AppConstants.textPrimary.opacity(0.85))
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
     }
 
     // MARK: - Restore + legal
@@ -252,7 +367,7 @@ struct PaywallView: View {
 
     private var legalFooter: some View {
         VStack(spacing: 10) {
-            Text("Credits are a digital good delivered instantly in the app and are used to generate videos. Payment is charged to your Apple Account at confirmation of purchase. Credits are consumable, do not expire, and are non-refundable except where required by law. On this device, your balance is stored locally to your account.")
+            Text("Payments processed by Apple In-App Purchase, charged to your Apple Account at confirmation. Credits are consumable, do not expire, and are non-refundable except where required by law. Your balance is stored locally to your account on this device.")
                 .font(.gumby(11, weight: .regular))
                 .foregroundStyle(AppConstants.chatMutedLabel)
                 .multilineTextAlignment(.center)

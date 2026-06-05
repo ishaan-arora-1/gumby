@@ -145,7 +145,8 @@ final class UGCViewModel: ObservableObject {
                 videoDuration: 10,
                 captionsEnabled: true,
                 captionPresetId: CaptionPreset.defaultId,
-                creatorEthnicity: nil
+                creatorEthnicity: nil,
+                creatorSpeaks: true
             )
         )
         // Optimistic insert; real status will get reconciled by polling.

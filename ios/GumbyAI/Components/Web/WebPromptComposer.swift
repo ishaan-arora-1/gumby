@@ -132,10 +132,12 @@ struct WebPromptComposer: View {
     // MARK: - Textarea
 
     private var textArea: some View {
-        // TextField with vertical axis auto-grows from 1 line at rest to
-        // a 4-line cap. Was previously TextEditor, which always renders
-        // at its frame size even when empty — that's why the input bar
-        // felt like 6-8 blank lines tall. TextField sizes to content.
+        // Reserve a fixed 3 lines of vertical space at all times — never
+        // less, never more. `reservesSpace: true` is the key bit: it
+        // pads the empty state to the same height it has when filled, so
+        // the composer doesn't shrink when blank and doesn't grow as the
+        // user types. (Previously this was `1...4`, which made the bar
+        // jitter from 1 to 4 lines as the user typed.)
         TextField(
             "",
             text: $chatVM.composerPrompt,
@@ -143,7 +145,7 @@ struct WebPromptComposer: View {
                 .foregroundColor(WebTheme.Color.placeholder),
             axis: .vertical
         )
-        .lineLimit(1...4)
+        .lineLimit(3, reservesSpace: true)
         .font(WebTheme.Font.body(14))
         .foregroundColor(.white)
         .tint(.white)

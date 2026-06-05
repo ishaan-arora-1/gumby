@@ -153,10 +153,33 @@ struct UGCJobCard: View {
     private var background: some View {
         if let urlString = job.outputThumbnailURL ?? job.templateSnapshot?.thumbnailURL,
            let url = URL(string: urlString) {
-            AsyncImage(url: url) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                Color.black
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .empty:
+                    // Thumbnail still downloading — show a spinner over a
+                    // dark slab instead of an opaque black square so the
+                    // tile reads as "loading", not "broken".
+                    ZStack {
+                        LinearGradient(
+                            colors: [Color(red: 0.10, green: 0.10, blue: 0.13), .black],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                        ProgressView()
+                            .tint(.white.opacity(0.85))
+                            .scaleEffect(0.9)
+                    }
+                case .failure:
+                    // Thumbnail download failed — still better to fall back
+                    // to the gradient than to expose the error.
+                    LinearGradient(
+                        colors: [Color(red: 0.12, green: 0.12, blue: 0.16), .black],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                @unknown default:
+                    Color.black
+                }
             }
         } else {
             LinearGradient(
