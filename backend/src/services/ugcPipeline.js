@@ -10,7 +10,6 @@ const {
   KLING_TEXT_TO_VIDEO,
   IMAGE_SUBJECT_SWAP,
   IMAGE_GENERATE,
-  IMAGE_EDIT_FAST,
 } = require('../config/falModels');
 const { captionVideo } = require('./captioning');
 const { ffmpegPath } = require('../config/ffmpeg');
@@ -192,15 +191,21 @@ const ATTIRE_GUIDANCE =
  * that person as the creator in the final scene.
  *
  * So before any of the seed-image branches run, we route the user
- * photo through one extra Nano Banana edit call that asks for a clean
+ * photo through one extra Nano Banana Pro edit call that asks for a clean
  * product-catalog photo: just the product on a neutral background, no
  * humans, no hands, no skin. The downstream branches then operate on
  * this clean version, which makes the "use the creator description, not
  * the person in the photo" rule trivial to honor.
  *
+ * We use Nano Banana Pro here (not Flux Kontext) — Flux was mangling the
+ * product itself while extracting it (recoloring labels, warping shapes),
+ * which defeated the whole point of preserving the product pixel-for-pixel.
+ * Nano Banana is the same model the downstream seed-image branches use, so
+ * the product stays consistent across the whole pipeline.
+ *
  * Cost: one extra Nano Banana edit per generation that has a product
- * image (~$0.15). Latency: ~5–10s. Non-fatal — the orchestrator falls
- * back to the raw user image if extraction fails.
+ * image. Latency: ~5–10s. Non-fatal — the orchestrator falls back to the
+ * raw user image if extraction fails.
  */
 async function extractCleanProductImage({
   productImageUrl,
@@ -208,33 +213,26 @@ async function extractCleanProductImage({
   onProgress,
 }) {
   const productPhrase = productName ? `"${productName}"` : 'the product';
-  // Flux Kontext prefers concise, directive prompts over long
-  // instructional ones. We get noticeably better edits with a tight
-  // "do X, preserve Y, remove Z" structure than with the prose-style
-  // bullet list we used for Nano Banana.
   const prompt = [
     `Show only ${productPhrase} from this image as a clean product-catalog photograph on a plain white background.`,
     'Completely remove every person, model, mannequin, hand, face, body, hair, and skin — the output must contain zero human elements.',
     'For apparel, present the garment as a flat-lay or ghost-mannequin shot — the garment alone, no wearer.',
     'For other items, center the product as a standard e-commerce listing photo.',
-    'Preserve the product exactly: shape, color, fabric, print, label text, and branding all match the source.',
+    'Preserve the product EXACTLY: shape, color, fabric, print, label text, and branding all match the source pixel-for-pixel. Do not redesign, recolor, restyle, or warp the product in any way.',
     'Photorealistic, even product-photography lighting, sharp focus.',
   ].join(' ');
 
-  // Flux Kontext API shape is different from Nano Banana — single
-  // `image_url` not an `image_urls` array, no `resolution` field, no
-  // `num_images` field (defaults to 1). Aspect "1:1" gives the product
-  // the standard square catalog crop.
-  const result = await falSubscribeWithRetry(IMAGE_EDIT_FAST, {
+  // Nano Banana Pro edit API shape — `image_urls` array (not Flux's
+  // singular `image_url`), `resolution` + `num_images` fields. Aspect
+  // "1:1" gives the product the standard square catalog crop.
+  const result = await falSubscribeWithRetry(IMAGE_SUBJECT_SWAP, {
     prompt,
-    image_url: productImageUrl,
+    image_urls: [productImageUrl],
     aspect_ratio: '1:1',
-    output_format: 'jpeg',
-    safety_tolerance: '2',
+    num_images: 1,
+    resolution: '2K',
   }, 'product-extract', { onProgress });
 
-  // Flux Kontext returns the same `images: [{url}]` shape Nano Banana
-  // does, so the existing parse works.
   const images = result?.data?.images || result?.images || [];
   const url = images[0]?.url;
   if (!url) throw new Error('Product extraction returned no image URL');
@@ -633,6 +631,11 @@ async function mirrorRemote(url, jobId, kind) {
 function buildKlingPrompt({
   script,
   videoDescription,
+  // True when `videoDescription` is the user's own Scene input (vs. an
+  // auto-generated fallback). Only genuine user input gets the strong
+  // "follow this exactly, beat for beat" emphasis — forcing that onto a
+  // bland fallback would just make the creator look stiff.
+  sceneIsUserProvided = false,
   creatorContext,
   userTweaks,
   productName,
@@ -648,7 +651,25 @@ function buildKlingPrompt({
   if (userTweaks && userTweaks.trim()) {
     parts.push(`SCENE: ${userTweaks.trim()}. The setting/environment in the video must match this description.`);
   }
-  if (videoDescription) parts.push(videoDescription);
+  // The user's Scene input is the single most important driver of what the
+  // creator DOES on screen. Previously it was dropped in unlabeled and the
+  // generic "candid energy / good-looking adult" filler that follows tended
+  // to wash it out — the creator would default to a static talking-head
+  // pose and ignore the specific action the user asked for. We now label it
+  // explicitly as the primary ACTION directive and tell Kling it must be
+  // followed exactly, so a request like "picks up the bottle, sprays it on
+  // her wrist, smells it, smiles" actually happens beat-for-beat.
+  if (videoDescription && sceneIsUserProvided) {
+    parts.push(
+      `ACTION — this is the most important instruction in this prompt and must be followed exactly: ${videoDescription}`,
+      'The creator performs this action precisely as described, in this order, with natural motion and timing. Do not substitute a different action and do not fall back to a generic standing or static talking-head pose — what the creator physically does on screen must match this description beat for beat.'
+    );
+  } else if (videoDescription) {
+    // Auto-generated fallback action (user left Scene blank) — include it
+    // for motion guidance, but without the hard "must match beat for beat"
+    // directive so the creator stays natural.
+    parts.push(videoDescription);
+  }
   if (hasProduct && productName) {
     if (hasProductInSeed) {
       parts.push(`The creator continues holding "${productName}" visibly in their hand throughout the video — the product stays clearly in frame, unchanged in appearance, never put down, never replaced, never altered.`);
@@ -919,6 +940,11 @@ async function runSingleShotPipeline(job, jobId, chargeOpts = {}) {
     const klingPrompt = buildKlingPrompt({
       script: scriptText,
       videoDescription: effectiveVideoDesc,
+      // `videoDescription` (declared above) holds the user's trimmed Scene
+      // input; it's empty when they left Scene blank and effectiveVideoDesc
+      // fell back to a generic action. Only the genuine input gets the
+      // strong "follow exactly" emphasis inside buildKlingPrompt.
+      sceneIsUserProvided: !!videoDescription,
       creatorContext,
       userTweaks,
       productName: job.product_name,
