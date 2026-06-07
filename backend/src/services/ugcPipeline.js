@@ -169,7 +169,7 @@ function nanoAspectFor(aspectRatio) {
 }
 
 const REALISM_GUIDANCE =
-  'The new person is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model, NOT a fashion-ad face. No glamour makeup, casual everyday clothing, candid natural expression. Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of a real adult creator.';
+  'The new person is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model, NOT a fashion-ad face. No glamour makeup, casual everyday clothing, candid natural expression. Photorealistic, sharp focus — looks like a real iPhone photo of a real adult creator.';
 
 // Wardrobe guardrail for the Nano Banana seed image only. The goal is NOT to
 // force full/conservative coverage — revealing or "hot" outfits are fine when
@@ -468,7 +468,7 @@ async function integrateProductIntoTemplate({
     'Place that extracted product naturally on or with the person from the first image — worn if it is apparel, held if it is a handheld item, used if it is a tool — in a way that fits the scene.',
     'Preserve the product pixel-perfectly: packaging, color, label text, shape, fabric, design, and branding all match the second image exactly. Do not redesign or alter the product.',
     'The product should be clearly visible and recognizable in the final image — never hide, blur, or change its branding.',
-    'Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of the same person now holding this product, with no trace of any other product or any human element from the product reference.',
+    'Photorealistic, sharp focus — looks like a real iPhone photo of the same person now holding this product, with no trace of any other product or any human element from the product reference.',
   );
   const prompt = parts.join(' ');
 
@@ -523,7 +523,7 @@ async function stripProductFromTemplate({
     hasTweaks
       ? 'If the person was not holding anything, keep their hands empty but still apply the requested scene changes above.'
       : 'If the person was not holding anything to begin with, return the scene unchanged.',
-    'Photorealistic, sharp focus, natural lighting — looks like a real iPhone photo of the same person, hands-free.',
+    'Photorealistic, sharp focus — looks like a real iPhone photo of the same person, hands-free.',
   );
   const prompt = parts.join(' ');
 
