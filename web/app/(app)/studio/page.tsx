@@ -99,6 +99,7 @@ export default function StudioPage() {
         productName: data.productName || '',
         productDescription: data.productDescription || '',
         videoDescription: data.videoDescription || '',
+        voiceTone: data.voiceTone || '',
         duration: opts.durationSeconds,
         productImageUrl: routedProductUrl,
       });

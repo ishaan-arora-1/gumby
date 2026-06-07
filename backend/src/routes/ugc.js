@@ -318,8 +318,9 @@ router.post('/parse-prompt', aiLimiter, async (req, res) => {
       '   - 1-3 sentences. Specific, vivid, present-tense.',
       '- suggestedDuration: 5 or 10 seconds. Default 10. Use 5 only for very simple single-beat concepts.',
       '- includeProduct: boolean — true if the user mentioned a specific product to feature, false otherwise.',
+      '- voiceTone: How the creator should SOUND when speaking — the vocal delivery, NOT the words. Capture this ONLY if the user describes it (e.g. "low and teasing", "soft and sultry", "calm and reassuring", "deadpan", "hyped and excited"). A few words at most. If the user says nothing about how the voice should sound, return an empty string "" — do NOT invent a tone.',
       '',
-      'Return: {"creatorDescription":"...","productName":"...","productDescription":"...","videoDescription":"...","suggestedDuration":10,"includeProduct":true}',
+      'Return: {"creatorDescription":"...","productName":"...","productDescription":"...","videoDescription":"...","suggestedDuration":10,"includeProduct":true,"voiceTone":""}',
     ].join('\n');
 
     // All attachments are products now. We don't run a vision call —
@@ -359,6 +360,11 @@ router.post('/parse-prompt', aiLimiter, async (req, res) => {
       productName: (parsed.productName || '').slice(0, 200),
       productDescription: (parsed.productDescription || '').slice(0, 500),
       videoDescription: (parsed.videoDescription || '').slice(0, 1000),
+      // Optional vocal-delivery hint ("low and teasing", "soft and sultry").
+      // Empty when the user didn't describe how the voice should sound — the
+      // pipeline only injects a delivery directive into the Kling prompt when
+      // this is non-empty.
+      voiceTone: (parsed.voiceTone || '').slice(0, 120),
       suggestedDuration,
       includeProduct:
         hasProductAttachment ||
@@ -398,6 +404,7 @@ router.post('/generate', aiLimiter, async (req, res) => {
     captionPreset,
     creatorEthnicity,
     creatorSpeaks,
+    voiceTone,
   } = req.body || {};
 
   // "Talking creator" toggle. When false, the creator stays silent — we
@@ -469,6 +476,17 @@ router.post('/generate', aiLimiter, async (req, res) => {
       ? creatorEthnicity.trim()
       : null;
 
+    // Optional vocal-delivery hint ("low and teasing", "soft and sultry").
+    // Free text, so we just trim + cap the length. Only meaningful when the
+    // creator actually speaks — a silent clip has no voice to shape. Stored
+    // on template_snapshot (no migration) and read by the pipeline, which
+    // injects it as a delivery directive into the Kling prompt.
+    const voiceToneSafe = wantsSpeech
+      && typeof voiceTone === 'string'
+      && voiceTone.trim().length
+      ? voiceTone.trim().slice(0, 120)
+      : null;
+
     if (template) {
       const cleanTweaks = typeof creatorTweaks === 'string'
         ? creatorTweaks.trim().slice(0, 500)
@@ -498,6 +516,8 @@ router.post('/generate', aiLimiter, async (req, res) => {
         // "Talking creator" toggle. When false the pipeline skips the
         // script + audio + captions and renders a silent clip.
         creator_speaks: wantsSpeech,
+        // Optional vocal-delivery hint shaping how the creator sounds.
+        voice_tone: voiceToneSafe,
       };
     } else {
       // Direct mode: store creator description in the snapshot so the
@@ -517,6 +537,8 @@ router.post('/generate', aiLimiter, async (req, res) => {
         // Direct-mode-only. Pipeline weaves this into the Nano Banana +
         // Kling prompts as "a good-looking <ethnicity> creator —".
         user_ethnicity: ethnicitySafe,
+        // Optional vocal-delivery hint shaping how the creator sounds.
+        voice_tone: voiceToneSafe,
       };
     }
 

@@ -17,6 +17,8 @@ export interface StudioPrefill {
   productName?: string;
   productDescription?: string;
   videoDescription?: string;
+  // Optional vocal-delivery hint parsed from the prompt ("low and teasing").
+  voiceTone?: string;
   duration?: 5 | 10;
   // Filled in by the composer when the user attached an image — always
   // routed to the product slot now. The inspiration upload affordance
@@ -60,6 +62,11 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
   const [videoDescription, setVideoDescription] = useState(prefill?.videoDescription ?? '');
   const [duration, setDuration] = useState<5 | 10>(prefill?.duration ?? 10);
   const [genScript, setGenScript] = useState(false);
+
+  // Optional vocal-delivery hint ("low and teasing", "soft and sultry").
+  // Empty by default; prefilled when the prompt parser detected one. Only
+  // sent to the backend when the creator actually speaks.
+  const [voiceTone, setVoiceTone] = useState(prefill?.voiceTone ?? '');
 
   // "Talking creator" toggle. On by default — the creator speaks the
   // script. When off, the creator stays silent: we hide the script and
@@ -157,6 +164,8 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
       creatorSpeaks: speaks,
       script: speaks ? script : '',
       videoDescription,
+      // Voice tone only matters when the creator speaks.
+      voiceTone: speaks && voiceTone.trim() ? voiceTone.trim() : undefined,
       videoDuration: duration,
       captionsEnabled: speaks ? captionsEnabled : false,
       captionPreset: speaks && captionsEnabled ? captionPresetId : undefined,
@@ -345,6 +354,22 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
                 onChange={(e) => setScript(e.target.value)}
                 placeholder="Okay so I just got this thing and honestly…"
                 rows={5}
+                className={inputCls}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-[11px] uppercase tracking-[0.15em] text-white/45">
+                Voice tone <span className="text-white/30 normal-case tracking-normal">· optional</span>
+              </div>
+              <div className="text-xs text-white/45 -mt-1">
+                How should the creator sound? e.g. low and teasing, soft and
+                sultry, calm, hyped.
+              </div>
+              <input
+                value={voiceTone}
+                onChange={(e) => setVoiceTone(e.target.value)}
+                placeholder="Low, teasing, slow delivery…"
                 className={inputCls}
               />
             </div>

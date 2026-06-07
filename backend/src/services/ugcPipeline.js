@@ -642,8 +642,14 @@ function buildKlingPrompt({
   hasProduct,
   hasProductInSeed,
   creatorSpeaks = true,
+  // Optional vocal-delivery hint ("low and teasing", "soft and sultry").
+  // When set, it overrides the default "clearly and naturally" read and we
+  // drop the generic "candid everyday energy" line that otherwise biases
+  // Kling's inline audio toward an upbeat delivery.
+  voiceTone = '',
 }) {
   const parts = [];
+  const tone = (voiceTone || '').trim();
   if (creatorContext) parts.push(creatorContext);
   // Tweaks override the template's natural setting — bubble them up to
   // Kling too so the rendered video doesn't drift back to the template
@@ -682,7 +688,15 @@ function buildKlingPrompt({
   // Avoid camera-aware phrasing ("to camera", "on camera", "talking head")
   // — Kling reads it literally and biases toward webcam framing. We just
   // describe naturalistic action and let the model handle the framing.
-  parts.push('One continuous shot, no cuts, smooth natural motion, expressive body language and facial expression, candid everyday energy.');
+  // "candid everyday energy" nudges Kling toward an upbeat read — drop it
+  // when the user asked for a specific vocal tone so it doesn't fight the
+  // requested delivery (e.g. a "low, teasing" voice shouldn't be forced
+  // back to peppy).
+  parts.push(
+    tone
+      ? 'One continuous shot, no cuts, smooth natural motion, expressive body language and facial expression.'
+      : 'One continuous shot, no cuts, smooth natural motion, expressive body language and facial expression, candid everyday energy.'
+  );
   parts.push('The creator is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model and NOT a fashion ad. No glamour makeup, casual everyday clothing, authentic vibe, vertical phone-video aspect ratio.');
 
   if (creatorSpeaks && script) {
@@ -690,8 +704,14 @@ function buildKlingPrompt({
     // the dominant directive. Kling generates audio inline via
     // generate_audio, and these lines tell it exactly what audio to
     // produce and that the mouth must track that audio precisely.
+    // Vocal delivery: when the user specified a tone, make it an explicit,
+    // emphatic instruction so Kling's inline audio adopts it instead of the
+    // default upbeat UGC read. Otherwise fall back to "clearly and naturally".
+    const deliveryDirective = tone
+      ? `The creator speaks the following script aloud in a distinctly ${tone} voice — the vocal delivery, pacing, and emotion must clearly match a ${tone} tone throughout. Their voice is audible in the final video and their lip movements MUST be perfectly synchronized with every word they say:`
+      : `The creator speaks the following script aloud, clearly and naturally, with their voice audible in the final video — their lip movements MUST be perfectly synchronized with every word they say:`;
     parts.push(
-      `The creator speaks the following script aloud, clearly and naturally, with their voice audible in the final video — their lip movements MUST be perfectly synchronized with every word they say:`,
+      deliveryDirective,
       `"${script}"`,
       'Their mouth shapes match each word, the audio is the creator\'s own voice speaking these exact lines, and the lip-sync is tight throughout — no silent video, no mismatched mouth movement.'
     );
@@ -759,6 +779,11 @@ async function runSingleShotPipeline(job, jobId, chargeOpts = {}) {
   // Passed into both Nano Banana branches so the seed image can reflect
   // the user's adjustments while keeping the template creator's identity.
   const userTweaks = (snapshot.user_tweaks || '').trim();
+
+  // Optional vocal-delivery hint ("low and teasing", "soft and sultry").
+  // Threaded into the Kling prompt only — shapes how the creator's inline
+  // audio sounds. Empty for older jobs / when the user didn't ask for one.
+  const voiceTone = (snapshot.voice_tone || '').trim();
 
   // Fallback action when the user didn't fill in a Scene. Phrasing
   // avoids "to camera" / "in front of mirror" — Kling renders those
@@ -951,6 +976,7 @@ async function runSingleShotPipeline(job, jobId, chargeOpts = {}) {
       hasProduct,
       hasProductInSeed: !!productImageUrl && (seedKind === 'inspiration+product' || seedKind === 'template+product'),
       creatorSpeaks,
+      voiceTone,
     });
     console.log(`[ugc:${jobId}] kling 3.0 pro ${seedImageUrl ? 'i2v' : 't2v'} (seed=${seedKind}, ${videoDuration}s, audio=${creatorSpeaks ? 'on' : 'off'}, speaks=${creatorSpeaks}, product=${hasProduct})`);
 
