@@ -169,7 +169,7 @@ function nanoAspectFor(aspectRatio) {
 }
 
 const REALISM_GUIDANCE =
-  'The new person is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model, NOT a fashion-ad face. Candid natural expression. Photorealistic, sharp focus — looks like a real iPhone photo of a real adult creator.';
+  'The new person is a naturally good-looking everyday adult — relatable, approachable, healthy. Candid natural expression. Photorealistic, sharp focus — looks like a real iPhone photo of a real adult creator.';
 
 // Wardrobe guardrail for the Nano Banana seed image only. The goal is NOT to
 // force full/conservative coverage — revealing or "hot" outfits are fine when
@@ -557,7 +557,7 @@ function klingDurationEnum(seconds) {
 // Style/quality negatives shared by every render, regardless of whether
 // the creator speaks or not.
 const KLING_NEGATIVE_PROMPT_CORE =
-  'professional model, supermodel, fashion model, magazine cover, glamour shot, beauty advertisement, runway, studio lighting, plastic skin, doll-like, old, elderly, aged, wrinkled, weathered face, blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed hands, extra limbs, frozen still image, multiple people, split screen, scene cuts, hard cuts';
+  'professional model, supermodel, fashion model, studio lighting, plastic skin, doll-like, old, elderly, aged, wrinkled, weathered face, blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed hands, extra limbs, frozen still image, multiple people, split screen, scene cuts, hard cuts';
 
 // Speaking videos: we WANT audio + tight lip-sync, so we push the model
 // away from silence and out-of-sync mouths.
@@ -697,7 +697,7 @@ function buildKlingPrompt({
       ? 'One continuous shot, no cuts, smooth natural motion, expressive body language and facial expression.'
       : 'One continuous shot, no cuts, smooth natural motion, expressive body language and facial expression, candid everyday energy.'
   );
-  parts.push('The creator is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model and NOT a fashion ad. Authentic vibe, vertical phone-video aspect ratio.');
+  parts.push('The creator is a naturally good-looking everyday adult — relatable, approachable, healthy. Authentic vibe, vertical phone-video aspect ratio.');
 
   if (creatorSpeaks && script) {
     // The script + speak + lip-sync instructions go LAST so they read as
