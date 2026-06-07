@@ -557,7 +557,7 @@ function klingDurationEnum(seconds) {
 // Style/quality negatives shared by every render, regardless of whether
 // the creator speaks or not.
 const KLING_NEGATIVE_PROMPT_CORE =
-  'professional model, supermodel, fashion model, studio lighting, plastic skin, doll-like, old, elderly, aged, wrinkled, weathered face, blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed hands, extra limbs, frozen still image, multiple people, split screen, scene cuts, hard cuts';
+  'studio lighting, plastic skin, doll-like, old, elderly, aged, wrinkled, weathered face, blurry, distorted face, disfigured, watermark, text, logo, cartoon, anime, low quality, deformed hands, extra limbs, frozen still image, multiple people, split screen, scene cuts, hard cuts';
 
 // Speaking videos: we WANT audio + tight lip-sync, so we push the model
 // away from silence and out-of-sync mouths.
