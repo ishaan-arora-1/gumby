@@ -16,9 +16,6 @@ import {
   Check,
 } from 'lucide-react';
 import { fetchPublicPacks, STATIC_PACK_FALLBACK, type CreditPack } from '@/lib/api';
-import { isLikelyIndia } from '@/components/pricing/CurrencyToggle';
-
-const SUPPORT_EMAIL = 'support@blinkugc.com';
 
 /* ============================================================
    Blink UGC — landing page
@@ -303,31 +300,12 @@ export function BlinkLanding() {
 ============================================================ */
 function PricingSection() {
   const [packs, setPacks] = useState<CreditPack[]>(STATIC_PACK_FALLBACK);
-  // `null` until the locale check runs client-side — important because
-  // SSR + hydration would otherwise flash the wrong CTA copy.
-  const [india, setIndia] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    setIndia(isLikelyIndia());
-  }, []);
 
   useEffect(() => {
     let mounted = true;
     fetchPublicPacks().then((p) => { if (mounted && p.length) setPacks(p); });
     return () => { mounted = false; };
   }, []);
-
-  // While the geo-check pends, we render the India layout as the optimistic
-  // default — it's the larger market and switching the CTA copy after
-  // hydration is a non-visual change to most visitors.
-  const isInternational = india === false;
-  const mailtoSubject = encodeURIComponent('Early access — international credits');
-  const mailtoBody = encodeURIComponent(
-    "Hey Blink UGC team,\n\nI'd love to buy credits but I'm outside India. " +
-    "Can you set me up with early access?\n\nThanks!"
-  );
-  const earlyAccessMailto =
-    `mailto:${SUPPORT_EMAIL}?subject=${mailtoSubject}&body=${mailtoBody}`;
 
   return (
     <section
@@ -354,23 +332,11 @@ function PricingSection() {
           </p>
         </div>
 
-        <div className="mx-auto mb-10 max-w-[680px] rounded-[16px] border border-white/10 bg-white/[0.04] px-5 py-4 text-center text-[13.5px] leading-[1.55] text-white/80">
-          <span className="font-semibold text-white">Not in India?</span>{' '}
-          Mail us at{' '}
-          <a
-            href={earlyAccessMailto}
-            className="text-white underline decoration-white/40 underline-offset-2 hover:decoration-white"
-          >
-            {SUPPORT_EMAIL}
-          </a>{' '}
-          to get special access.
-        </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[18px]">
           {packs.map((p) => {
-            // Single currency for v1 — INR only. The USD path will light up
-            // automatically the moment we flip the geo-gate after PayPal-via-Razorpay
-            // verification clears.
+            // Landing shows INR teaser pricing; the in-app /pricing page
+            // handles the INR/USD choice (USD = PayPal + international cards)
+            // once the visitor signs in.
             const priceMinor = p.price_paise;
             const major = Math.round(priceMinor / 100);
             const perCredit = priceMinor / 100 / p.credits;
@@ -427,40 +393,24 @@ function PricingSection() {
                   <LandingFeature>Credits never expire</LandingFeature>
                 </ul>
 
-                {isInternational ? (
-                  <a
-                    href={earlyAccessMailto}
-                    className={[
-                      'mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-full text-[14px] font-semibold transition',
-                      featured
-                        ? 'bg-[#ff2e3f] text-white hover:bg-[#e11d2b] shadow-[0_10px_30px_rgba(225,29,43,0.35)]'
-                        : 'bg-white text-[#080808] hover:bg-white/90',
-                    ].join(' ')}
-                  >
-                    Mail for early access
-                  </a>
-                ) : (
-                  <Link
-                    href={`/login?mode=signup&next=${encodeURIComponent('/pricing')}`}
-                    className={[
-                      'mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-full text-[14px] font-semibold transition',
-                      featured
-                        ? 'bg-[#ff2e3f] text-white hover:bg-[#e11d2b] shadow-[0_10px_30px_rgba(225,29,43,0.35)]'
-                        : 'bg-white text-[#080808] hover:bg-white/90',
-                    ].join(' ')}
-                  >
-                    Get {p.label}
-                  </Link>
-                )}
+                <Link
+                  href={`/login?mode=signup&next=${encodeURIComponent('/pricing')}`}
+                  className={[
+                    'mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-full text-[14px] font-semibold transition',
+                    featured
+                      ? 'bg-[#ff2e3f] text-white hover:bg-[#e11d2b] shadow-[0_10px_30px_rgba(225,29,43,0.35)]'
+                      : 'bg-white text-[#080808] hover:bg-white/90',
+                  ].join(' ')}
+                >
+                  Get {p.label}
+                </Link>
               </div>
             );
           })}
         </div>
 
         <p className="mt-8 text-center text-[12px] text-white/40">
-          {isInternational
-            ? 'International checkout (PayPal & cards) going live next week — email us above for early access.'
-            : 'Secure checkout by Razorpay · UPI, cards, netbanking, wallets · One-time, no auto-renewal'}
+          Secure checkout by Razorpay · UPI &amp; cards in India, PayPal &amp; international cards elsewhere · One-time, no auto-renewal
         </p>
       </div>
     </section>
