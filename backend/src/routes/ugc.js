@@ -57,16 +57,17 @@ router.get('/templates', async (req, res) => {
   res.setHeader('Expires', '0');
 
   const page = parseInt(req.query.page) || 1;
-  const limit = 5;
+  const limit = 6;
   const offset = (page - 1) * limit;
   const category = (req.query.category || '').trim();
 
   try {
     const redis = await getRedisClient();
-    // v5 cache namespace — bump whenever the schema or URL shape changes so
-    // stale Redis entries are bypassed without a manual flush. (v5: curated
-    // templates now expose captioned preview video_url + clean_frame_url.)
-    const cacheKey = `ugc_templates_v5:${category || 'all'}:${page}`;
+    // v6 cache namespace — bump whenever the schema, URL shape, or page size
+    // changes so stale Redis entries are bypassed without a manual flush.
+    // (v6: page size 5 → 6 to surface the 6th curated template. v5: curated
+    // templates expose captioned preview video_url + clean_frame_url.)
+    const cacheKey = `ugc_templates_v6:${category || 'all'}:${page}`;
     const cached = await redis.get(cacheKey);
     if (cached) return res.json(JSON.parse(cached));
 
