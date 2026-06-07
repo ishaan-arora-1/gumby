@@ -169,7 +169,7 @@ function nanoAspectFor(aspectRatio) {
 }
 
 const REALISM_GUIDANCE =
-  'The new person is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model, NOT a fashion-ad face. No glamour makeup, casual everyday clothing, candid natural expression. Photorealistic, sharp focus — looks like a real iPhone photo of a real adult creator.';
+  'The new person is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model, NOT a fashion-ad face. Candid natural expression. Photorealistic, sharp focus — looks like a real iPhone photo of a real adult creator.';
 
 // Wardrobe guardrail for the Nano Banana seed image only. The goal is NOT to
 // force full/conservative coverage — revealing or "hot" outfits are fine when
@@ -697,7 +697,7 @@ function buildKlingPrompt({
       ? 'One continuous shot, no cuts, smooth natural motion, expressive body language and facial expression.'
       : 'One continuous shot, no cuts, smooth natural motion, expressive body language and facial expression, candid everyday energy.'
   );
-  parts.push('The creator is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model and NOT a fashion ad. No glamour makeup, casual everyday clothing, authentic vibe, vertical phone-video aspect ratio.');
+  parts.push('The creator is a naturally good-looking everyday adult — relatable, approachable, healthy. NOT a professional model and NOT a fashion ad. Authentic vibe, vertical phone-video aspect ratio.');
 
   if (creatorSpeaks && script) {
     // The script + speak + lip-sync instructions go LAST so they read as
