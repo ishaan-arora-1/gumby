@@ -94,10 +94,10 @@ const SHOWCASE_VIDEOS = [
     src: '/showcase/middle-pink.mp4',
     poster: '/showcase/middle-pink.jpg',
   },
-  // Black-box caption variant — the original captioned hero
+  // Wardrobe / fashion clip — same source as the new #1 template.
   {
-    src: cldVideo('v1780158722/5b209243-f12b-4d4d-9365-6eac272fa36a_wopbcx', 720),
-    poster: cldPoster('v1780158722/5b209243-f12b-4d4d-9365-6eac272fa36a_wopbcx', 720),
+    src: cldVideo('v1780874830/2f4837f0-f447-4ccb-ae65-8364dda24e10_x9icad', 720),
+    poster: cldPoster('v1780874830/2f4837f0-f447-4ccb-ae65-8364dda24e10_x9icad', 720),
   },
 ];
 
