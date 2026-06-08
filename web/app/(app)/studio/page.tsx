@@ -6,6 +6,7 @@ import type { UGCTemplate, UGCJob } from '@/lib/types';
 import { PromptComposer } from '@/components/studio/PromptComposer';
 import { TemplateCard } from '@/components/studio/TemplateCard';
 import { StudioForm, type StudioPrefill } from '@/components/studio/StudioForm';
+import { ComposeForm, type ComposeData } from '@/components/studio/ComposeForm';
 import { GeneratingCard } from '@/components/studio/GeneratingCard';
 import { VideoResult } from '@/components/studio/VideoResult';
 import { LoopingVideo } from '@/components/ui/LoopingVideo';
@@ -20,6 +21,9 @@ export default function StudioPage() {
   const [templates, setTemplates] = useState<UGCTemplate[]>([]);
   const [pickedTemplate, setPickedTemplate] = useState<UGCTemplate | null>(null);
   const [prefill, setPrefill] = useState<StudioPrefill | null>(null);
+  // Set when the user came in via the unified multi-image upload flow — drives
+  // the stripped-down ComposeForm instead of the structured StudioForm.
+  const [composeData, setComposeData] = useState<ComposeData | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [adJob, setAdJob] = useState<UGCJob | null>(null);
   const [error, setError] = useState<string>('');
@@ -87,17 +91,19 @@ export default function StudioPage() {
           prompt.trim(),
           attachmentUrls.map((url) => ({ url }))
         );
+        // Map the classification back onto each uploaded image for display.
+        const roleByIndex: Record<number, string> = {};
+        (data.classification || []).forEach((c: any) => {
+          if (typeof c?.index === 'number') roleByIndex[c.index] = (c.role || 'other');
+        });
         setPickedTemplate(null);
-        setPrefill({
-          creatorDescription: data.creatorDescription || '',
-          includeProduct: !!data.includeProduct || !!data.compose?.productImageUrl,
-          productName: data.productName || '',
-          productDescription: '',
+        setPrefill(null);
+        setComposeData({
+          images: attachmentUrls.map((url, i) => ({ url, role: roleByIndex[i] || 'other' })),
+          compose: data.compose || {},
+          instruction: data.compose?.instruction || prompt.trim(),
           videoDescription: data.videoDescription || '',
-          voiceTone: '',
           duration: opts.durationSeconds,
-          productImageUrl: data.compose?.productImageUrl || null,
-          compose: data.compose || null,
         });
         setStep('studio');
         return;
@@ -106,6 +112,7 @@ export default function StudioPage() {
       // No images → the classic prompt-parse path.
       const { data } = await api.parsePrompt(prompt.trim());
       setPickedTemplate(null);
+      setComposeData(null);
       setPrefill({
         creatorDescription: data.creatorDescription || '',
         includeProduct: !!data.includeProduct,
@@ -127,6 +134,7 @@ export default function StudioPage() {
   const onUseTemplate = (t: UGCTemplate) => {
     setPickedTemplate(t);
     setPrefill(null);
+    setComposeData(null);
     setStep('studio');
   };
 
@@ -206,6 +214,7 @@ export default function StudioPage() {
     setStep('welcome');
     setPickedTemplate(null);
     setPrefill(null);
+    setComposeData(null);
     setAdJob(null);
     setError('');
   };
@@ -297,38 +306,51 @@ export default function StudioPage() {
             exit={{ opacity: 0 }}
             className="px-6 lg:px-10 pt-6"
           >
-            {pickedTemplate && (
-              <div className="max-w-2xl mx-auto mb-6 p-4 rounded-card bg-studio border border-white/[0.06] flex items-center gap-4">
-                <div className="w-16 h-20 rounded-btn overflow-hidden bg-elevated">
-                  {pickedTemplate.video_url && (
-                    <LoopingVideo
-                      src={pickedTemplate.video_url}
-                      className="w-full h-full"
-                    />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-white/40">
-                    Creator
+            {composeData ? (
+              // Unified upload flow — stripped-down form (images + overview +
+              // optional Bolna talking creator). No separate product/creator
+              // /scene fields; the backend classifies and orchestrates.
+              <ComposeForm
+                data={composeData}
+                onSubmit={onGenerateAd}
+                loading={isGenerating}
+              />
+            ) : (
+              <>
+                {pickedTemplate && (
+                  <div className="max-w-2xl mx-auto mb-6 p-4 rounded-card bg-studio border border-white/[0.06] flex items-center gap-4">
+                    <div className="w-16 h-20 rounded-btn overflow-hidden bg-elevated">
+                      {pickedTemplate.video_url && (
+                        <LoopingVideo
+                          src={pickedTemplate.video_url}
+                          className="w-full h-full"
+                        />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+                        Creator
+                      </div>
+                      <div className="font-bold truncate">
+                        {pickedTemplate.actor_name || pickedTemplate.name}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setStep('welcome')}
+                      className="text-xs text-white/60 hover:text-white"
+                    >
+                      Change
+                    </button>
                   </div>
-                  <div className="font-bold truncate">
-                    {pickedTemplate.actor_name || pickedTemplate.name}
-                  </div>
-                </div>
-                <button
-                  onClick={() => setStep('welcome')}
-                  className="text-xs text-white/60 hover:text-white"
-                >
-                  Change
-                </button>
-              </div>
+                )}
+                <StudioForm
+                  template={pickedTemplate}
+                  prefill={prefill}
+                  onSubmit={onGenerateAd}
+                  loading={isGenerating}
+                />
+              </>
             )}
-            <StudioForm
-              template={pickedTemplate}
-              prefill={prefill}
-              onSubmit={onGenerateAd}
-              loading={isGenerating}
-            />
           </motion.div>
         )}
 

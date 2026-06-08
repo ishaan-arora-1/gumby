@@ -22,7 +22,7 @@ interface Props {
   loading?: boolean;
 }
 
-const MAX_ATTACHMENTS = 2;
+const MAX_ATTACHMENTS = 5;
 
 const SUGGESTIONS = [
   '20-year-old skincare creator unboxing serum in her kitchen, daylight',

@@ -398,7 +398,7 @@ router.post('/parse-prompt', aiLimiter, async (req, res) => {
 router.post('/interpret-uploads', aiLimiter, async (req, res) => {
   const { prompt, attachments } = req.body || {};
   const imgs = Array.isArray(attachments)
-    ? attachments.filter((a) => a && typeof a.url === 'string' && a.url.length).slice(0, 4)
+    ? attachments.filter((a) => a && typeof a.url === 'string' && a.url.length).slice(0, 5)
     : [];
   if (!imgs.length) {
     return res.status(400).json({ success: false, error: 'At least one image is required' });
