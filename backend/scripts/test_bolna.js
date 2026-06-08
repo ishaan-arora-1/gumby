@@ -17,10 +17,12 @@ const bolna = require('../src/config/bolna');
 async function main() {
   const text = process.argv[2] || 'Hey, this is a quick test of the Blink voice. Can you hear me clearly?';
 
-  console.log('BOLNA_API_KEY set:', bolna.isEnabled());
+  // Test the key directly — do NOT gate on isEnabled() (which also requires
+  // BOLNA_TTS_ENABLED); this script's job is to check the key + endpoint.
+  console.log('BOLNA_API_KEY present:', !!process.env.BOLNA_API_KEY);
   console.log('Defaults:', bolna.defaults());
-  if (!bolna.isEnabled()) {
-    console.error('\n❌ BOLNA_API_KEY is not set in backend/.env — the pipeline never even calls Bolna, so the base clip ships silent. Set the key and re-run.');
+  if (!process.env.BOLNA_API_KEY) {
+    console.error('\n❌ BOLNA_API_KEY is not set in backend/.env.');
     process.exit(1);
   }
 
