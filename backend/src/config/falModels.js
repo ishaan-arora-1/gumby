@@ -38,9 +38,15 @@ module.exports = {
   IMAGE_GENERATE: 'fal-ai/nano-banana-pro',
 
   // Kling LipSync (audio-to-video) — drives the mouth of an existing video
-  // from an external audio track. Used by the Bolna voice path: we render a
-  // SILENT Kling i2v clip, generate the voice with Bolna TTS, then lip-sync
-  // the silent clip to that audio here. Input: { video_url, audio_url }.
-  // Audio must be a public <5MB mp3/wav/m4a, 2–60s. ~$0.014/sec.
+  // from an external audio track. Used by the voice path: we render a SILENT
+  // Kling i2v clip, generate the voice (Bolna or fal ElevenLabs), then
+  // lip-sync the silent clip to that audio here. Input: { video_url, audio_url }.
+  // video 2–10s ≤100MB 720/1080p; audio public <5MB mp3/wav, 2–60s. ~$0.014/sec.
   KLING_LIPSYNC: 'fal-ai/kling-video/lipsync/audio-to-video',
+
+  // ElevenLabs TTS on fal — reliable voice source for the lip-sync path. Uses
+  // the existing FAL_KEY (no extra key, not enterprise-gated like Bolna's
+  // hosted TTS). Input: { text, voice, stability, similarity_boost, speed }.
+  // Output: { audio: { url } } (public mp3). 29 languages, auto-detected.
+  ELEVENLABS_TTS: 'fal-ai/elevenlabs/tts/multilingual-v2',
 };

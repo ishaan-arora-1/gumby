@@ -11,6 +11,7 @@ const {
   IMAGE_SUBJECT_SWAP,
   IMAGE_GENERATE,
   KLING_LIPSYNC,
+  ELEVENLABS_TTS,
 } = require('../config/falModels');
 const { captionVideo } = require('./captioning');
 const { ffmpegPath } = require('../config/ffmpeg');
@@ -708,32 +709,66 @@ async function generateVideoFromText({ prompt, durationSec = 10, aspectRatio = '
 }
 
 /**
- * Bolna voice + Kling lip-sync. Takes a SILENT Kling clip, generates the
- * spoken audio with Bolna TTS, then drives the creator's mouth from that
- * audio via Kling LipSync. This is the "2 Kling calls + 1 Bolna call" path:
- * the first Kling call produced `silentVideoUrl`, this runs Bolna + the
- * second (lip-sync) Kling call.
- *
- * Returns the lip-synced video URL. Throws on failure so the caller can
- * decide whether to fall back to the silent clip.
+ * Generate the spoken-audio track and return a PUBLIC url Kling LipSync can
+ * fetch. Provider order:
+ *   1. Bolna (only if BOLNA_API_KEY set AND the call succeeds) — its hosted
+ *      tts_sample API is enterprise-gated, so this frequently 403s.
+ *   2. fal ElevenLabs TTS — reliable fallback on the existing FAL_KEY, returns
+ *      a public mp3. This is what makes the lip-sync path actually produce
+ *      audio without any extra credentials.
+ */
+async function synthesizeVoiceAudio({ script, jobId, voiceOpts = {} }) {
+  // 1) Bolna (best-effort).
+  if (bolna.isEnabled()) {
+    try {
+      const { buffer, contentType } = await bolna.generateTts(script, voiceOpts);
+      if (buffer.length > 5 * 1024 * 1024) {
+        throw new Error(`Bolna audio too large for Kling LipSync (${buffer.length} bytes > 5MB)`);
+      }
+      const ext = /wav/i.test(contentType) ? 'wav' : 'mp3';
+      const url = await uploadBufferToBucket(buffer, contentType || 'audio/mpeg', ext, `jobs/${jobId}/audio`);
+      console.log(`[ugc:${jobId}] voice via Bolna`);
+      return url;
+    } catch (e) {
+      console.warn(`[ugc:${jobId}] Bolna TTS failed (${e?.message || e}); falling back to fal ElevenLabs`);
+    }
+  }
+
+  // 2) fal ElevenLabs TTS — reliable. Returns a public mp3 url we can pass
+  //    straight to Kling LipSync (already <5MB for short scripts).
+  const result = await falSubscribeWithRetry(ELEVENLABS_TTS, {
+    text: script,
+    voice: voiceOpts.voice || 'Rachel',
+    stability: 0.5,
+    similarity_boost: 0.75,
+    // Language picker (en/hi/ta/te). multilingual-v2 honors language_code;
+    // best results still come from the script text being in that language.
+    ...(voiceOpts.language ? { language_code: voiceOpts.language } : {}),
+  }, 'elevenlabs-tts');
+  const audioUrl =
+    result?.data?.audio?.url || result?.audio?.url ||
+    result?.data?.audio_url || result?.audio_url || null;
+  if (!audioUrl) throw new Error('fal ElevenLabs TTS returned no audio URL');
+  console.log(`[ugc:${jobId}] voice via fal ElevenLabs`);
+  return audioUrl;
+}
+
+/**
+ * Voice + Kling lip-sync. Takes a SILENT Kling clip, generates the spoken
+ * audio (Bolna or fal ElevenLabs), then drives the creator's mouth from that
+ * audio via Kling LipSync — the second Kling call. Returns the lip-synced
+ * video URL. Throws on failure so the caller can fall back to the silent clip.
  */
 async function voiceAndLipSync({ silentVideoUrl, script, jobId, voiceOpts = {}, onProgress }) {
-  // 1) Bolna TTS → audio bytes.
   if (onProgress) try { onProgress(0.1); } catch {}
-  const { buffer, contentType } = await bolna.generateTts(script, voiceOpts);
-  const ext = /wav/i.test(contentType) ? 'wav' : /m4a|mp4|aac/i.test(contentType) ? 'm4a' : 'mp3';
-  if (buffer.length > 5 * 1024 * 1024) {
-    throw new Error(`Bolna audio too large for Kling LipSync (${buffer.length} bytes > 5MB)`);
-  }
-  // 2) Host the audio so Kling LipSync can fetch it (needs a public URL).
-  const audioUrl = await uploadBufferToBucket(buffer, contentType || 'audio/mpeg', ext, `jobs/${jobId}/audio`);
-  if (onProgress) try { onProgress(0.35); } catch {}
+  const audioUrl = await synthesizeVoiceAudio({ script, jobId, voiceOpts });
+  if (onProgress) try { onProgress(0.4); } catch {}
 
-  // 3) Kling LipSync (audio-to-video) — second Kling call.
+  // Kling LipSync (audio-to-video) — second Kling call.
   const result = await falSubscribeWithRetry(KLING_LIPSYNC, {
     video_url: silentVideoUrl,
     audio_url: audioUrl,
-  }, 'kling-lipsync', { onProgress: onProgress ? (f) => onProgress(0.35 + 0.65 * f) : undefined });
+  }, 'kling-lipsync', { onProgress: onProgress ? (f) => onProgress(0.4 + 0.6 * f) : undefined });
   const url = result?.data?.video?.url || result?.video?.url;
   if (!url) throw new Error('Kling LipSync returned no video URL');
   return url;
@@ -1136,12 +1171,13 @@ async function runSingleShotPipeline(job, jobId, chargeOpts = {}) {
       creatorSpeaks,
       voiceTone,
     });
-    // Bolna voice path: when the creator speaks AND Bolna is configured, we
-    // render a SILENT Kling clip and then add the voice via Bolna TTS + Kling
-    // LipSync (2 Kling calls + 1 Bolna call) instead of Kling's inline audio.
-    // Falls back to inline audio when Bolna isn't enabled, so this branch is
-    // safe with no BOLNA_API_KEY set.
-    const useBolnaVoice = creatorSpeaks && bolna.isEnabled();
+    // External-voice path: when the creator speaks, we render a SILENT Kling
+    // clip, then add the voice via TTS + Kling LipSync (2 Kling calls + 1 TTS
+    // call) instead of Kling's inline audio. The voice comes from Bolna when
+    // BOLNA_API_KEY is set AND its call succeeds, otherwise fal ElevenLabs
+    // (reliable, uses the existing FAL_KEY). Gated on fal being available;
+    // falls back to Kling inline audio only if fal itself is off (mock mode).
+    const useExternalVoice = creatorSpeaks && isFalEnabled();
     const voiceOpts = {
       provider: snapshot.voice_provider || undefined,
       voice: snapshot.voice_id || undefined,
@@ -1150,29 +1186,32 @@ async function runSingleShotPipeline(job, jobId, chargeOpts = {}) {
     console.log(
       `[ugc:${jobId}] kling 3.0 pro ${seedImageUrl ? 'i2v' : 't2v'} ` +
       `(seed=${seedKind}, ${videoDuration}s, speaks=${creatorSpeaks}, product=${hasProduct}, ` +
-      `voice=${useBolnaVoice ? 'bolna+lipsync' : creatorSpeaks ? 'kling-inline' : 'silent'})`
+      `voice=${useExternalVoice ? 'tts+lipsync' : creatorSpeaks ? 'kling-inline' : 'silent'})`
     );
 
-    // Step 2a — base clip. Silent when we're going to lip-sync Bolna audio.
+    // Step 2a — base clip. Silent when we're going to lip-sync external audio.
     const genArgs = {
       prompt: klingPrompt,
       durationSec: videoDuration,
       aspectRatio,
       hasProduct,
       creatorSpeaks,
-      generateAudio: useBolnaVoice ? false : undefined,
-      // When using Bolna, the base render owns 32→70; lip-sync owns 70→hi.
-      onProgress: useBolnaVoice ? (f) => videoTick(f * 0.6) : videoTick,
+      generateAudio: useExternalVoice ? false : undefined,
+      // With external voice, the base render owns 32→70; lip-sync owns 70→hi.
+      onProgress: useExternalVoice ? (f) => videoTick(f * 0.6) : videoTick,
     };
     let klingVideoUrl = seedImageUrl
       ? await generateVideoFromImage({ seedImageUrl, ...genArgs })
       : await generateVideoFromText({ ...genArgs });
 
-    // Step 2b — Bolna TTS + Kling LipSync (second Kling call). Non-fatal: if
-    // it fails we ship the silent base clip rather than failing the whole job.
-    if (useBolnaVoice) {
+    // Step 2b — TTS + Kling LipSync (second Kling call). Non-fatal: if it
+    // fails we ship the silent base clip rather than failing the whole job.
+    // The reason is surfaced on the job row (job.error) so it's visible in the
+    // UI / history without trawling logs.
+    let voiceError = null;
+    if (useExternalVoice) {
       try {
-        console.log(`[ugc:${jobId}] bolna TTS + kling lipsync`);
+        console.log(`[ugc:${jobId}] tts + kling lipsync`);
         klingVideoUrl = await voiceAndLipSync({
           silentVideoUrl: klingVideoUrl,
           script: scriptText,
@@ -1180,9 +1219,10 @@ async function runSingleShotPipeline(job, jobId, chargeOpts = {}) {
           voiceOpts,
           onProgress: (f) => videoTick(0.6 + 0.4 * f),
         });
-        console.log(`[ugc:${jobId}] bolna voice + lipsync complete`);
+        console.log(`[ugc:${jobId}] voice + lipsync complete`);
       } catch (voiceErr) {
-        console.error(`[ugc:${jobId}] bolna/lipsync failed, shipping silent clip: ${voiceErr?.message || voiceErr}`);
+        voiceError = voiceErr?.message || String(voiceErr);
+        console.error(`[ugc:${jobId}] tts/lipsync failed, shipping SILENT clip: ${voiceError}`);
       }
     }
 
@@ -1272,7 +1312,10 @@ async function runSingleShotPipeline(job, jobId, chargeOpts = {}) {
     // reason on the row so operations can see why future jobs aren't
     // getting captions without trawling logs. We don't fail the job —
     // they still get a watchable video.
-    if (captionError) {
+    if (voiceError) {
+      // Voice failure is the more important signal — show it first.
+      completionPatch.error = `voice_skipped (silent clip shipped): ${voiceError.slice(0, 400)}`;
+    } else if (captionError) {
       completionPatch.error = `captions_skipped: ${captionError.slice(0, 400)}`;
     }
     await updateJob(jobId, completionPatch);
