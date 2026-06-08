@@ -34,17 +34,39 @@ function getApiKey() {
   return process.env.BOLNA_API_KEY || '';
 }
 
+// Bolna's hosted TTS-sample API is access-gated (returns 403 on non-enterprise
+// keys), so we don't attempt it on every generation just to fall back. It's
+// only used when BOTH the key is present AND BOLNA_TTS_ENABLED is truthy. Flip
+// the flag on once your Bolna account has TTS API access and it takes over
+// automatically (the pipeline tries Bolna first, then fal ElevenLabs).
 function isEnabled() {
-  return Boolean(getApiKey());
+  if (!getApiKey()) return false;
+  const flag = (process.env.BOLNA_TTS_ENABLED || '').toLowerCase();
+  return flag === 'true' || flag === '1' || flag === 'yes';
 }
 
 function defaults() {
   return {
     provider: process.env.BOLNA_TTS_PROVIDER || 'elevenlabs',
-    voice: process.env.BOLNA_TTS_VOICE || 'Monika',
+    // ElevenLabs needs BOTH a voice name and its voice_id.
+    voice: process.env.BOLNA_TTS_VOICE || 'Rachel',
+    voiceId: process.env.BOLNA_TTS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM',
     model: process.env.BOLNA_TTS_MODEL || 'eleven_turbo_v2_5',
     language: process.env.BOLNA_TTS_LANGUAGE || 'en',
   };
+}
+
+// Build the provider_config Bolna expects, per provider. ElevenLabs requires
+// BOTH `voice` (name) and `voice_id`; others key off `voice` / `language`.
+function buildProviderConfig(provider, { voice, voiceId, model, language }) {
+  switch ((provider || '').toLowerCase()) {
+    case 'elevenlabs':
+      return { voice, voice_id: voiceId, model };
+    case 'sarvam':
+      return { voice, language, model };
+    default:
+      return { voice, model, language };
+  }
 }
 
 /**
@@ -61,18 +83,16 @@ async function generateTts(text, opts = {}) {
 
   const d = defaults();
   const provider = opts.provider || d.provider;
-  const voice = opts.voice || d.voice;
+  const voice = opts.voiceName || d.voice;
+  // `opts.voice` carries the user's chosen voice id (from snapshot.voice_id).
+  const voiceId = opts.voiceId || opts.voice || d.voiceId;
   const model = opts.model || d.model;
   const language = opts.language || d.language;
 
   const body = {
     text: clean,
     provider,
-    provider_config: {
-      voice,
-      model,
-      language,
-    },
+    provider_config: buildProviderConfig(provider, { voice, voiceId, model, language }),
   };
 
   const resp = await fetch(TTS_ENDPOINT, {
