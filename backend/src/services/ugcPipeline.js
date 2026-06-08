@@ -10,10 +10,12 @@ const {
   KLING_TEXT_TO_VIDEO,
   IMAGE_SUBJECT_SWAP,
   IMAGE_GENERATE,
+  KLING_LIPSYNC,
 } = require('../config/falModels');
 const { captionVideo } = require('./captioning');
 const { ffmpegPath } = require('../config/ffmpeg');
 const credits = require('./credits');
+const bolna = require('../config/bolna');
 
 const UGC_BUCKET = 'ugc-videos';
 
@@ -541,6 +543,97 @@ async function stripProductFromTemplate({
   return url;
 }
 
+/**
+ * Unified "compose from uploads" seed builder.
+ *
+ * The user drops several images into ONE upload area and writes a free-form
+ * instruction ("take the product from the second pic, put this creator in the
+ * background of the third"). An upstream vision pass (/ugc/interpret-uploads)
+ * has already classified each image into a role; here we receive the resolved
+ * role→url map plus the raw instruction and synthesize a single seed still.
+ *
+ * Images are passed to Nano Banana in a FIXED, labelled order so the prompt
+ * can refer to them unambiguously ("FIRST image = the creator", etc.). Only
+ * the roles that were actually provided are included.
+ */
+async function composeFromUploads({
+  creatorImageUrl,
+  productImageUrl,
+  backgroundImageUrl,
+  instruction,
+  creatorDescription,
+  productName,
+  aspectRatio = '9:16',
+  onProgress,
+}) {
+  const image_urls = [];
+  const parts = [];
+  const labels = ['FIRST', 'SECOND', 'THIRD', 'FOURTH'];
+  let i = 0;
+
+  parts.push(
+    'Compose a single photorealistic still by combining the provided reference images according to the user instruction below. Each image has a specific role.'
+  );
+
+  if (creatorImageUrl) {
+    image_urls.push(creatorImageUrl);
+    parts.push(
+      `The ${labels[i++]} image is the CREATOR — the on-camera person. Keep their face, identity, ethnicity, hair, and body type EXACTLY as shown. This is who appears in the final image.`
+    );
+  }
+  if (productImageUrl) {
+    image_urls.push(productImageUrl);
+    parts.push(
+      `The ${labels[i++]} image is the PRODUCT${productName ? ` ("${productName}")` : ''} reference. EXTRACT ONLY THE PRODUCT — ignore any person, hand, or model shown with it. Place it naturally on/with the creator (worn, held, or used). Preserve it pixel-perfectly: shape, color, label text, and branding all match this reference exactly.`
+    );
+  }
+  if (backgroundImageUrl) {
+    image_urls.push(backgroundImageUrl);
+    parts.push(
+      `The ${labels[i++]} image is the BACKGROUND/SCENE — use its environment, setting, and lighting as the backdrop the creator is placed into.`
+    );
+  }
+
+  if (creatorDescription && creatorDescription.trim()) {
+    parts.push(`Creator description (use if no creator image, or to refine): "${creatorDescription.trim()}".`);
+  }
+
+  if (instruction && instruction.trim()) {
+    parts.push(
+      `USER INSTRUCTION — this is the primary directive and must be followed: "${instruction.trim()}".`
+    );
+  }
+
+  parts.push(REALISM_GUIDANCE);
+  parts.push(ATTIRE_GUIDANCE);
+
+  // No images at all → fall back to pure text-to-image generation.
+  if (image_urls.length === 0) {
+    const result = await falSubscribeWithRetry(IMAGE_GENERATE, {
+      prompt: parts.join(' '),
+      aspect_ratio: nanoAspectFor(aspectRatio),
+      num_images: 1,
+      resolution: '2K',
+    }, 'compose-from-text', { onProgress });
+    const images = result?.data?.images || result?.images || [];
+    const url = images[0]?.url;
+    if (!url) throw new Error('Compose (text) returned no image URL');
+    return url;
+  }
+
+  const result = await falSubscribeWithRetry(IMAGE_SUBJECT_SWAP, {
+    prompt: parts.join(' '),
+    image_urls,
+    aspect_ratio: nanoAspectFor(aspectRatio),
+    num_images: 1,
+    resolution: '2K',
+  }, 'compose-from-uploads', { onProgress });
+  const images = result?.data?.images || result?.images || [];
+  const url = images[0]?.url;
+  if (!url) throw new Error('Compose returned no image URL');
+  return url;
+}
+
 // ---------------------------------------------------------------------------
 // Step 2 — Kling 3.0 Pro single-shot generation WITH audio.
 //
@@ -579,15 +672,18 @@ function klingNegativePrompt({ hasProduct, creatorSpeaks = true }) {
   return np;
 }
 
-async function generateVideoFromImage({ seedImageUrl, prompt, durationSec = 10, aspectRatio = '9:16', hasProduct = true, creatorSpeaks = true, onProgress }) {
+async function generateVideoFromImage({ seedImageUrl, prompt, durationSec = 10, aspectRatio = '9:16', hasProduct = true, creatorSpeaks = true, generateAudio, onProgress }) {
+  // `generateAudio` defaults to creatorSpeaks (the inline-audio flow). The
+  // Bolna voice path overrides it to FALSE so Kling renders a silent clip we
+  // can lip-sync to an external audio track — while keeping creatorSpeaks=true
+  // for the prompt/negatives so the creator still looks like they're talking.
+  const audio = generateAudio === undefined ? creatorSpeaks : generateAudio;
   const result = await falSubscribeWithRetry(KLING_IMAGE_TO_VIDEO, {
     prompt,
     image_url: seedImageUrl,
     duration: klingDurationEnum(durationSec),
     aspect_ratio: aspectRatio,
-    // Only synthesize audio when the creator is actually speaking. A
-    // silent video skips inline audio generation entirely.
-    generate_audio: creatorSpeaks,
+    generate_audio: audio,
     negative_prompt: klingNegativePrompt({ hasProduct, creatorSpeaks }),
     cfg_scale: 0.5,
   }, 'kling-i2v', { onProgress });
@@ -596,17 +692,50 @@ async function generateVideoFromImage({ seedImageUrl, prompt, durationSec = 10, 
   return url;
 }
 
-async function generateVideoFromText({ prompt, durationSec = 10, aspectRatio = '9:16', hasProduct = true, creatorSpeaks = true, onProgress }) {
+async function generateVideoFromText({ prompt, durationSec = 10, aspectRatio = '9:16', hasProduct = true, creatorSpeaks = true, generateAudio, onProgress }) {
+  const audio = generateAudio === undefined ? creatorSpeaks : generateAudio;
   const result = await falSubscribeWithRetry(KLING_TEXT_TO_VIDEO, {
     prompt,
     duration: klingDurationEnum(durationSec),
     aspect_ratio: aspectRatio,
-    generate_audio: creatorSpeaks,
+    generate_audio: audio,
     negative_prompt: klingNegativePrompt({ hasProduct, creatorSpeaks }),
     cfg_scale: 0.5,
   }, 'kling-t2v', { onProgress });
   const url = result?.data?.video?.url || result?.video?.url;
   if (!url) throw new Error('Kling 3.0 text-to-video returned no video URL');
+  return url;
+}
+
+/**
+ * Bolna voice + Kling lip-sync. Takes a SILENT Kling clip, generates the
+ * spoken audio with Bolna TTS, then drives the creator's mouth from that
+ * audio via Kling LipSync. This is the "2 Kling calls + 1 Bolna call" path:
+ * the first Kling call produced `silentVideoUrl`, this runs Bolna + the
+ * second (lip-sync) Kling call.
+ *
+ * Returns the lip-synced video URL. Throws on failure so the caller can
+ * decide whether to fall back to the silent clip.
+ */
+async function voiceAndLipSync({ silentVideoUrl, script, jobId, voiceOpts = {}, onProgress }) {
+  // 1) Bolna TTS → audio bytes.
+  if (onProgress) try { onProgress(0.1); } catch {}
+  const { buffer, contentType } = await bolna.generateTts(script, voiceOpts);
+  const ext = /wav/i.test(contentType) ? 'wav' : /m4a|mp4|aac/i.test(contentType) ? 'm4a' : 'mp3';
+  if (buffer.length > 5 * 1024 * 1024) {
+    throw new Error(`Bolna audio too large for Kling LipSync (${buffer.length} bytes > 5MB)`);
+  }
+  // 2) Host the audio so Kling LipSync can fetch it (needs a public URL).
+  const audioUrl = await uploadBufferToBucket(buffer, contentType || 'audio/mpeg', ext, `jobs/${jobId}/audio`);
+  if (onProgress) try { onProgress(0.35); } catch {}
+
+  // 3) Kling LipSync (audio-to-video) — second Kling call.
+  const result = await falSubscribeWithRetry(KLING_LIPSYNC, {
+    video_url: silentVideoUrl,
+    audio_url: audioUrl,
+  }, 'kling-lipsync', { onProgress: onProgress ? (f) => onProgress(0.35 + 0.65 * f) : undefined });
+  const url = result?.data?.video?.url || result?.video?.url;
+  if (!url) throw new Error('Kling LipSync returned no video URL');
   return url;
 }
 
@@ -848,7 +977,36 @@ async function runSingleShotPipeline(job, jobId, chargeOpts = {}) {
       }
     }
 
-    if (inspirationImageUrl) {
+    // ---- Compose mode: unified multi-image upload + free-form instruction ----
+    // When the user dropped several images into one upload area and described
+    // what to do, /interpret-uploads classified each into a role and stashed
+    // them on snapshot.compose. The product (if any) flows through the
+    // clean-extract above (job.product_image_url); creator + background come
+    // straight from the compose blob.
+    const compose = snapshot.compose || null;
+    const hasCompose = !!(compose && (compose.creator_image_url || compose.background_image_url || compose.instruction || productImageUrl) && compose.enabled !== false);
+
+    if (hasCompose) {
+      const tick = await reportStage('rendering_scene', 5, 30);
+      console.log(
+        `[ugc:${jobId}] composing seed from uploads ` +
+        `(creator=${!!compose.creator_image_url}, product=${!!productImageUrl}, background=${!!compose.background_image_url})`
+      );
+      const composedUrl = await composeFromUploads({
+        creatorImageUrl: compose.creator_image_url || null,
+        productImageUrl: productImageUrl || null,
+        backgroundImageUrl: compose.background_image_url || null,
+        instruction: compose.instruction || '',
+        creatorDescription: creatorContext,
+        productName: job.product_name,
+        aspectRatio,
+        onProgress: tick,
+      });
+      seedImageUrl = await mirrorRemote(composedUrl, jobId, 'image');
+      await updateJob(jobId, { creator_scene_image_url: seedImageUrl }).catch(() => {});
+      seedKind = 'compose';
+      console.log(`[ugc:${jobId}] compose → seed image complete`);
+    } else if (inspirationImageUrl) {
       const tick = await reportStage('rendering_scene', 5, 30);
       console.log(`[ugc:${jobId}] reimagining inspiration${productImageUrl ? ' + product' : ''} via Nano Banana Pro`);
       const reimaginedUrl = await reimagineCreatorInScene({
@@ -978,26 +1136,55 @@ async function runSingleShotPipeline(job, jobId, chargeOpts = {}) {
       creatorSpeaks,
       voiceTone,
     });
-    console.log(`[ugc:${jobId}] kling 3.0 pro ${seedImageUrl ? 'i2v' : 't2v'} (seed=${seedKind}, ${videoDuration}s, audio=${creatorSpeaks ? 'on' : 'off'}, speaks=${creatorSpeaks}, product=${hasProduct})`);
+    // Bolna voice path: when the creator speaks AND Bolna is configured, we
+    // render a SILENT Kling clip and then add the voice via Bolna TTS + Kling
+    // LipSync (2 Kling calls + 1 Bolna call) instead of Kling's inline audio.
+    // Falls back to inline audio when Bolna isn't enabled, so this branch is
+    // safe with no BOLNA_API_KEY set.
+    const useBolnaVoice = creatorSpeaks && bolna.isEnabled();
+    const voiceOpts = {
+      provider: snapshot.voice_provider || undefined,
+      voice: snapshot.voice_id || undefined,
+      language: snapshot.voice_language || undefined,
+    };
+    console.log(
+      `[ugc:${jobId}] kling 3.0 pro ${seedImageUrl ? 'i2v' : 't2v'} ` +
+      `(seed=${seedKind}, ${videoDuration}s, speaks=${creatorSpeaks}, product=${hasProduct}, ` +
+      `voice=${useBolnaVoice ? 'bolna+lipsync' : creatorSpeaks ? 'kling-inline' : 'silent'})`
+    );
 
-    const klingVideoUrl = seedImageUrl
-      ? await generateVideoFromImage({
-          seedImageUrl,
-          prompt: klingPrompt,
-          durationSec: videoDuration,
-          aspectRatio,
-          hasProduct,
-          creatorSpeaks,
-          onProgress: videoTick,
-        })
-      : await generateVideoFromText({
-          prompt: klingPrompt,
-          durationSec: videoDuration,
-          aspectRatio,
-          hasProduct,
-          creatorSpeaks,
-          onProgress: videoTick,
+    // Step 2a — base clip. Silent when we're going to lip-sync Bolna audio.
+    const genArgs = {
+      prompt: klingPrompt,
+      durationSec: videoDuration,
+      aspectRatio,
+      hasProduct,
+      creatorSpeaks,
+      generateAudio: useBolnaVoice ? false : undefined,
+      // When using Bolna, the base render owns 32→70; lip-sync owns 70→hi.
+      onProgress: useBolnaVoice ? (f) => videoTick(f * 0.6) : videoTick,
+    };
+    let klingVideoUrl = seedImageUrl
+      ? await generateVideoFromImage({ seedImageUrl, ...genArgs })
+      : await generateVideoFromText({ ...genArgs });
+
+    // Step 2b — Bolna TTS + Kling LipSync (second Kling call). Non-fatal: if
+    // it fails we ship the silent base clip rather than failing the whole job.
+    if (useBolnaVoice) {
+      try {
+        console.log(`[ugc:${jobId}] bolna TTS + kling lipsync`);
+        klingVideoUrl = await voiceAndLipSync({
+          silentVideoUrl: klingVideoUrl,
+          script: scriptText,
+          jobId,
+          voiceOpts,
+          onProgress: (f) => videoTick(0.6 + 0.4 * f),
         });
+        console.log(`[ugc:${jobId}] bolna voice + lipsync complete`);
+      } catch (voiceErr) {
+        console.error(`[ugc:${jobId}] bolna/lipsync failed, shipping silent clip: ${voiceErr?.message || voiceErr}`);
+      }
+    }
 
     // ---- Charge credits — the generation actually succeeded ----
     // Kling returned a video, so the render genuinely happened and the

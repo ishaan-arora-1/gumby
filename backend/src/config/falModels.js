@@ -36,4 +36,11 @@ module.exports = {
   // a fresh creator-in-scene still purely from the prompt so Kling
   // image-to-video still has a seed frame to work from.
   IMAGE_GENERATE: 'fal-ai/nano-banana-pro',
+
+  // Kling LipSync (audio-to-video) — drives the mouth of an existing video
+  // from an external audio track. Used by the Bolna voice path: we render a
+  // SILENT Kling i2v clip, generate the voice with Bolna TTS, then lip-sync
+  // the silent clip to that audio here. Input: { video_url, audio_url }.
+  // Audio must be a public <5MB mp3/wav/m4a, 2–60s. ~$0.014/sec.
+  KLING_LIPSYNC: 'fal-ai/kling-video/lipsync/audio-to-video',
 };

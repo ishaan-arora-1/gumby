@@ -77,31 +77,44 @@ export default function StudioPage() {
     setError('');
     setIsParsing(true);
     try {
-      const attachmentsPayload = (opts.attachmentUrls || []).map((url) => ({ url }));
-      const { data } = await api.parsePrompt(
-        prompt.trim(),
-        attachmentsPayload.length ? attachmentsPayload : undefined
-      );
+      const attachmentUrls = opts.attachmentUrls || [];
 
-      // Inspiration upload was removed everywhere — any image the user
-      // attaches in the composer goes straight to the product slot.
-      // First-uploaded wins; extras are dropped silently.
-      const routedProductUrl: string | null =
-        (opts.attachmentUrls && opts.attachmentUrls[0]) || null;
+      // Unified compose mode: when the user attached images, run the vision
+      // pass that classifies each one (creator / product / background) against
+      // the instruction, then carry the resolved `compose` blob into the form.
+      if (attachmentUrls.length) {
+        const { data } = await api.interpretUploads(
+          prompt.trim(),
+          attachmentUrls.map((url) => ({ url }))
+        );
+        setPickedTemplate(null);
+        setPrefill({
+          creatorDescription: data.creatorDescription || '',
+          includeProduct: !!data.includeProduct || !!data.compose?.productImageUrl,
+          productName: data.productName || '',
+          productDescription: '',
+          videoDescription: data.videoDescription || '',
+          voiceTone: '',
+          duration: opts.durationSeconds,
+          productImageUrl: data.compose?.productImageUrl || null,
+          compose: data.compose || null,
+        });
+        setStep('studio');
+        return;
+      }
 
+      // No images → the classic prompt-parse path.
+      const { data } = await api.parsePrompt(prompt.trim());
       setPickedTemplate(null);
       setPrefill({
         creatorDescription: data.creatorDescription || '',
-        // If the user attached an image we treat it as a product even when
-        // the prompt-parser didn't infer one — the upload itself signals
-        // intent.
-        includeProduct: !!data.includeProduct || !!routedProductUrl,
+        includeProduct: !!data.includeProduct,
         productName: data.productName || '',
         productDescription: data.productDescription || '',
         videoDescription: data.videoDescription || '',
         voiceTone: data.voiceTone || '',
         duration: opts.durationSeconds,
-        productImageUrl: routedProductUrl,
+        productImageUrl: null,
       });
       setStep('studio');
     } catch (e: any) {

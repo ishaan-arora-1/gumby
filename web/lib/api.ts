@@ -181,6 +181,15 @@ export const api = {
       }),
     }),
 
+  // Unified compose: vision pass classifies each uploaded image (creator /
+  // product / background) against the free-form instruction and returns a
+  // `compose` blob to pass into generateAd.
+  interpretUploads: (prompt: string, attachments: { url: string }[]) =>
+    request<{ success: boolean; data: any }>('/ugc/interpret-uploads', {
+      method: 'POST',
+      body: JSON.stringify({ prompt, attachments }),
+    }),
+
   // ---- UGC Generation Jobs (Full Ad) ----
   generateAd: (body: {
     templateId?: string | null;
@@ -198,6 +207,17 @@ export const api = {
     creatorEthnicity?: string;
     creatorSpeaks?: boolean;
     voiceTone?: string;
+    // Bolna voice selection (optional).
+    voiceProvider?: string;
+    voiceId?: string;
+    voiceLanguage?: string;
+    // Unified compose mode (from interpretUploads).
+    compose?: {
+      creatorImageUrl?: string | null;
+      productImageUrl?: string | null;
+      backgroundImageUrl?: string | null;
+      instruction?: string;
+    };
   }) =>
     request<{ success: boolean; data: any }>('/ugc/generate', {
       method: 'POST',

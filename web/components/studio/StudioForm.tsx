@@ -24,6 +24,15 @@ export interface StudioPrefill {
   // routed to the product slot now. The inspiration upload affordance
   // was removed across both clients.
   productImageUrl?: string | null;
+  // Unified compose blob from /interpret-uploads (creator/product/background
+  // images classified from the multi-image upload). Passed straight through
+  // to generateAd so the pipeline composes the seed from the uploads.
+  compose?: {
+    creatorImageUrl?: string | null;
+    productImageUrl?: string | null;
+    backgroundImageUrl?: string | null;
+    instruction?: string;
+  } | null;
 }
 
 interface Props {
@@ -134,15 +143,24 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
     // also guards this, but bailing here keeps a queued tap from running
     // the validation/onSubmit path a second time.
     if (loading) return;
-    if (!template && !creatorDesc.trim()) {
+    // Compose mode supplies the creator (and often the scene) via uploaded
+    // images, so those text fields aren't required when a compose blob is
+    // present.
+    const hasCompose = !!(prefill?.compose && (
+      prefill.compose.creatorImageUrl ||
+      prefill.compose.productImageUrl ||
+      prefill.compose.backgroundImageUrl ||
+      (prefill.compose.instruction || '').trim()
+    ));
+    if (!template && !hasCompose && !creatorDesc.trim()) {
       alert('Describe the creator for your video');
       return;
     }
-    if (includeProduct && !productName.trim()) {
+    if (includeProduct && !hasCompose && !productName.trim()) {
       alert('Add a product name (or turn off "Include product")');
       return;
     }
-    if (!videoDescription.trim()) {
+    if (!hasCompose && !videoDescription.trim()) {
       alert("Describe the scene (what's the creator doing)");
       return;
     }
@@ -169,6 +187,9 @@ export function StudioForm({ template, prefill, onSubmit, loading }: Props) {
       videoDuration: duration,
       captionsEnabled: speaks ? captionsEnabled : false,
       captionPreset: speaks && captionsEnabled ? captionPresetId : undefined,
+      // Unified compose: carry the classified upload images straight through
+      // so the pipeline composes the seed from them.
+      compose: prefill?.compose ?? undefined,
     });
   };
 

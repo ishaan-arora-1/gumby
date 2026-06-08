@@ -386,6 +386,91 @@ router.post('/parse-prompt', aiLimiter, async (req, res) => {
   }
 });
 
+// ---------- Interpret uploads (unified compose mode) ----------
+//
+// The user drops several images into ONE upload area and writes a free-form
+// instruction describing what to do ("take the product from the 2nd pic, put
+// this creator in the background of the 3rd"). We run a GPT-4o VISION pass
+// that LOOKS at each image, reads the instruction, and assigns each image a
+// role (creator / product / background / other) plus extracts the usual
+// fields. The client then hands the resolved roles to /generate with
+// `compose: {...}`, and the pipeline composes the seed via composeFromUploads.
+router.post('/interpret-uploads', aiLimiter, async (req, res) => {
+  const { prompt, attachments } = req.body || {};
+  const imgs = Array.isArray(attachments)
+    ? attachments.filter((a) => a && typeof a.url === 'string' && a.url.length).slice(0, 4)
+    : [];
+  if (!imgs.length) {
+    return res.status(400).json({ success: false, error: 'At least one image is required' });
+  }
+  const userInstruction = (typeof prompt === 'string' ? prompt : '').trim();
+
+  const systemPrompt = [
+    'You are a UGC video assistant. The user uploaded one or more images into a single upload area and wrote an instruction describing the video they want.',
+    'LOOK at each image and, using the instruction, assign each one a ROLE:',
+    '- "creator": a person to feature on camera (the on-screen talent).',
+    '- "product": an item/object being advertised or shown off.',
+    '- "background": a scene/location/environment to place the creator into.',
+    '- "other": anything that does not fit the above.',
+    'Images are given in order, indexed from 0. Use the instruction to disambiguate (e.g. "take the product from the second picture" → image index 1 is the product).',
+    'Also extract: productName (empty if none), creatorDescription (physical look + setting of the on-camera person, inferred if no creator image), videoDescription (what the creator DOES — concrete action, no camera/mirror language), includeProduct (boolean).',
+    'Return ONLY a JSON object: {"images":[{"index":0,"role":"creator"},...],"productName":"...","creatorDescription":"...","videoDescription":"...","includeProduct":true}',
+  ].join('\n');
+
+  try {
+    const content = [
+      { type: 'text', text: userInstruction || 'No instruction given — infer roles from the images.' },
+      ...imgs.map((a) => ({ type: 'image_url', image_url: { url: a.url } })),
+    ];
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content },
+      ],
+    });
+    const parsed = JSON.parse(completion.choices?.[0]?.message?.content || '{}');
+
+    // Map classified indices back to URLs. First image of each role wins.
+    const roleOf = {};
+    if (Array.isArray(parsed.images)) {
+      for (const it of parsed.images) {
+        const idx = Number(it?.index);
+        const role = (it?.role || '').toLowerCase();
+        if (imgs[idx] && ['creator', 'product', 'background'].includes(role) && !roleOf[role]) {
+          roleOf[role] = imgs[idx].url;
+        }
+      }
+    }
+
+    const result = {
+      compose: {
+        creatorImageUrl: roleOf.creator || null,
+        productImageUrl: roleOf.product || null,
+        backgroundImageUrl: roleOf.background || null,
+        instruction: userInstruction,
+      },
+      productName: (parsed.productName || '').slice(0, 200),
+      creatorDescription: (parsed.creatorDescription || '').slice(0, 500),
+      videoDescription: (parsed.videoDescription || '').slice(0, 1000),
+      includeProduct: parsed.includeProduct !== false && !!roleOf.product,
+      // Echo the raw classification for debugging / UI display.
+      classification: Array.isArray(parsed.images) ? parsed.images : [],
+    };
+
+    console.log(
+      `[interpret-uploads] ${imgs.length} image(s) → creator=${!!roleOf.creator} ` +
+      `product=${!!roleOf.product} background=${!!roleOf.background}`
+    );
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('UGC interpret-uploads error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to interpret uploads' });
+  }
+});
+
 // ---------- Jobs ----------
 
 router.post('/generate', aiLimiter, async (req, res) => {
@@ -406,6 +491,13 @@ router.post('/generate', aiLimiter, async (req, res) => {
     creatorEthnicity,
     creatorSpeaks,
     voiceTone,
+    // Unified compose mode: { creatorImageUrl, productImageUrl,
+    // backgroundImageUrl, instruction } from /interpret-uploads.
+    compose,
+    // Bolna voice selection (optional).
+    voiceProvider,
+    voiceId,
+    voiceLanguage,
   } = req.body || {};
 
   // "Talking creator" toggle. When false, the creator stays silent — we
@@ -414,10 +506,20 @@ router.post('/generate', aiLimiter, async (req, res) => {
   // producing speaking videos.
   const wantsSpeech = creatorSpeaks !== false;
 
-  // Either a templateId or a creatorDescription is required (direct mode)
+  // Compose mode — the user uploaded images into one slot + a free-form
+  // instruction. Valid on its own (no template / description needed) as long
+  // as it carries at least one image or an instruction.
+  const composeIn = compose && typeof compose === 'object' ? compose : null;
+  const isComposeMode = !!(composeIn && (
+    composeIn.creatorImageUrl || composeIn.productImageUrl ||
+    composeIn.backgroundImageUrl || (composeIn.instruction || '').trim()
+  ));
+
+  // Either a templateId or a creatorDescription is required (direct mode) —
+  // unless we're in compose mode, which stands on its own.
   const isDirectMode = !templateId && typeof creatorDescription === 'string' && creatorDescription.trim().length > 0;
-  if (!templateId && !isDirectMode) {
-    return res.status(400).json({ success: false, error: 'templateId or creatorDescription is required' });
+  if (!templateId && !isDirectMode && !isComposeMode) {
+    return res.status(400).json({ success: false, error: 'templateId, creatorDescription, or compose images are required' });
   }
   // A script is only required when the creator is actually speaking.
   if (wantsSpeech && (!script || !script.trim())) {
@@ -443,7 +545,9 @@ router.post('/generate', aiLimiter, async (req, res) => {
       user_id: userId,
       template_id: templateId || null,
       product_name: productName || '',
-      product_image_url: productImageUrl || null,
+      // In compose mode the product photo comes from the classified upload;
+      // route it here so it flows through the existing clean-extraction pass.
+      product_image_url: productImageUrl || (composeIn && composeIn.productImageUrl) || null,
       product_description: productDescription || '',
       // Optional inspiration photo. When present, the pipeline runs the
       // image through Flux Kontext Pro to produce a creator-in-scene
@@ -488,6 +592,27 @@ router.post('/generate', aiLimiter, async (req, res) => {
       ? voiceTone.trim().slice(0, 120)
       : null;
 
+    // Bolna voice selection (optional). Only meaningful when the creator
+    // speaks. Whitelisted provider; voice/language are short free text.
+    const VOICE_PROVIDERS = new Set(['elevenlabs', 'sarvam', 'cartesia', 'polly', 'azuretts']);
+    const voiceProviderSafe = wantsSpeech && typeof voiceProvider === 'string'
+      && VOICE_PROVIDERS.has(voiceProvider.trim().toLowerCase())
+      ? voiceProvider.trim().toLowerCase() : null;
+    const voiceIdSafe = wantsSpeech && typeof voiceId === 'string' && voiceId.trim().length
+      ? voiceId.trim().slice(0, 80) : null;
+    const voiceLanguageSafe = wantsSpeech && typeof voiceLanguage === 'string' && voiceLanguage.trim().length
+      ? voiceLanguage.trim().slice(0, 12) : null;
+
+    // Compose blob — creator + background + instruction. The product image is
+    // routed into job.product_image_url (above) so it flows through clean
+    // extraction; creator + background live here. Stored on the snapshot.
+    const composeSnap = isComposeMode ? {
+      enabled: true,
+      creator_image_url: composeIn.creatorImageUrl || null,
+      background_image_url: composeIn.backgroundImageUrl || null,
+      instruction: (composeIn.instruction || '').toString().slice(0, 1000),
+    } : null;
+
     if (template) {
       const cleanTweaks = typeof creatorTweaks === 'string'
         ? creatorTweaks.trim().slice(0, 500)
@@ -519,13 +644,23 @@ router.post('/generate', aiLimiter, async (req, res) => {
         creator_speaks: wantsSpeech,
         // Optional vocal-delivery hint shaping how the creator sounds.
         voice_tone: voiceToneSafe,
+        // Bolna voice selection (used when BOLNA_API_KEY is configured).
+        voice_provider: voiceProviderSafe,
+        voice_id: voiceIdSafe,
+        voice_language: voiceLanguageSafe,
+        // Compose images, if the user came in via the unified upload flow.
+        compose: composeSnap,
       };
     } else {
       // Direct mode: store creator description in the snapshot so the
       // pipeline can use it for text-to-video scene generation.
       job.template_snapshot = {
-        name: 'Direct prompt',
-        actor_name: creatorDescription.trim(),
+        name: isComposeMode ? 'Compose upload' : 'Direct prompt',
+        // Compose mode may carry no description (the creator comes from an
+        // uploaded photo), so fall back to a neutral label.
+        actor_name: (typeof creatorDescription === 'string' && creatorDescription.trim())
+          ? creatorDescription.trim()
+          : (isComposeMode ? 'Uploaded creator' : 'Creator'),
         setting: null,
         video_url: null,
         thumbnail_url: null,
@@ -540,6 +675,12 @@ router.post('/generate', aiLimiter, async (req, res) => {
         user_ethnicity: ethnicitySafe,
         // Optional vocal-delivery hint shaping how the creator sounds.
         voice_tone: voiceToneSafe,
+        // Bolna voice selection (used when BOLNA_API_KEY is configured).
+        voice_provider: voiceProviderSafe,
+        voice_id: voiceIdSafe,
+        voice_language: voiceLanguageSafe,
+        // Compose images, if the user came in via the unified upload flow.
+        compose: composeSnap,
       };
     }
 
