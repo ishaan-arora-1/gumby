@@ -1,22 +1,21 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '@/lib/api';
-import { Wand2 } from 'lucide-react';
+import { Wand2, Play, Loader2 } from 'lucide-react';
 import { CAPTION_PRESETS, DEFAULT_CAPTION_PRESET_ID } from '@/lib/captionPresets';
 import { CaptionPreview } from './CaptionPreview';
 
 const CREDIT_COST: Record<5 | 10, number> = { 5: 50, 10: 100 };
 
-// Bolna-backed voice options. Provider + language + a voice id/name. These map
-// to the backend's voiceProvider / voiceLanguage / voiceId, which only take
-// effect when BOLNA_API_KEY is configured (otherwise Kling inline audio).
-const VOICE_PROVIDERS = ['elevenlabs', 'sarvam', 'cartesia'] as const;
+// Voice = Sarvam Bulbul v3 (Indian languages + Hinglish). Speakers are loaded
+// from the backend; each can be previewed before selecting.
 const VOICE_LANGUAGES = [
+  { id: 'hi', label: 'Hindi / Hinglish' },
   { id: 'en', label: 'English' },
-  { id: 'hi', label: 'Hindi' },
   { id: 'ta', label: 'Tamil' },
   { id: 'te', label: 'Telugu' },
 ] as const;
+interface Speaker { id: string; label: string; gender: string }
 
 export interface ComposeImage {
   url: string;
@@ -62,9 +61,44 @@ export function ComposeForm({ data, onSubmit, loading }: Props) {
   const [script, setScript] = useState('');
   const [genScript, setGenScript] = useState(false);
 
-  const [voiceProvider, setVoiceProvider] = useState<(typeof VOICE_PROVIDERS)[number]>('elevenlabs');
-  const [voiceLanguage, setVoiceLanguage] = useState<string>('en');
-  const [voiceId, setVoiceId] = useState('');
+  const [voiceLanguage, setVoiceLanguage] = useState<string>('hi');
+  const [speakers, setSpeakers] = useState<Speaker[]>([]);
+  const [selectedSpeaker, setSelectedSpeaker] = useState<string>('ritu');
+  const [previewing, setPreviewing] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Load the Sarvam speaker list once.
+  useEffect(() => {
+    api.listVoices()
+      .then((r) => {
+        if (r.data.speakers?.length) {
+          setSpeakers(r.data.speakers);
+          if (!r.data.speakers.find((s) => s.id === selectedSpeaker)) {
+            setSelectedSpeaker(r.data.speakers[0].id);
+          }
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const previewSpeaker = async (speakerId: string) => {
+    if (previewing) return;
+    setPreviewing(speakerId);
+    try {
+      const r = await api.previewVoice(speakerId, voiceLanguage);
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      const audio = new Audio(r.data.audio);
+      audioRef.current = audio;
+      audio.play().catch(() => {});
+    } catch (e) {
+      console.error('preview failed', e);
+    } finally {
+      setPreviewing(null);
+    }
+  };
 
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [captionPresetId, setCaptionPresetId] = useState<string>(DEFAULT_CAPTION_PRESET_ID);
@@ -110,10 +144,10 @@ export function ComposeForm({ data, onSubmit, loading }: Props) {
       videoDuration: duration,
       captionsEnabled: speaks ? captionsEnabled : false,
       captionPreset: speaks && captionsEnabled ? captionPresetId : undefined,
-      // Bolna voice selection (only used when BOLNA_API_KEY is set).
-      voiceProvider: speaks ? voiceProvider : undefined,
+      // Sarvam voice selection (speaker + language).
+      voiceProvider: speaks ? 'sarvam' : undefined,
       voiceLanguage: speaks ? voiceLanguage : undefined,
-      voiceId: speaks && voiceId.trim() ? voiceId.trim() : undefined,
+      voiceId: speaks ? selectedSpeaker : undefined,
     });
   };
 
@@ -207,25 +241,16 @@ export function ComposeForm({ data, onSubmit, loading }: Props) {
               />
             </div>
 
-            {/* Bolna voice controls */}
+            {/* Sarvam voice — language + speaker picker with previews */}
             <div className="space-y-3 pt-1 border-t border-white/[0.06]">
               <div className="text-[11px] uppercase tracking-[0.15em] text-white/45 pt-3">
-                Voice <span className="normal-case tracking-normal text-white/30">· Bolna</span>
+                Voice <span className="normal-case tracking-normal text-white/30">· Sarvam</span>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {VOICE_PROVIDERS.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setVoiceProvider(p)}
-                    className={`px-3 h-8 rounded-pill text-xs font-semibold capitalize transition ${
-                      voiceProvider === p ? 'bg-white text-black' : 'bg-elevated text-white/60 hover:text-white'
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
+              <div className="text-xs text-white/45 -mt-1">
+                For Hindi lines, write them in Hindi (Devanagari) — Hinglish works too.
               </div>
+
+              {/* Language */}
               <div className="flex flex-wrap gap-2">
                 {VOICE_LANGUAGES.map((l) => (
                   <button
@@ -240,12 +265,44 @@ export function ComposeForm({ data, onSubmit, loading }: Props) {
                   </button>
                 ))}
               </div>
-              <input
-                value={voiceId}
-                onChange={(e) => setVoiceId(e.target.value)}
-                placeholder="Voice id / name (optional) — e.g. a specific ElevenLabs voice"
-                className={inputCls}
-              />
+
+              {/* Speaker picker — tap to select, ▶ to preview */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {speakers.map((s) => {
+                  const selected = selectedSpeaker === s.id;
+                  return (
+                    <div
+                      key={s.id}
+                      onClick={() => setSelectedSpeaker(s.id)}
+                      className={`relative cursor-pointer rounded-btn border px-3 py-2 transition ${
+                        selected
+                          ? 'border-accent2 bg-accent2/10'
+                          : 'border-white/10 bg-elevated/40 hover:border-white/30'
+                      }`}
+                    >
+                      <div className="text-sm font-semibold">{s.label}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-white/40">{s.gender}</div>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); previewSpeaker(s.id); }}
+                        aria-label={`Preview ${s.label}`}
+                        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center"
+                      >
+                        {previewing === s.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Play className="w-3 h-3" />
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+                {speakers.length === 0 && (
+                  <div className="col-span-full text-xs text-white/40">
+                    Voices unavailable — check SARVAM_API_KEY.
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Captions */}

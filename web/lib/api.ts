@@ -190,6 +190,18 @@ export const api = {
       body: JSON.stringify({ prompt, attachments }),
     }),
 
+  // ---- Voices (Sarvam) ----
+  listVoices: () =>
+    request<{
+      success: boolean;
+      data: { provider: string; enabled: boolean; speakers: { id: string; label: string; gender: string }[] };
+    }>('/ugc/voices'),
+  previewVoice: (speaker: string, language: string) =>
+    request<{ success: boolean; data: { audio: string } }>('/ugc/voice-preview', {
+      method: 'POST',
+      body: JSON.stringify({ speaker, language }),
+    }),
+
   // ---- UGC Generation Jobs (Full Ad) ----
   generateAd: (body: {
     templateId?: string | null;

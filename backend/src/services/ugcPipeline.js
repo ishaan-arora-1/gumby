@@ -16,7 +16,7 @@ const {
 const { captionVideo } = require('./captioning');
 const { ffmpegPath } = require('../config/ffmpeg');
 const credits = require('./credits');
-const bolna = require('../config/bolna');
+const sarvam = require('../config/sarvam');
 
 const UGC_BUCKET = 'ugc-videos';
 
@@ -711,30 +711,32 @@ async function generateVideoFromText({ prompt, durationSec = 10, aspectRatio = '
 /**
  * Generate the spoken-audio track and return a PUBLIC url Kling LipSync can
  * fetch. Provider order:
- *   1. Bolna (only if BOLNA_API_KEY set AND the call succeeds) — its hosted
- *      tts_sample API is enterprise-gated, so this frequently 403s.
- *   2. fal ElevenLabs TTS — reliable fallback on the existing FAL_KEY, returns
- *      a public mp3. This is what makes the lip-sync path actually produce
- *      audio without any extra credentials.
+ *   1. Sarvam Bulbul v3 (if SARVAM_API_KEY set) — Indian-language + Hinglish
+ *      voices, the primary voice source.
+ *   2. fal ElevenLabs TTS — fallback on the existing FAL_KEY (English-centric)
+ *      so the lip-sync path still produces audio if Sarvam is unset/fails.
  */
 async function synthesizeVoiceAudio({ script, jobId, voiceOpts = {} }) {
-  // 1) Bolna (best-effort).
-  if (bolna.isEnabled()) {
+  // 1) Sarvam (primary — Hinglish / Indian languages).
+  if (sarvam.isEnabled()) {
     try {
-      const { buffer, contentType } = await bolna.generateTts(script, voiceOpts);
+      const { buffer, contentType } = await sarvam.generateTts(script, {
+        speaker: voiceOpts.voice,       // form sends the speaker as voiceId
+        language: voiceOpts.language,   // 'hi' | 'hi-IN' | 'en' | ...
+      });
       if (buffer.length > 5 * 1024 * 1024) {
-        throw new Error(`Bolna audio too large for Kling LipSync (${buffer.length} bytes > 5MB)`);
+        throw new Error(`Sarvam audio too large for Kling LipSync (${buffer.length} bytes > 5MB)`);
       }
       const ext = /wav/i.test(contentType) ? 'wav' : 'mp3';
-      const url = await uploadBufferToBucket(buffer, contentType || 'audio/mpeg', ext, `jobs/${jobId}/audio`);
-      console.log(`[ugc:${jobId}] voice via Bolna`);
+      const url = await uploadBufferToBucket(buffer, contentType || 'audio/wav', ext, `jobs/${jobId}/audio`);
+      console.log(`[ugc:${jobId}] voice via Sarvam (speaker=${voiceOpts.voice || 'default'}, lang=${voiceOpts.language || 'hi'})`);
       return url;
     } catch (e) {
-      console.warn(`[ugc:${jobId}] Bolna TTS failed (${e?.message || e}); falling back to fal ElevenLabs`);
+      console.warn(`[ugc:${jobId}] Sarvam TTS failed (${e?.message || e}); falling back to fal ElevenLabs`);
     }
   }
 
-  // 2) fal ElevenLabs TTS — reliable. Returns a public mp3 url we can pass
+  // 2) fal ElevenLabs TTS — fallback. Returns a public mp3 url we can pass
   //    straight to Kling LipSync (already <5MB for short scripts).
   const result = await falSubscribeWithRetry(ELEVENLABS_TTS, {
     text: script,

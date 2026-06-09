@@ -9,6 +9,7 @@ const { aiLimiter } = require('../middleware/rateLimit');
 const { runUGCJob } = require('../services/ugcPipeline');
 const { runCreatorJob } = require('../services/creatorPipeline');
 const credits = require('../services/credits');
+const sarvam = require('../config/sarvam');
 
 // ---------- Public ----------
 // Public endpoint for the marketing site — returns a small set of active
@@ -468,6 +469,53 @@ router.post('/interpret-uploads', aiLimiter, async (req, res) => {
   } catch (err) {
     console.error('UGC interpret-uploads error:', err);
     return res.status(500).json({ success: false, error: 'Failed to interpret uploads' });
+  }
+});
+
+// ---------- Voices (Sarvam) ----------
+
+// List the selectable Sarvam speakers for the voice picker.
+router.get('/voices', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      provider: 'sarvam',
+      enabled: sarvam.isEnabled(),
+      speakers: sarvam.listSpeakers(),
+    },
+  });
+});
+
+// Short preview of a speaker so the user can hear it before selecting. Cached
+// in-memory per speaker+language so repeated previews don't re-bill Sarvam.
+const _voicePreviewCache = new Map();
+router.post('/voice-preview', aiLimiter, async (req, res) => {
+  if (!sarvam.isEnabled()) {
+    return res.status(503).json({ success: false, error: 'Sarvam not configured' });
+  }
+  const { speaker, language, text } = req.body || {};
+  const lang = (language || 'hi').toString();
+  const spk = (speaker || 'ritu').toString();
+  const sample = (typeof text === 'string' && text.trim())
+    ? text.trim().slice(0, 200)
+    : (/^(hi|hi-IN)$/i.test(lang)
+        ? 'Hi guys, honestly main is product se obsessed ho gayi hoon. Trust me, you need this!'
+        : 'Hey guys, honestly I am obsessed with this product. Trust me, you need it!');
+
+  const cacheKey = `${spk}:${lang}:${sample}`;
+  if (_voicePreviewCache.has(cacheKey)) {
+    return res.json({ success: true, data: { audio: _voicePreviewCache.get(cacheKey), cached: true } });
+  }
+  try {
+    const { buffer, contentType } = await sarvam.generateTts(sample, { speaker: spk, language: lang });
+    const dataUri = `data:${contentType};base64,${buffer.toString('base64')}`;
+    // Cap cache to avoid unbounded growth in a long-running process.
+    if (_voicePreviewCache.size > 200) _voicePreviewCache.clear();
+    _voicePreviewCache.set(cacheKey, dataUri);
+    return res.json({ success: true, data: { audio: dataUri } });
+  } catch (err) {
+    console.error('voice-preview error:', err?.message || err);
+    return res.status(500).json({ success: false, error: 'Failed to generate preview' });
   }
 });
 
