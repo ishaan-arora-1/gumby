@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api, pollJob, ApiError } from '@/lib/api';
 import type { UGCJob, UGCTemplate } from '@/lib/types';
 import { PromptComposer } from '@/components/studio/PromptComposer';
+import { TemplateCard } from '@/components/studio/TemplateCard';
 import { StudioForm, type StudioPrefill } from '@/components/studio/StudioForm';
 import { GeneratingCard } from '@/components/studio/GeneratingCard';
 import { VideoResult } from '@/components/studio/VideoResult';
@@ -16,6 +17,7 @@ type Step = 'welcome' | 'studio' | 'generating_ad' | 'ad_done';
 export default function StudioPage() {
   const [step, setStep] = useState<Step>('welcome');
   const [prefill, setPrefill] = useState<StudioPrefill | null>(null);
+  const [templates, setTemplates] = useState<UGCTemplate[]>([]);
   const [adJob, setAdJob] = useState<UGCJob | null>(null);
   const [error, setError] = useState<string>('');
   const [insufficient, setInsufficient] = useState<{ required: number; balance: number } | null>(null);
@@ -31,30 +33,43 @@ export default function StudioPage() {
   // the same tick before the React state flag updates.
   const generatingRef = useRef(false);
 
+  // Map a template/creator into the unified studio form: its still becomes
+  // the fixed creator image, the rest of the flow is identical to the
+  // normal unified form. Shared by the featured-templates grid below the
+  // composer AND the /templates + /history "Use creator" hand-off.
+  const useTemplate = (tpl: UGCTemplate) => {
+    const imageUrl = tpl.thumbnail_url || tpl.actor_avatar_url || '';
+    if (!imageUrl) return; // no usable still — ignore
+    setError('');
+    setPrefill({
+      creator: {
+        imageUrl,
+        name: tpl.actor_name || tpl.name,
+        sampleScript: tpl.sample_script,
+      },
+      aspectRatio: (tpl.aspect_ratio as '9:16' | '16:9' | '1:1') || '9:16',
+      duration: tpl.duration_seconds && tpl.duration_seconds >= 8 ? 10 : undefined,
+    });
+    setStep('studio');
+  };
+
+  // Load the featured creators shown below the composer on the welcome
+  // screen (same catalog as /templates).
+  useEffect(() => {
+    api.listTemplates(1).then((r) => setTemplates(r.data)).catch(() => {});
+  }, []);
+
   // Hand-off from /templates and /history's "Use creator" buttons. Both
   // stash the chosen template/creator in sessionStorage and route here.
   // We read it once on mount, drop the user straight into the studio form
   // with that creator fixed, and clear the key so a refresh doesn't
-  // re-trigger. The creator's still (thumbnail) becomes the known creator
-  // image; the rest of the flow is identical to the normal unified form.
+  // re-trigger.
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem('blinkugc:pendingTemplate');
       if (!raw) return;
       sessionStorage.removeItem('blinkugc:pendingTemplate');
-      const tpl = JSON.parse(raw) as UGCTemplate;
-      const imageUrl = tpl.thumbnail_url || tpl.actor_avatar_url || '';
-      if (!imageUrl) return; // no usable still — fall back to the fresh studio
-      setPrefill({
-        creator: {
-          imageUrl,
-          name: tpl.actor_name || tpl.name,
-          sampleScript: tpl.sample_script,
-        },
-        aspectRatio: (tpl.aspect_ratio as '9:16' | '16:9' | '1:1') || '9:16',
-        duration: tpl.duration_seconds && tpl.duration_seconds >= 8 ? 10 : undefined,
-      });
-      setStep('studio');
+      useTemplate(JSON.parse(raw) as UGCTemplate);
     } catch {}
   }, []);
 
@@ -185,6 +200,33 @@ export default function StudioPage() {
               </p>
             </div>
             <PromptComposer onSubmit={onComposerSubmit} loading={false} />
+
+            {/* Featured creators — pick one to start with that creator
+                fixed, or scroll past and just describe your own. */}
+            <div className="mt-20 max-w-7xl mx-auto">
+              <div className="flex items-end justify-between mb-5">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-white/40 mb-2">
+                    Or start with a creator
+                  </div>
+                  <h3 className="font-display font-bold text-2xl tracking-tight">
+                    Featured creators
+                  </h3>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                {templates.map((t) => (
+                  <TemplateCard key={t.id} template={t} onUse={useTemplate} />
+                ))}
+                {templates.length === 0 &&
+                  [...Array(10)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="aspect-[9/16] rounded-card bg-elevated/40 animate-pulse"
+                    />
+                  ))}
+              </div>
+            </div>
           </motion.div>
         )}
 
