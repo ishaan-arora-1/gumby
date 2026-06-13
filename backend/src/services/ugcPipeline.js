@@ -199,6 +199,13 @@ function roleDirective(role, idx) {
  * background / style) so it composites them correctly — e.g. "keep the
  * person from image 1, place the product from image 2 on them."
  */
+// "Close to the camera / close to the frame" must read as a tight close-up
+// SHOT, never as a physical camera object in the scene. Without this guard
+// the models render a literal camera/recording device. Injected into every
+// seed prompt.
+const NO_CAMERA_GUARD =
+  'IMPORTANT: do NOT place any physical camera, recording device, DSLR, camcorder, tripod, or filming equipment in the image. If the request mentions being "close to the camera" or "close to the frame", interpret that purely as a tight close-up framing of the subject — never as a camera object in the scene.';
+
 function buildSeedPrompt(userPrompt, attachments) {
   const trimmed = (userPrompt || '').trim();
   const parts = [];
@@ -208,6 +215,7 @@ function buildSeedPrompt(userPrompt, attachments) {
       `USER REQUEST: ${trimmed}`,
       'Vertical phone-video composition. Natural lighting, sharp focus.',
       'The on-camera person, if any, is a naturally good-looking everyday adult — relatable, approachable, healthy. Authentic vibe, like a real camera photo of a real person.',
+      NO_CAMERA_GUARD,
     );
     return parts.join('\n\n');
   }
@@ -217,6 +225,7 @@ function buildSeedPrompt(userPrompt, attachments) {
     'Each input image has a specific role — follow these exactly:',
     attachments.map((a, i) => `- ${roleDirective(a.role, i)}`).join('\n'),
     'Vertical phone-video composition. Natural lighting, sharp focus, photorealistic — looks like a real camera photo of real subjects.',
+    NO_CAMERA_GUARD,
   );
   return parts.join('\n\n');
 }
@@ -285,10 +294,19 @@ const KLING_NEGATIVE_PROMPT_SPEAKING =
 const KLING_NEGATIVE_PROMPT_SILENT =
   'talking, speaking, mouthing words, open mouth mid-speech, dialogue, narration';
 
+// Always steer away from a LITERAL camera in the shot. A UGC clip is shot
+// ON a phone, so a physical camera/recording device should never appear in
+// frame. This is what stops "close to the camera / close to the frame"
+// from being read as "put a camera in the scene" — that phrasing means a
+// tight close-up shot, not a camera object.
+const KLING_NEGATIVE_PROMPT_NO_CAMERA =
+  'visible camera, physical camera, camera device, DSLR, camcorder, video camera, holding a camera, camera equipment, tripod, camera lens in frame, filming rig';
+
 function klingNegativePrompt(creatorSpeaks) {
-  return creatorSpeaks
+  const base = creatorSpeaks
     ? KLING_NEGATIVE_PROMPT_SPEAKING
     : KLING_NEGATIVE_PROMPT_SILENT;
+  return `${base}, ${KLING_NEGATIVE_PROMPT_NO_CAMERA}`;
 }
 
 /**
