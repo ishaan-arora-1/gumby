@@ -96,6 +96,40 @@ async function request<T>(
 
 // Public (no-auth) calls — used by marketing landing
 const API_BASE_URL = API_BASE;
+
+// Server-resolved geo → currency. Backend reads the real client IP, so
+// this is accurate regardless of browser locale / VPN. Public, no auth.
+// Returns null on any failure so callers can fall back to a client-side
+// heuristic.
+export interface GeoInfo {
+  country: string | null;
+  currency: 'INR' | 'USD';
+  isIndia: boolean;
+  source: string;
+}
+export async function fetchGeo(): Promise<GeoInfo | null> {
+  try {
+    // Testing override: ?country=IN / ?country=US in the page URL forces a
+    // country so you can preview the India vs US experience without a VPN.
+    // The backend honors the same `country` query param.
+    let qs = '';
+    if (typeof window !== 'undefined') {
+      const override = new URLSearchParams(window.location.search).get('country');
+      if (override && /^[A-Za-z]{2}$/.test(override)) {
+        qs = `?country=${override.toUpperCase()}`;
+      }
+    }
+    const res = await fetch(`${API_BASE_URL}/geo${qs}`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const j = await res.json();
+    if (j?.data?.currency === 'INR' || j?.data?.currency === 'USD') {
+      return j.data as GeoInfo;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 export async function fetchFeaturedTemplates(limit = 8): Promise<any[]> {
   try {
     const res = await fetch(`${API_BASE_URL}/ugc/featured?limit=${limit}`, {
@@ -181,23 +215,23 @@ export const api = {
       }),
     }),
 
-  // ---- UGC Generation Jobs (Full Ad) ----
+  // ---- UGC Generation Jobs (unified free-form upload) ----
+  // The user uploads any number of reference images plus one free-form
+  // prompt. The backend classifies each image's role itself (creator /
+  // product / background / style) and routes accordingly. Captions /
+  // script only matter when the creator speaks.
   generateAd: (body: {
-    templateId?: string | null;
-    creatorDescription?: string;
-    creatorTweaks?: string;
-    productName: string;
-    productDescription: string;
-    productImageUrl?: string;
-    inspirationImageUrl?: string;
-    script: string;
-    videoDescription?: string;
-    videoDuration?: number;
+    prompt: string;
+    attachmentUrls: string[];
+    // Known creator image from a template / history item. Role is fixed to
+    // "creator" on the backend; the rest of attachmentUrls are classified.
+    creatorImageUrl?: string;
+    script?: string;
+    creatorSpeaks?: boolean;
+    videoDuration?: 5 | 10;
+    aspectRatio?: '9:16' | '16:9' | '1:1';
     captionsEnabled?: boolean;
     captionPreset?: string;
-    creatorEthnicity?: string;
-    creatorSpeaks?: boolean;
-    voiceTone?: string;
   }) =>
     request<{ success: boolean; data: any }>('/ugc/generate', {
       method: 'POST',

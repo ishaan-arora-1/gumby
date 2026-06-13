@@ -12,6 +12,7 @@ const calendarRoutes = require('./routes/calendar');
 const libraryRoutes = require('./routes/library');
 const ugcRoutes = require('./routes/ugc');
 const creditsRoutes = require('./routes/credits');
+const geoRoutes = require('./routes/geo');
 const webhookRoutes = require('./routes/webhooks');
 const { router: userRoutes } = require('./routes/user');
 const { ensureBuckets } = require('./services/storageBootstrap');
@@ -79,6 +80,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/geo', geoRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/explore', exploreRoutes);
 app.use('/api/calendar', calendarRoutes);

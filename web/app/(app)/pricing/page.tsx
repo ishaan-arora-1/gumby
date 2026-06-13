@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Check, Sparkles } from 'lucide-react';
-import { api, STATIC_PACK_FALLBACK, type CreditPack } from '@/lib/api';
+import { api, fetchGeo, STATIC_PACK_FALLBACK, type CreditPack } from '@/lib/api';
 import { buyPack, formatMoney } from '@/lib/razorpay';
 import {
   CurrencyToggle,
@@ -34,7 +34,22 @@ export default function InAppPricingPage() {
   const [msg, setMsg] = useState<{ kind: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   useEffect(() => {
+    // Prefer the server's IP-based geo (accurate regardless of browser
+    // locale / VPN). Fall back to the client-side locale heuristic only if
+    // that call fails, so the page never blocks on the network. The toggle
+    // still lets the user override either way.
+    let cancelled = false;
+    // Seed with the locale guess immediately so SSR→hydrate doesn't hang on
+    // the skeleton; the server result (a beat later) corrects it if needed.
     setCurrency(defaultCurrencyForLocale());
+    fetchGeo()
+      .then((geo) => {
+        if (!cancelled && geo) setCurrency(geo.currency);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

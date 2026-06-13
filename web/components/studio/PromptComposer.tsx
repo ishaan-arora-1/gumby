@@ -1,7 +1,9 @@
 'use client';
 import { useState, useRef } from 'react';
 import { Sparkles, ArrowUp, Paperclip, X } from 'lucide-react';
-import { api, fileToBase64 } from '@/lib/api';
+import { api, fileToBase64, ApiError } from '@/lib/api';
+import { RightsConfirmModal } from './RightsConfirmModal';
+import { hasUnconfirmedImages, markImagesConfirmed } from '@/lib/imageRights';
 
 export interface ComposerAttachment {
   id: string;
@@ -22,13 +24,16 @@ interface Props {
   loading?: boolean;
 }
 
-const MAX_ATTACHMENTS = 2;
+// Free-form upload zone: the user can attach references for the creator,
+// product, background, vibe, or any combination. They explain what each
+// image is in the prompt itself.
+const MAX_ATTACHMENTS = 5;
 
 const SUGGESTIONS = [
-  '20-year-old skincare creator unboxing serum in her kitchen, daylight',
-  'Hype-y fitness creator in a gym holding a protein shake, neon lights',
-  'Cozy lifestyle creator on a couch sipping artisan coffee, golden hour',
-  'Tech creator at a clean desk holding a sleek gadget, soft studio light',
+  'Skincare serum, sunlit kitchen',
+  'Protein shake, neon gym',
+  'Artisan coffee, cozy couch',
+  'New gadget, clean desk',
 ];
 
 export function PromptComposer({ onSubmit, loading }: Props) {
@@ -36,6 +41,7 @@ export function PromptComposer({ onSubmit, loading }: Props) {
   const [aspect, setAspect] = useState<'9:16' | '1:1' | '16:9'>('9:16');
   const [dur, setDur] = useState<5 | 10>(10);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [showRightsModal, setShowRightsModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const uploading = attachments.some((a) => a.uploading);
@@ -43,14 +49,32 @@ export function PromptComposer({ onSubmit, loading }: Props) {
     .map((a) => a.remoteUrl)
     .filter((u): u is string => !!u);
 
-  const submit = () => {
-    if (prompt.trim().length < 10) return;
-    if (uploading) return;
+  const proceed = () => {
     onSubmit(prompt.trim(), {
       aspectRatio: aspect,
       durationSeconds: dur,
       attachmentUrls: uploadedUrls,
     });
+  };
+
+  const submit = () => {
+    if (prompt.trim().length < 10) return;
+    if (uploading) return;
+    // Rights gate — if the user attached images they haven't confirmed
+    // yet, ask before advancing. Confirmed images carry into the studio
+    // form (same URLs), so they won't be re-asked there unless they add a
+    // new picture.
+    if (hasUnconfirmedImages(uploadedUrls)) {
+      setShowRightsModal(true);
+      return;
+    }
+    proceed();
+  };
+
+  const onRightsConfirmed = () => {
+    setShowRightsModal(false);
+    markImagesConfirmed(uploadedUrls);
+    proceed();
   };
 
   const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,10 +104,16 @@ export function PromptComposer({ onSubmit, loading }: Props) {
             a.id === id ? { ...a, remoteUrl: res.data.url, uploading: false } : a
           )
         );
-      } catch (err) {
+      } catch (err: any) {
         console.error('attachment upload failed', err);
         setAttachments((prev) => prev.filter((a) => a.id !== id));
         URL.revokeObjectURL(localPreviewUrl);
+        // 422 = rejected by the server-side image moderation gate (nudity /
+        // explicit content). Surface the reason so the user knows why the
+        // image vanished instead of it silently disappearing.
+        if (err instanceof ApiError && err.status === 422) {
+          alert(err.message);
+        }
       }
     }
   };
@@ -101,6 +131,12 @@ export function PromptComposer({ onSubmit, loading }: Props) {
     // escape upward into the AppShell's opaque bg-canvas (which previously
     // ate the gradient on the second paint).
     <div className="relative isolate w-full max-w-3xl mx-auto">
+      <RightsConfirmModal
+        open={showRightsModal}
+        imageCount={uploadedUrls.length}
+        onConfirm={onRightsConfirmed}
+        onClose={() => setShowRightsModal(false)}
+      />
       {/* Gemini-style radial blue glow biased above the composer so it
           surrounds the textarea and tapers off before reaching the
           suggestion chips below. */}
@@ -154,7 +190,7 @@ export function PromptComposer({ onSubmit, loading }: Props) {
                 submit();
               }
             }}
-            placeholder="Describe the video you want — the creator, the product, the vibe."
+            placeholder="Describe your product ad. Drop in a product photo too."
             rows={3}
             className="w-full bg-transparent text-[15px] placeholder:text-placeholder resize-none focus:outline-none leading-relaxed"
           />
@@ -164,11 +200,11 @@ export function PromptComposer({ onSubmit, loading }: Props) {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={attachments.length >= MAX_ATTACHMENTS}
-                aria-label="Attach image"
+                aria-label="Attach reference image"
                 title={
                   attachments.length >= MAX_ATTACHMENTS
-                    ? `Up to ${MAX_ATTACHMENTS} images`
-                    : 'Attach image'
+                    ? `Up to ${MAX_ATTACHMENTS} reference images`
+                    : 'Attach reference image (creator, product, background, vibe)'
                 }
                 className="h-7 w-7 rounded-pill bg-elevated border border-white/10 text-white/70 flex items-center justify-center hover:text-white hover:border-white/25 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >

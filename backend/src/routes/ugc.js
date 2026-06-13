@@ -9,6 +9,7 @@ const { aiLimiter } = require('../middleware/rateLimit');
 const { runUGCJob } = require('../services/ugcPipeline');
 const { runCreatorJob } = require('../services/creatorPipeline');
 const credits = require('../services/credits');
+const moderation = require('../services/moderation');
 
 // ---------- Public ----------
 // Public endpoint for the marketing site — returns a small set of active
@@ -57,17 +58,18 @@ router.get('/templates', async (req, res) => {
   res.setHeader('Expires', '0');
 
   const page = parseInt(req.query.page) || 1;
-  const limit = 6;
+  const limit = 7;
   const offset = (page - 1) * limit;
   const category = (req.query.category || '').trim();
 
   try {
     const redis = await getRedisClient();
-    // v6 cache namespace — bump whenever the schema, URL shape, or page size
+    // v7 cache namespace — bump whenever the schema, URL shape, or page size
     // changes so stale Redis entries are bypassed without a manual flush.
-    // (v6: page size 5 → 6 to surface the 6th curated template. v5: curated
-    // templates expose captioned preview video_url + clean_frame_url.)
-    const cacheKey = `ugc_templates_v6:${category || 'all'}:${page}`;
+    // (v7: page size 6 → 7 so a newly-added template doesn't push an
+    // existing one off page 1. v6: page size 5 → 6. v5: curated templates
+    // expose captioned preview video_url + clean_frame_url.)
+    const cacheKey = `ugc_templates_v7:${category || 'all'}:${page}`;
     const cached = await redis.get(cacheKey);
     if (cached) return res.json(JSON.parse(cached));
 
@@ -390,182 +392,118 @@ router.post('/parse-prompt', aiLimiter, async (req, res) => {
 
 router.post('/generate', aiLimiter, async (req, res) => {
   const userId = req.user.id;
+  // Unified free-form payload — one prompt, any number of attachments,
+  // plus the usual finishing options (script if the creator speaks,
+  // duration, aspect ratio, captions). No more separate creator /
+  // product / inspiration fields; the user explains what each
+  // attached image is inside their prompt.
   const {
-    templateId,
-    creatorDescription,
-    creatorTweaks,
-    productName,
-    productDescription,
-    productImageUrl,
-    inspirationImageUrl,
+    prompt,
+    attachmentUrls,
+    // Optional KNOWN creator image — set when the user came from a
+    // template or "use this video as a template". Its role is fixed to
+    // "creator" (not classified): the pipeline composes this exact person
+    // into the scene, preserving their identity.
+    creatorImageUrl,
     script,
-    videoDescription,
+    creatorSpeaks,
     videoDuration,
+    aspectRatio,
     captionsEnabled,
     captionPreset,
-    creatorEthnicity,
-    creatorSpeaks,
-    voiceTone,
   } = req.body || {};
 
-  // "Talking creator" toggle. When false, the creator stays silent — we
-  // don't require or use a script, and captions are forced off downstream.
-  // Defaults to true so older clients (which never send the flag) keep
+  // Talking-creator toggle. When false the creator stays silent and we
+  // don't require a script. Defaults to true so older clients keep
   // producing speaking videos.
   const wantsSpeech = creatorSpeaks !== false;
 
-  // Either a templateId or a creatorDescription is required (direct mode)
-  const isDirectMode = !templateId && typeof creatorDescription === 'string' && creatorDescription.trim().length > 0;
-  if (!templateId && !isDirectMode) {
-    return res.status(400).json({ success: false, error: 'templateId or creatorDescription is required' });
+  const cleanPrompt = typeof prompt === 'string' ? prompt.trim() : '';
+  if (cleanPrompt.length < 8) {
+    return res.status(400).json({
+      success: false,
+      error: 'Tell us what you want the video to show — describe the scene in a sentence or two.',
+    });
   }
-  // A script is only required when the creator is actually speaking.
   if (wantsSpeech && (!script || !script.trim())) {
-    return res.status(400).json({ success: false, error: 'script is required' });
+    return res.status(400).json({
+      success: false,
+      error: 'Write or generate a script (or turn off "Talking creator").',
+    });
   }
+
+  // Whitelist + dedupe + cap attachment URLs. The client sends plain
+  // URLs; the backend classifies each image's role itself (see the
+  // pipeline -> attachmentClassifier), so the user doesn't tag anything.
+  // Junk that isn't an HTTP(S) URL is dropped.
+  const rawAttachments = Array.isArray(attachmentUrls) ? attachmentUrls : [];
+  const seenUrls = new Set();
+  const cleanAttachments = [];
+  for (const u of rawAttachments) {
+    if (typeof u !== 'string') continue;
+    const trimmed = u.trim();
+    if (!trimmed || !/^https?:\/\//i.test(trimmed)) continue;
+    if (seenUrls.has(trimmed)) continue;
+    seenUrls.add(trimmed);
+    cleanAttachments.push(trimmed);
+    if (cleanAttachments.length >= 10) break;
+  }
+
+  const creatorImageUrlSafe =
+    typeof creatorImageUrl === 'string' && /^https?:\/\//i.test(creatorImageUrl.trim())
+      ? creatorImageUrl.trim()
+      : null;
+
+  const aspectRatioSafe = ['9:16', '16:9', '1:1'].includes(aspectRatio)
+    ? aspectRatio
+    : '9:16';
+  const wantsCaptions = wantsSpeech && captionsEnabled !== false;
+  const captionPresetSafe = typeof captionPreset === 'string' && captionPreset.length
+    ? captionPreset.slice(0, 32)
+    : null;
+  const rawDuration = Number(videoDuration);
+  const videoDurationSafe = rawDuration >= 8 ? 10 : (rawDuration > 0 ? 5 : 10);
 
   try {
-    let template = null;
-    if (templateId) {
-      const { data: tplData, error: tplErr } = await supabase
-        .from('ugc_templates')
-        .select('*')
-        .eq('id', templateId)
-        .single();
-      if (tplErr || !tplData) {
-        return res.status(404).json({ success: false, error: 'Template not found' });
-      }
-      template = tplData;
-    }
-
     const job = {
       id: uuidv4(),
       user_id: userId,
-      template_id: templateId || null,
-      product_name: productName || '',
-      product_image_url: productImageUrl || null,
-      product_description: productDescription || '',
-      // Optional inspiration photo. When present, the pipeline runs the
-      // image through Flux Kontext Pro to produce a creator-in-scene
-      // still that seeds the Kling 3.0 Pro video generation.
-      inspiration_image_url: typeof inspirationImageUrl === 'string' && inspirationImageUrl.length
-        ? inspirationImageUrl
-        : null,
-      // Empty string is fine when the creator isn't speaking (column is
-      // NOT NULL DEFAULT '').
+      // Schema still has these columns from earlier branched flows. We
+      // pass null/empty so the row is valid; the unified pipeline reads
+      // everything it needs from `template_snapshot` below.
+      template_id: null,
+      product_name: '',
+      product_image_url: null,
+      product_description: '',
+      inspiration_image_url: null,
       script: typeof script === 'string' ? script.trim() : '',
       status: 'queued',
       progress: 0,
+      // Unified pipeline uses these directly.
+      video_duration: videoDurationSafe,
+      template_snapshot: {
+        prompt: cleanPrompt.slice(0, 4000),
+        // Plain image URLs. The pipeline classifies each image's role
+        // (creator / product / background / style) at run time and routes
+        // accordingly — a lone 'creator' image is used as-is straight into
+        // Kling; everything else composites via Nano Banana.
+        attachment_urls: cleanAttachments,
+        // Known template/history creator (role fixed to 'creator'). When
+        // set, the pipeline composes THIS person into the scene and never
+        // uses the as-is shortcut, so the template's creator is preserved.
+        creator_image_url: creatorImageUrlSafe,
+        aspect_ratio: aspectRatioSafe,
+        creator_speaks: wantsSpeech,
+        captions_enabled: wantsCaptions,
+        caption_preset: captionPresetSafe,
+      },
     };
 
-    // Captions default ON, but only matter when the creator speaks — a
-    // silent video has nothing to caption. The pipeline reads this off
-    // template_snapshot to avoid a DB migration, same pattern we use for
-    // user_tweaks.
-    const wantsCaptions = wantsSpeech && captionsEnabled !== false;
-    const captionPresetSafe = typeof captionPreset === 'string' && captionPreset.length
-      ? captionPreset.slice(0, 32)
-      : null;
-
-    // Creator ethnicity is only meaningful in direct mode (templates
-    // already fix the creator's identity). Whitelist the allowed values
-    // — anything else is dropped so the picker can't be used to inject
-    // arbitrary prompt text.
-    const ETHNICITY_WHITELIST = new Set(['Indian', 'American', 'Asian']);
-    const ethnicitySafe = typeof creatorEthnicity === 'string'
-      && ETHNICITY_WHITELIST.has(creatorEthnicity.trim())
-      ? creatorEthnicity.trim()
-      : null;
-
-    // Optional vocal-delivery hint ("low and teasing", "soft and sultry").
-    // Free text, so we just trim + cap the length. Only meaningful when the
-    // creator actually speaks — a silent clip has no voice to shape. Stored
-    // on template_snapshot (no migration) and read by the pipeline, which
-    // injects it as a delivery directive into the Kling prompt.
-    const voiceToneSafe = wantsSpeech
-      && typeof voiceTone === 'string'
-      && voiceTone.trim().length
-      ? voiceTone.trim().slice(0, 120)
-      : null;
-
-    if (template) {
-      const cleanTweaks = typeof creatorTweaks === 'string'
-        ? creatorTweaks.trim().slice(0, 500)
-        : '';
-      job.template_snapshot = {
-        name: template.name,
-        actor_name: template.actor_name,
-        setting: template.setting,
-        video_url: template.video_url,
-        thumbnail_url: template.thumbnail_url,
-        // Caption-free seed still. Present only on curated templates (whose
-        // video_url is a captioned preview); the pipeline uses it as the
-        // seed frame instead of extracting one from the captioned video.
-        // NULL for history-reuse templates → pipeline falls back to frame
-        // extraction. `?? null` so older rows without the column don't blow
-        // up the snapshot.
-        clean_frame_url: template.clean_frame_url ?? null,
-        aspect_ratio: template.aspect_ratio,
-        duration_seconds: template.duration_seconds,
-        // Optional user-provided tweaks ("same person but on a beach…").
-        // Read by the pipeline to relax the "keep scene identical" rule
-        // in the Nano Banana seed image prompt while still locking the
-        // template creator's face and identity.
-        user_tweaks: cleanTweaks || null,
-        captions_enabled: wantsCaptions,
-        caption_preset: captionPresetSafe,
-        // "Talking creator" toggle. When false the pipeline skips the
-        // script + audio + captions and renders a silent clip.
-        creator_speaks: wantsSpeech,
-        // Optional vocal-delivery hint shaping how the creator sounds.
-        voice_tone: voiceToneSafe,
-      };
-    } else {
-      // Direct mode: store creator description in the snapshot so the
-      // pipeline can use it for text-to-video scene generation.
-      job.template_snapshot = {
-        name: 'Direct prompt',
-        actor_name: creatorDescription.trim(),
-        setting: null,
-        video_url: null,
-        thumbnail_url: null,
-        aspect_ratio: '9:16',
-        duration_seconds: null,
-        captions_enabled: wantsCaptions,
-        caption_preset: captionPresetSafe,
-        // "Talking creator" toggle (silent clip when false).
-        creator_speaks: wantsSpeech,
-        // Direct-mode-only. Pipeline weaves this into the Nano Banana +
-        // Kling prompts as "a good-looking <ethnicity> creator —".
-        user_ethnicity: ethnicitySafe,
-        // Optional vocal-delivery hint shaping how the creator sounds.
-        voice_tone: voiceToneSafe,
-      };
-    }
-
-    // Single-shot pipeline: the user's video description + duration are
-    // passed straight to Kling 3.0 Pro. No GPT scene decomposition, no
-    // intercut B-roll — one prompt, one video generation call.
-    const cleanVideoDesc = typeof videoDescription === 'string' ? videoDescription.trim() : '';
-    if (cleanVideoDesc) {
-      job.video_description = cleanVideoDesc.slice(0, 1000);
-    }
-    // Kling 3.0 Pro accepts only `"5"` or `"10"` for duration. We collapse
-    // anything else (including legacy 15s requests from older clients) to
-    // the nearest supported value.
-    const rawDuration = Number(videoDuration);
-    job.video_duration = rawDuration >= 8 ? 10 : (rawDuration > 0 ? 5 : 10);
-
     // ---- Credit preflight ----
-    // 5-second video costs 50 credits, 10-second video costs 100. We
-    // check (not debit) here so we can return a clean 402 to the client
-    // before the heavy work begins. The debit happens once the job row
-    // is inserted — that way we have a stable jobId to use as the
-    // ledger's ref_id (and we can refund against it on failure).
-    //
-    // The whole credit system is bypassed when `credits.isEnabled()`
-    // returns false (default until RAZORPAY_KEY_ID is set), so iOS +
-    // web clients keep generating videos for free during local dev.
+    // 5s video costs 50 credits, 10s costs 100. We check (not debit)
+    // here so we can return a clean 402 before the heavy work begins.
+    // The debit happens inside the pipeline once Kling actually
+    // succeeds — see runUGCJob.
     const enforceCredits = credits.isEnabled();
     let requiredCredits = 0;
     if (enforceCredits) {
@@ -585,11 +523,11 @@ router.post('/generate', aiLimiter, async (req, res) => {
     }
 
     console.log(
-      `[ugc:new] user=${userId.slice(0,8)} tpl=${templateId ? templateId.slice(0,8) : 'direct'} ` +
-      `mode=single-shot${isDirectMode ? ' (direct)' : ''} ` +
-      `inspiration=${job.inspiration_image_url ? 'yes' : 'no'} ` +
-      `product_image=${productImageUrl ? 'yes' : 'no'} ` +
-      `video_dur=${job.video_duration || 'n/a'} ` +
+      `[ugc:new] user=${userId.slice(0,8)} mode=unified ` +
+      `attachments=${cleanAttachments.length} ` +
+      `prompt_len=${cleanPrompt.length} ` +
+      `speaks=${wantsSpeech} ` +
+      `dur=${job.video_duration}s ` +
       `credits=${enforceCredits ? requiredCredits : 'off'}`
     );
 
@@ -603,18 +541,19 @@ router.post('/generate', aiLimiter, async (req, res) => {
       if (insErr) throw insErr;
       inserted = data;
     } catch (insErr) {
-      // Pre-migration fallback — if new columns aren't there yet, strip
-      // them and retry. The pipeline will still run with whatever it has.
+      // Pre-migration fallback — if optional columns aren't there yet,
+      // strip them and retry. Everything the unified pipeline needs is
+      // in template_snapshot (a JSON column that's been in the schema
+      // since the first UGC migration), so this is purely defensive.
       const msg = insErr?.message || '';
-      if (/not-null.*template_id|template_id.*not.null/i.test(msg) && isDirectMode) {
+      if (/not-null.*template_id|template_id.*not.null/i.test(msg)) {
         return res.status(400).json({
           success: false,
-          error: 'Direct mode requires migration 007. Run: npm run migrate:nullable-template',
+          error: 'This branch requires migration 007 (nullable template_id). Run: npm run migrate:nullable-template',
         });
       }
       if (/shot_plan|broll_urls|creator_reference_image_url|creator_scene_image_url|inspiration_image_url|video_description|video_duration/i.test(msg)) {
-        console.warn('UGC generate: missing columns, retrying without new fields. Please apply latest migrations.');
-        delete job.video_description;
+        console.warn('UGC generate: missing optional columns, retrying without them.');
         delete job.video_duration;
         delete job.inspiration_image_url;
         const { data, error: retryErr } = await supabase
@@ -1115,11 +1054,14 @@ router.post('/upload-inspiration-image', async (req, res) => {
 });
 
 /**
- * Unified attachment upload used by the prompt composer. We don't know yet
- * whether the image is a product, an inspiration, or both — that's decided
- * by /parse-prompt via GPT-4o-mini vision classification once all the
- * uploads finish. The returned signed URL is what the client passes back
- * to /parse-prompt as `attachments: [{ url }]`.
+ * Unified attachment upload used by the studio composer + form. Every
+ * user-uploaded reference photo flows through here, so this is the single
+ * chokepoint where we run image moderation: nudity / explicit content is
+ * rejected with a 422 BEFORE the bytes are ever written to storage, so a
+ * flagged image never enters the bucket or the generation pipeline.
+ *
+ * The returned signed URL is what the client passes back to /ugc/generate
+ * as one of `attachmentUrls`.
  */
 router.post('/upload-attachment', async (req, res) => {
   const { contentType, base64 } = req.body || {};
@@ -1127,6 +1069,20 @@ router.post('/upload-attachment', async (req, res) => {
     return res.status(400).json({ success: false, error: 'base64 image required' });
   }
   try {
+    // ---- Safety gate: moderate BEFORE storing ----
+    const verdict = await moderation.moderateImageBase64({ base64, contentType });
+    if (!verdict.allowed) {
+      console.warn(
+        `[ugc] attachment rejected by moderation user=${req.user.id.slice(0, 8)} ` +
+        `categories=${verdict.flaggedCategories.join(',') || 'n/a'}`
+      );
+      return res.status(422).json({
+        success: false,
+        error: verdict.reason || 'This image isn\'t allowed.',
+        code: 'image_rejected',
+      });
+    }
+
     const url = await uploadImageBase64({
       kind: 'attachment',
       userId: req.user.id,
