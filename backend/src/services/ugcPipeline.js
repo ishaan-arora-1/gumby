@@ -529,6 +529,7 @@ async function runUnifiedPipeline(job, jobId, chargeOpts = {}) {
           outputPath: captionedPath,
           scriptHint: script,
           presetId: captionPreset || undefined,
+          aspectRatio,
         });
         videoBytesToUpload = fs.readFileSync(captionedPath);
         console.log(

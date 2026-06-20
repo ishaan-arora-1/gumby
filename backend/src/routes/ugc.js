@@ -152,7 +152,15 @@ router.post('/script', aiLimiter, async (req, res) => {
   const tplActor = template?.actor_name || 'a creator';
   const tplSetting = template?.setting || '';
   const tplSampleScript = template?.sample_script || '';
-  const hasProduct = productName && productName.trim().length > 0;
+
+  // `productDescription` carries the user's free-form ad brief in the unified
+  // flow (the iOS/web composer prompt), while `productName` is usually empty
+  // there. Treat EITHER as real context — otherwise the unified flow would
+  // wrongly fall into the "no product, write a generic personal thought"
+  // branch and emit disconnected filler like "you have to check it out".
+  const hasProductName = productName && productName.trim().length > 0;
+  const brief = (productDescription || '').trim();
+  const hasContext = hasProductName || brief.length > 0;
 
   // Word budget tuned per duration. 5s clips don't fit the old 2.0/2.4
   // wps budget — the model would write 10 words and the safety-net trim
@@ -161,8 +169,14 @@ router.post('/script', aiLimiter, async (req, res) => {
   // room for a proper 3-beat script (reaction → reason → soft CTA),
   // while 10s+ keeps the slower 2.0/2.4 cadence that feels natural.
   const targetSeconds = Math.min(15, Math.max(5, Number(requestedSeconds) || 10));
-  const wpsTarget = targetSeconds <= 5 ? 2.4 : 2.0;
-  const wpsMax    = targetSeconds <= 5 ? 2.8 : 2.4;
+  // Natural energetic UGC delivery is ~2.6-3.0 words/sec. The earlier budget
+  // (2.4 wps target for 5s = ~12 words) let the model undershoot into tiny
+  // one-liners. Bump it and add a real FLOOR so a 5s clip is a full 3-sentence
+  // script (~14-16 words) instead of "you have to check it out".
+  const wpsMin    = targetSeconds <= 5 ? 2.4 : 1.9;
+  const wpsTarget = targetSeconds <= 5 ? 2.9 : 2.2;
+  const wpsMax    = targetSeconds <= 5 ? 3.2 : 2.5;
+  const wordMin    = Math.round(targetSeconds * wpsMin);
   const wordTarget = Math.round(targetSeconds * wpsTarget);
   const wordMax    = Math.round(targetSeconds * wpsMax);
 
@@ -198,22 +212,24 @@ router.post('/script', aiLimiter, async (req, res) => {
     "- 'Okay so I have been wearing this gloss every day for a week and the color is insane. Compliments nonstop. If you have been on the fence, just get it.'",
     "- 'This protein powder is literally the cleanest I have tried — mixes perfectly, tastes amazing, no bloat. Honestly, get it as soon as you can.'",
     "",
-    `LENGTH IS A HARD CONSTRAINT. ${wordTarget} words is the sweet spot. ${wordMax} words absolute maximum. Count your words mentally before responding — overlong scripts make the TTS speed up and the lip-sync clips the ending.`,
+    `LENGTH IS A HARD CONSTRAINT. Aim for ${wordTarget} words. NEVER fewer than ${wordMin} words and NEVER more than ${wordMax} words. A ${targetSeconds}-second clip needs the FULL ${wordMin}-${wordMax} words — short one-liners like "you have to check it out" or "this is so good" are WRONG and waste the video. Use the whole time: a real hook, a concrete detail, and a CTA. Count your words mentally before responding — overlong scripts make the TTS speed up and the lip-sync clips the ending.`,
   ].join('\n');
 
-  const userPrompt = hasProduct
+  const userPrompt = hasContext
     ? [
         `Creator vibe: ${tplActor} filming casually in ${tplSetting || 'a clean phone-shot setting'}.`,
         tplSampleScript ? `Creator's normal voice (tone reference, do NOT copy verbatim): "${tplSampleScript}"` : '',
-        `Product being featured: ${productName}`,
-        productDescription ? `Why it's good (translate into excited natural reactions — don't recite this verbatim): ${productDescription}` : '',
+        hasProductName ? `Product being featured: ${productName}` : '',
+        // The ad brief is the SINGLE most important input — the script must be
+        // unmistakably about THIS product/scene, using its real details.
+        brief ? `THE AD BRIEF (this is what the video is about — read it carefully and write the script specifically about this; pull out the real selling points and turn them into excited, natural first-person reactions; do NOT recite it verbatim and do NOT write something generic that ignores it):\n${brief}` : '',
         tone ? `Brand tone hint: ${tone}` : '',
         '',
-        `Write a complete punchy UGC script for this product. ${
+        `Write a complete punchy UGC script that sells exactly what the brief describes. ${
           targetSeconds <= 5
-            ? '2-3 short sentences. Reaction → reason → soft CTA. End with something like "get it" or "you need this".'
-            : '3-4 sentences. Hook → detail → CTA. End with a soft "get it" / "trust me" / "go grab one" line.'
-        } The final sentence MUST be the CTA — never trail off into a fragment.`,
+            ? '3 short sentences. Hook/reaction → a concrete detail from the brief → soft CTA. End with something like "get it" or "you need this".'
+            : '3-4 sentences. Hook → a concrete detail from the brief → CTA. End with a soft "get it" / "trust me" / "go grab one" line.'
+        } The script must clearly reference what is being advertised — never generic filler. The final sentence MUST be the CTA — never trail off into a fragment.`,
       ].filter(Boolean).join('\n')
     : [
         `Creator vibe: ${tplActor} filming casually in ${tplSetting || 'a clean phone-shot setting'}.`,

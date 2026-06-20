@@ -32,9 +32,23 @@ const FONTS_DIR = path.join(__dirname, '..', '..', 'assets', 'fonts');
 // not visual style). Pixel width estimation uses the preset's fontSize.
 // ---------------------------------------------------------------------------
 
-const PLAY_RES_X        = 1080;   // ASS coordinate canvas (libass auto-scales
-const PLAY_RES_Y        = 1920;   //   to the actual frame size at render time)
+const PLAY_RES_X        = 1080;   // default ASS canvas (9:16). The real canvas
+const PLAY_RES_Y        = 1920;   //   is chosen per aspect ratio — see below.
 const SAFE_WIDTH_RATIO  = 0.85;   // captions never exceed 85% of frame width
+
+// The ASS PlayRes canvas MUST match the aspect ratio of the actual frame.
+// libass scales the canvas to the rendered frame: if the canvas is 9:16 but
+// the video is 16:9, captions get horizontally stretched AND the vertical
+// `positionYRatio` lands in the wrong place. Matching the canvas to the frame
+// keeps text un-distorted and positioned correctly for every aspect.
+function resolutionForAspect(aspectRatio) {
+  switch (aspectRatio) {
+    case '16:9': return { x: 1920, y: 1080 };
+    case '1:1':  return { x: 1080, y: 1080 };
+    case '9:16':
+    default:     return { x: 1080, y: 1920 };
+  }
+}
 const MAX_WORDS_PER_CUE = 3;
 const MAX_CHARS_PER_CUE = 18;     // includes spaces
 const MAX_GAP_MS        = 250;    // gap larger than this forces a cue break
@@ -109,8 +123,8 @@ function estimateWidth(text, fontSize) {
   return text.length * fontSize * 0.62;
 }
 
-function chunkWordsIntoCues(words, fontSize) {
-  const safeWidth = PLAY_RES_X * SAFE_WIDTH_RATIO;
+function chunkWordsIntoCues(words, fontSize, playResX = PLAY_RES_X) {
+  const safeWidth = playResX * SAFE_WIDTH_RATIO;
   const cues = [];
   let cur = null;
 
@@ -166,9 +180,9 @@ function fmtTime(sec) {
   return `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
 }
 
-function buildAss({ cues, preset }) {
-  const posX = Math.round(PLAY_RES_X / 2);
-  const posY = Math.round(PLAY_RES_Y * preset.positionYRatio);
+function buildAss({ cues, preset, playResX = PLAY_RES_X, playResY = PLAY_RES_Y }) {
+  const posX = Math.round(playResX / 2);
+  const posY = Math.round(playResY * preset.positionYRatio);
 
   // BorderStyle 1 = outline + drop shadow (current default look).
   // BorderStyle 3 = opaque rectangle behind the text (block look). The
@@ -227,8 +241,8 @@ function buildAss({ cues, preset }) {
   return [
     '[Script Info]',
     'ScriptType: v4.00+',
-    `PlayResX: ${PLAY_RES_X}`,
-    `PlayResY: ${PLAY_RES_Y}`,
+    `PlayResX: ${playResX}`,
+    `PlayResY: ${playResY}`,
     'ScaledBorderAndShadow: yes',
     'WrapStyle: 0',
     '',
@@ -271,9 +285,12 @@ async function burnSubtitles(videoPath, assPath, outPath) {
  * @param {string} [opts.presetId]   Caption style preset id. Defaults to
  *                                   DEFAULT_PRESET_ID. Unknown ids fall
  *                                   back to the default — never throws.
+ * @param {string} [opts.aspectRatio] '9:16' | '16:9' | '1:1'. Sizes the ASS
+ *                                   canvas so captions aren't stretched or
+ *                                   mis-positioned on non-portrait videos.
  * @returns {Promise<{ cues: number, wordCount: number, presetId: string }>}
  */
-async function captionVideo({ inputPath, outputPath, scriptHint, presetId }) {
+async function captionVideo({ inputPath, outputPath, scriptHint, presetId, aspectRatio }) {
   if (!inputPath || !outputPath) {
     throw new Error('captionVideo requires inputPath and outputPath');
   }
@@ -292,8 +309,9 @@ async function captionVideo({ inputPath, outputPath, scriptHint, presetId }) {
     if (words.length === 0) {
       throw new Error('Whisper returned 0 words — audio may be silent');
     }
-    const cues = chunkWordsIntoCues(words, preset.fontSize);
-    fs.writeFileSync(assPath, buildAss({ cues, preset }), 'utf8');
+    const res = resolutionForAspect(aspectRatio);
+    const cues = chunkWordsIntoCues(words, preset.fontSize, res.x);
+    fs.writeFileSync(assPath, buildAss({ cues, preset, playResX: res.x, playResY: res.y }), 'utf8');
     await burnSubtitles(inputPath, assPath, outputPath);
     return { cues: cues.length, wordCount: words.length, presetId: preset.id };
   } finally {
