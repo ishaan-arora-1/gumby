@@ -161,16 +161,9 @@ struct UGCView: View {
     // MARK: - Handoff
 
     private func handoffToChat(with template: UGCTemplate) {
-        // Drop the user just past template selection and navigate to the
-        // chat funnel. `pickTemplate` already calls
-        // `resetFunnelStateForNewRun()` (clears drafts, polling, active
-        // jobs) and then synchronously creates the first draft.
-        //
-        // IMPORTANT: do NOT also call `chatVM.newConversation()` here —
-        // it schedules a delayed Task that wipes `drafts = []` 500 ms
-        // later, which races with the draft just created by
-        // `pickTemplate` and crashes `UGCStudioView` with an
-        // index-out-of-range on `drafts[activeDraftIndex]`.
+        // Seed the studio form with this creator fixed (mirrors web's
+        // `useTemplate`) and navigate to the Studio tab. `pickTemplate`
+        // clears any in-flight generation and advances to `.studio`.
         chatVM.pickTemplate(template)
         selectedDestination = .chat
     }

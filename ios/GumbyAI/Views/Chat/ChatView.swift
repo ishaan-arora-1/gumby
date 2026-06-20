@@ -1,32 +1,13 @@
 import SwiftUI
 
-/// Full-screen chat canvas from `bg.png`. Uses aspect-fit (not fill) so the
-/// artwork's soft edges and color bands aren't cropped on taller/wider phones.
-private struct ChatBackgroundImage: View {
-    var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                Color.black
-                Image("ChatBackground")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: geo.size.width, height: geo.size.height)
-            }
-        }
-        .ignoresSafeArea()
-    }
-}
-
-/// The AI Chat tab is the "Blinkugc" studio.
+/// The Studio tab — a SwiftUI mirror of `web/app/(app)/studio/page.tsx`.
 ///
-/// Two visual modes share the same screen:
-///   • **Welcome** (`chatVM.step == .welcome`) — brand background image with
-///     a horizontal template carousel up top, a suggested-prompt list,
-///     and a pinned composer at the bottom. This is the user's entry point
-///     for flows B/C (text-to-video creator generation).
-///   • **Funnel** (any other step) — a vertical scroll of step cards on the
-///     same background canvas. This is the shared lip-sync funnel used by all
-///     three flows once the user picks/promotes a creator.
+/// Four states share the screen, matching the web `Step` union:
+///   • **welcome** — prompt composer over a "Featured creators" grid
+///     (`WebStudioWelcomeView`, which owns its own floating header).
+///   • **studio** — the unified `WebStudioForm`.
+///   • **generatingAd** — `WebGeneratingAdView` progress screen.
+///   • **adDone** — `WebAdDoneView` finished-video screen.
 struct ChatView: View {
     @EnvironmentObject var chatVM: ChatViewModel
     @EnvironmentObject var sidebarVM: SidebarViewModel
@@ -34,33 +15,17 @@ struct ChatView: View {
 
     var body: some View {
         ZStack {
-            if chatVM.step == .studio {
-                // Clean dark canvas for the studio — no artwork, just solid dark
-                Color(hex: "0A0A0A").ignoresSafeArea()
-            } else if chatVM.step == .welcome {
-                // Web-style welcome owns its own flat canvas background.
-                // We render a full-screen canvas slab here (ignoring all
-                // safe areas, including the keyboard) so that when the
-                // keyboard opens the VStack-shrunk welcome view doesn't
-                // expose the brand artwork underneath.
-                WebTheme.Color.canvas.ignoresSafeArea()
-            } else {
-                ChatBackgroundImage()
-            }
+            WebTheme.Color.canvas.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Welcome state owns its OWN floating header inside
-                // WebStudioWelcomeView (transparent at top → opaque on
-                // scroll, mirroring the web nav). Studio + funnel modes
-                // still render the regular fixed-position headers.
-                if chatVM.step == .studio {
-                    studioHeader
-                } else if chatVM.step != .welcome {
-                    chatHeader
+                // The welcome state owns its own floating header inside
+                // WebStudioWelcomeView; every other state gets the fixed bar.
+                if chatVM.step != .welcome {
+                    header
                 }
 
                 if chatVM.step == .welcome {
-                    welcomeBody
+                    WebStudioWelcomeView()
                 } else {
                     funnelBody
                 }
@@ -78,9 +43,9 @@ struct ChatView: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Header (studio / generating / done)
 
-    private var chatHeader: some View {
+    private var header: some View {
         ZStack {
             HStack {
                 Button(action: { sidebarVM.toggle() }) {
@@ -92,160 +57,60 @@ struct ChatView: View {
                 }
                 Spacer()
                 Button(action: { chatVM.newConversation() }) {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(Color.white.opacity(0.12)))
+                    HStack(spacing: 5) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 13, weight: .bold))
+                        Text("New")
+                            .font(WebTheme.Font.body(13, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .frame(height: 34)
+                    .background(Capsule().fill(Color.white.opacity(0.12)))
                 }
             }
             Image("LogoCombined")
                 .resizable()
                 .scaledToFit()
-                .frame(height: 30)
+                .frame(height: 28)
                 .accessibilityLabel("Blinkugc")
         }
         .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 10)
-    }
-
-    // MARK: - Studio header (video editing themed)
-
-    private var studioHeader: some View {
-        HStack(spacing: 12) {
-            Button {
-                chatVM.newConversation()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(Color.white.opacity(0.08)))
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(chatVM.pickedTemplate?.actorName ?? "Studio")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(Color(hex: "34C759"))
-                        .frame(width: 6, height: 6)
-                    Text("\(chatVM.drafts.count) draft\(chatVM.drafts.count == 1 ? "" : "s")")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Color(hex: "8E8E93"))
+        .background {
+            WebTheme.Color.canvas
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5)
                 }
-            }
-
-            Spacer()
-
-            Button {
-                chatVM.newConversation()
-            } label: {
-                Image(systemName: "plus.circle")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(Color(hex: "8E8E93"))
-            }
+                .ignoresSafeArea(edges: .top)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
-        .background(Color(hex: "0A0A0A"))
     }
 
-    // MARK: - Welcome body
-    //
-    // Switched from the old carousel + pinned-composer layout to the
-    // web-style hero (italic serif headline + centered prompt composer +
-    // 2-col template grid). State plumbing on the VM is unchanged so the
-    // rest of the funnel (parse-prompt → studio card → generate) still
-    // works exactly as before.
-
-    private var welcomeBody: some View {
-        WebStudioWelcomeView()
-    }
-
-    // MARK: - Funnel body (step stack)
+    // MARK: - Funnel body (studio / generating / done)
 
     private var funnelBody: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(spacing: 14) {
-                    stepStack
+                VStack(spacing: 0) {
+                    switch chatVM.step {
+                    case .studio:
+                        WebStudioForm()
+                    case .generatingAd:
+                        WebGeneratingAdView()
+                    case .adDone:
+                        WebAdDoneView()
+                    case .welcome:
+                        EmptyView()
+                    }
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .padding(.horizontal, 14)
-                .padding(.top, 6)
-                .padding(.bottom, 28)
+                .padding(.top, 8)
             }
             .scrollDismissesKeyboard(.interactively)
-            .onChange(of: chatVM.step) { _, _ in
-                DispatchQueue.main.async {
-                    withAnimation(.easeOut(duration: 0.35)) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
-                }
-            }
             .onChange(of: chatVM.activeJob?.progress ?? -1) { _, _ in
                 withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
             }
-            .onChange(of: chatVM.activeCreatorJob?.progress ?? -1) { _, _ in
-                withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
-            }
-        }
-    }
-
-    // MARK: - Step Stack (funnel mode)
-
-    @ViewBuilder
-    private var stepStack: some View {
-        // Standalone creator pipeline (flows B & C). The "Browse creators"
-        // affordance routes via .templatePicker; the composer routes via
-        // .generatingCreator → .creatorReady → either .standaloneComplete
-        // or .studio (after promoting the creator into a hidden template).
-        if chatVM.step == .templatePicker {
-            UGCAssistantBubble(text: "Tap a creator to make them the face of your ad.", emoji: "person.crop.rectangle.stack")
-                .transition(.opacity)
-            UGCCardSurface(active: true) {
-                UGCChatTemplatePickerCard()
-            }
-            .transition(.opacity.combined(with: .move(edge: .bottom)))
-        }
-
-        if chatVM.step == .generatingCreator {
-            UGCAssistantBubble(text: "Casting your creator — Kling is rolling.", emoji: "wand.and.stars")
-                .transition(.opacity)
-            UGCCardSurface(active: true) {
-                UGCChatGeneratingCreatorCard()
-            }
-            .transition(.opacity.combined(with: .move(edge: .bottom)))
-        }
-
-        if chatVM.step == .creatorReady {
-            UGCAssistantBubble(text: "Here's your take. Turn it into a full ad — or keep it as-is.", emoji: "sparkles")
-                .transition(.opacity)
-            UGCCardSurface(active: true) {
-                UGCChatCreatorReadyCard()
-            }
-            .transition(.opacity.combined(with: .move(edge: .bottom)))
-        }
-
-        if chatVM.step == .standaloneComplete {
-            UGCAssistantBubble(text: "Done. Save it, share it, or upgrade it to a full ad later.", emoji: "checkmark.seal.fill")
-                .transition(.opacity)
-            UGCCardSurface(active: true) {
-                UGCChatStandaloneResultCard()
-            }
-            .transition(.opacity.combined(with: .move(edge: .bottom)))
-        }
-
-        // Studio (iterative regeneration UI — the full ad funnel collapsed
-        // into a single card with every input on it).
-        if chatVM.step == .studio {
-            UGCStudioView()
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
     }
 }

@@ -23,30 +23,21 @@ final class UGCService {
         return data
     }
 
-    // MARK: - AI script
+    // MARK: - AI script (unified)
 
-    struct ScriptRequest {
-        let productName: String
-        let productDescription: String
-        let template: UGCTemplate
-        let tone: String
-        /// How many seconds of spoken voice-over to target. Defaults to 10
-        /// — Kling 3.0 Pro renders 5s or 10s clips.
-        var targetSeconds: Int = 10
-    }
-
-    func generateScript(_ req: ScriptRequest) async throws -> String {
+    /// Draft a script from the free-form prompt — mirrors web StudioForm's
+    /// `generateScriptAI()`, which posts a synthetic "unified" template and
+    /// the prompt (capped at 800 chars) as the product description.
+    func generateScriptUnified(prompt: String, targetSeconds: Int) async throws -> String {
         let body: [String: Any] = [
-            "productName": req.productName,
-            "productDescription": req.productDescription,
-            "tone": req.tone,
-            "targetSeconds": req.targetSeconds,
+            "productName": "",
+            "productDescription": String(prompt.prefix(800)),
+            "targetSeconds": targetSeconds,
             "template": [
-                "name": req.template.name,
-                "actor_name": req.template.actorName,
-                "setting": req.template.setting,
-                "sample_script": req.template.sampleScript,
-                "duration_seconds": req.template.durationSeconds,
+                "name": "unified",
+                "actor_name": "Creator",
+                "setting": "as described in the user prompt",
+                "sample_script": "",
             ],
         ]
         struct ScriptPayload: Codable { let script: String }
@@ -54,106 +45,40 @@ final class UGCService {
         return resp.data?.script ?? ""
     }
 
-    // MARK: - Prompt parsing (direct mode)
+    // MARK: - Generation (unified free-form)
+    //
+    // 1:1 with web's `api.generateAd()` → `POST /ugc/generate`. One prompt,
+    // a flat list of reference image URLs (the backend classifies each
+    // image's role itself), an optional fixed creator image (from a
+    // template / history item), plus finishing options.
 
-    struct ClassifiedAttachment: Codable {
-        let url: String
-        /// "product" | "inspiration" | "both" — unknown values fall through
-        /// to "inspiration" client-side (the more flexible slot).
-        let kind: String
-    }
-
-    struct ParsedPrompt: Codable {
-        let creatorDescription: String
-        let productName: String
-        let productDescription: String
-        let videoDescription: String
-        let suggestedDuration: Int
-        let includeProduct: Bool
-        /// Per-attachment classifications when the composer passed
-        /// `attachments` to /parse-prompt. Empty (or absent) otherwise.
-        let attachments: [ClassifiedAttachment]?
-    }
-
-    func parsePrompt(_ prompt: String, attachmentURLs: [String] = []) async throws -> ParsedPrompt {
-        var body: [String: Any] = ["prompt": prompt]
-        if !attachmentURLs.isEmpty {
-            body["attachments"] = attachmentURLs.map { ["url": $0] }
-        }
-        let resp: APIResponse<ParsedPrompt> = try await api.post(path: "/ugc/parse-prompt", body: body)
-        guard let data = resp.data else { throw APIError.noData }
-        return data
-    }
-
-    // MARK: - Generation
-
-    struct GenerateRequest {
-        /// Template ID — nil in direct mode (user describes creator inline).
-        let templateId: String?
-        /// Creator appearance description — used only in direct mode when
-        /// templateId is nil.
-        let creatorDescription: String?
-        /// Optional template-mode tweaks (e.g. "same person but on a
-        /// beach"). The backend keeps the template creator's identity
-        /// locked and applies these adjustments to the surrounding scene
-        /// in the Nano Banana seed-image pass. Ignored in direct mode.
-        let creatorTweaks: String?
-        let productName: String
-        let productDescription: String
-        let productImageURL: String?
-        /// Optional inspiration photo describing the *scene* the user wants.
-        /// The backend reimagines this image with a new model (Nano Banana
-        /// Pro) and uses the result as the seed frame for the Kling 3.0 Pro
-        /// image-to-video call.
-        let inspirationImageURL: String?
+    struct AdRequest {
+        let prompt: String
+        let attachmentUrls: [String]
+        /// Known creator image from a template / history item. Role is fixed
+        /// to "creator" on the backend; the rest of attachmentUrls are
+        /// classified.
+        let creatorImageUrl: String?
         let script: String
-        /// Full video description — passed straight to Kling 3.0 Pro as the
-        /// action prompt. Single-shot generation, audio + lip-sync inline.
-        let videoDescription: String
-        /// Target video duration: 5 or 10 seconds (Kling 3.0 Pro enum).
-        let videoDuration: Int
-        /// Whether to burn TikTok-style word-by-word captions into the
-        /// finished video. Defaults to true on both clients.
-        let captionsEnabled: Bool
-        /// Caption style preset id — see CaptionPreset.all.
-        let captionPresetId: String?
-        /// Direct-mode-only ethnicity hint ("Indian" / "American" /
-        /// "Asian"). Sent verbatim; nil in template mode.
-        let creatorEthnicity: String?
-        /// "Talking creator" toggle — mirrors the same field on the web
-        /// StudioForm. When false, the backend skips the script + audio
-        /// + captions and renders a silent clip driven by the scene
-        /// description alone. Defaults to true on both clients.
         let creatorSpeaks: Bool
+        let videoDuration: Int          // 5 or 10
+        let aspectRatio: String         // 9:16 / 16:9 / 1:1
+        let captionsEnabled: Bool
+        let captionPresetId: String?
     }
 
-    func startGeneration(_ req: GenerateRequest) async throws -> UGCJob {
+    func startAdGeneration(_ req: AdRequest) async throws -> UGCJob {
         var body: [String: Any] = [
-            "productName": req.productName,
-            "productDescription": req.productDescription,
+            "prompt": req.prompt,
+            "attachmentUrls": req.attachmentUrls,
             "script": req.script,
+            "creatorSpeaks": req.creatorSpeaks,
             "videoDuration": req.videoDuration,
+            "aspectRatio": req.aspectRatio,
+            "captionsEnabled": req.captionsEnabled,
         ]
-        if let id = req.templateId { body["templateId"] = id }
-        if let desc = req.creatorDescription, !desc.isEmpty { body["creatorDescription"] = desc }
-        if let tweaks = req.creatorTweaks, !tweaks.isEmpty { body["creatorTweaks"] = tweaks }
-        if let url = req.productImageURL { body["productImageUrl"] = url }
-        if let url = req.inspirationImageURL, !url.isEmpty { body["inspirationImageUrl"] = url }
-        if !req.videoDescription.isEmpty {
-            body["videoDescription"] = req.videoDescription
-        }
-        body["captionsEnabled"] = req.captionsEnabled
-        if let preset = req.captionPresetId, !preset.isEmpty {
-            body["captionPreset"] = preset
-        }
-        if let ethnicity = req.creatorEthnicity, !ethnicity.isEmpty {
-            body["creatorEthnicity"] = ethnicity
-        }
-        // Always send creatorSpeaks. The backend treats omission as
-        // `true` (legacy behaviour), so for the "talking" path either
-        // form works — but sending it explicitly keeps the contract
-        // symmetric with web's StudioForm and prevents drift.
-        body["creatorSpeaks"] = req.creatorSpeaks
+        if let c = req.creatorImageUrl, !c.isEmpty { body["creatorImageUrl"] = c }
+        if let p = req.captionPresetId, !p.isEmpty { body["captionPreset"] = p }
         let resp: APIResponse<UGCJob> = try await api.post(path: "/ugc/generate", body: body)
         guard let job = resp.data else { throw APIError.noData }
         return job
@@ -174,69 +99,6 @@ final class UGCService {
 
     func deleteJob(id: String) async throws {
         try await api.delete(path: "/ugc/jobs/\(id)")
-    }
-
-    // MARK: - Standalone creator generation (text-to-video)
-
-    struct CreatorRequest {
-        let prompt: String
-        let aspectRatio: String
-        let durationSeconds: Int
-    }
-
-    func startCreatorGeneration(_ req: CreatorRequest) async throws -> UGCCreatorJob {
-        let body: [String: Any] = [
-            "prompt": req.prompt,
-            "aspectRatio": req.aspectRatio,
-            "durationSeconds": req.durationSeconds,
-        ]
-        let resp: APIResponse<UGCCreatorJob> = try await api.post(
-            path: "/ugc/creator/generate", body: body
-        )
-        guard let job = resp.data else { throw APIError.noData }
-        return job
-    }
-
-    func fetchCreatorJob(id: String) async throws -> UGCCreatorJob {
-        let resp: APIResponse<UGCCreatorJob> = try await api.get(
-            path: "/ugc/creator/jobs/\(id)"
-        )
-        guard let job = resp.data else { throw APIError.noData }
-        return job
-    }
-
-    func fetchCreatorJobs(page: Int = 1) async throws -> [UGCCreatorJob] {
-        let resp: PaginatedResponse<UGCCreatorJob> = try await api.get(
-            path: "/ugc/creator/jobs?page=\(page)"
-        )
-        return resp.data
-    }
-
-    func fetchLibrary(page: Int = 1) async throws -> [UGCCreatorJob] {
-        let resp: PaginatedResponse<UGCCreatorJob> = try await api.get(
-            path: "/ugc/library?page=\(page)"
-        )
-        return resp.data
-    }
-
-    func deleteCreatorJob(id: String) async throws {
-        try await api.delete(path: "/ugc/creator/jobs/\(id)")
-    }
-
-    func promoteCreatorToTemplate(
-        jobId: String,
-        actorName: String? = nil,
-        sampleScript: String? = nil
-    ) async throws -> UGCTemplate {
-        var body: [String: Any] = [:]
-        if let n = actorName, !n.isEmpty { body["actorName"] = n }
-        if let s = sampleScript, !s.isEmpty { body["sampleScript"] = s }
-        let resp: APIResponse<UGCTemplate> = try await api.post(
-            path: "/ugc/creator/jobs/\(jobId)/promote-to-template",
-            body: body
-        )
-        guard let tpl = resp.data else { throw APIError.noData }
-        return tpl
     }
 
     /// Reuse a completed UGC job as a template.

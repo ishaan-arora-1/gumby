@@ -30,14 +30,20 @@ enum GoogleSignInService {
         }
     }
 
-    /// Presents Google's sign-in UI and returns the resulting ID token.
-    static func signIn() async throws -> String {
+    /// Presents Google's sign-in UI and returns the resulting ID token and
+    /// access token. Both are handed to Supabase exactly as in Supabase's
+    /// documented native-Google flow (`provider` + `id_token` +
+    /// `access_token`, no `client_id`, no nonce). That routes GoTrue to the
+    /// named-Google verifier, which validates the token's signature and
+    /// audience — and crucially does NOT enforce the nonce that the
+    /// GoogleSignIn/AppAuth stack bakes into the token but never exposes.
+    static func signIn() async throws -> (idToken: String, accessToken: String) {
         let presenter = try topViewController()
         let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: presenter)
         guard let idToken = result.user.idToken?.tokenString else {
             throw GoogleSignInError.missingIDToken
         }
-        return idToken
+        return (idToken, result.user.accessToken.tokenString)
     }
 
     static func signOut() {

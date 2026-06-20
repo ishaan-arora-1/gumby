@@ -87,6 +87,36 @@ struct UGCJob: Codable, Identifiable, Hashable {
         case createdAt = "created_at"
     }
 
+    /// A human-readable name for the job, always non-empty — used for the
+    /// sidebar Recents, History cards, and the detail title so nothing ever
+    /// reads "Untitled". Falls back through the most descriptive field
+    /// available, then a dated label.
+    var displayTitle: String {
+        let name = productName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        if let t = templateSnapshot?.name?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
+        if let a = templateSnapshot?.actorName?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty { return a }
+        if let s = Self.snippet(from: script) { return s }
+        if let s = Self.snippet(from: productDescription) { return s }
+        if let s = Self.snippet(from: videoDescription ?? "") { return s }
+        if let date = createdAt {
+            let f = DateFormatter()
+            f.dateFormat = "MMM d"
+            return "Ad · \(f.string(from: date))"
+        }
+        return "New ad"
+    }
+
+    /// First few words of `text`, trimmed to a tidy title length.
+    private static func snippet(from text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let words = trimmed.split(whereSeparator: { $0 == " " || $0.isNewline }).prefix(6)
+        var s = words.joined(separator: " ")
+        if s.count > 40 { s = String(s.prefix(40)).trimmingCharacters(in: .whitespaces) + "…" }
+        return s
+    }
+
     struct TemplateSnapshot: Codable, Hashable {
         let name: String?
         let actorName: String?

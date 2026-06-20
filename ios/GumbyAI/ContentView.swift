@@ -5,6 +5,7 @@ struct ContentView: View {
     @EnvironmentObject var sidebarVM: SidebarViewModel
     @EnvironmentObject var historyVM: HistoryViewModel
     @EnvironmentObject var chatVM: ChatViewModel
+    @EnvironmentObject var ugcVM: UGCViewModel
     @EnvironmentObject var creditsManager: CreditsManager
     @EnvironmentObject var storeKit: StoreKitService
     @State private var selectedDestination: NavigationDestination = .chat
@@ -30,6 +31,10 @@ struct ContentView: View {
                         storeKit.start(credits: creditsManager)
                         // Preload conversation history so the sidebar opens instantly.
                         await historyVM.loadHistory()
+                        // Preload UGC jobs too — this warms the sidebar Recents
+                        // thumbnails (via ImagePrefetcher) before the user ever
+                        // opens the sidebar, so they're already there on first open.
+                        await ugcVM.loadJobs()
                         GeneratedImagesStore.shared.reloadForCurrentUser()
                     }
             } else {

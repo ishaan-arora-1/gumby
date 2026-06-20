@@ -3,23 +3,17 @@ import PhotosUI
 
 /// SwiftUI port of `web/components/studio/PromptComposer.tsx`.
 ///
-/// Visual structure top-to-bottom:
-///   • Radial blue glow positioned ABOVE the card (Gemini-style)
-///   • Outer `bg-composer` shell with `border-white/[0.08]` and a 2xl shadow
-///   • Inner `bg-composerInner` panel padded 16
-///       - Optional row of attachment thumbs (uploading spinner + remove X)
-///       - Multi-line textarea ("Describe the video you want — …")
-///       - Footer row with paperclip + aspect pill + duration pill + send
-///
-/// All state lives on the shared ChatViewModel so this can drop in without
-/// changing any flow logic.
+/// Free-form upload zone: the user can attach up to five references for the
+/// creator, product, background, vibe, or any combination, and explains what
+/// each image is inside the prompt itself. Submitting hands the prompt +
+/// attachment URLs straight to the studio form — no `/parse-prompt`
+/// round-trip. Uploaded images that haven't been rights-confirmed trigger the
+/// consent modal before advancing.
 struct WebPromptComposer: View {
     @EnvironmentObject var chatVM: ChatViewModel
     @State private var photoPickerItems: [PhotosPickerItem] = []
+    @State private var showRights = false
     @FocusState private var focused: Bool
-
-    // Web caps to 2 attachments; mirror that here.
-    private let MAX_ATTACHMENTS = 2
 
     var body: some View {
         VStack(spacing: 8) {
@@ -27,23 +21,30 @@ struct WebPromptComposer: View {
                 glow
                     .allowsHitTesting(false)
 
-                // Outer shell. Web uses `p-2` (8pt) around the inner panel
-                // so the lighter `bg-composer` (#262626) frames the darker
-                // inner (#1C1C1C) — that visible ring of lighter color
-                // *is* the "border" the design reads as.
                 VStack(spacing: 0) {
                     innerPanel
                         .padding(8)
                 }
                 .background(
+                    // The fill AND the drop-shadow live on THIS background shape,
+                    // not on the VStack itself. A `.shadow()` applied to the
+                    // container that holds the TextEditor forces SwiftUI to
+                    // rasterize that subtree offscreen to compute the shadow,
+                    // which makes typed text intermittently render with no color
+                    // (invisible until the field is re-selected / re-drawn).
+                    // Casting the shadow from the background shape keeps the text
+                    // layer un-rasterized — and the background still hugs the
+                    // content, so the surrounding glow halo stays visible.
+                    // (This is why the earlier TextField→TextEditor swap didn't
+                    // fix it — the shadow, not the control, was the trigger.)
                     RoundedRectangle(cornerRadius: WebTheme.Radius.card, style: .continuous)
                         .fill(WebTheme.Color.composer)
+                        .shadow(color: .black.opacity(0.40), radius: 22, x: 0, y: 0)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: WebTheme.Radius.card, style: .continuous)
                         .strokeBorder(WebTheme.Color.border, lineWidth: 1)
                 )
-                .shadow(color: .black.opacity(0.40), radius: 22, x: 0, y: 0)
             }
 
             if let err = chatVM.composerError, !err.isEmpty {
@@ -51,6 +52,18 @@ struct WebPromptComposer: View {
                     .font(WebTheme.Font.body(11, weight: .medium))
                     .foregroundColor(Color(hex: "FF453A"))
             }
+        }
+        .fullScreenCover(isPresented: $showRights) {
+            RightsConfirmModal(
+                imageCount: chatVM.composerRemoteURLs.count,
+                onConfirm: {
+                    ImageRights.markConfirmed(chatVM.composerRemoteURLs)
+                    showRights = false
+                    chatVM.submitComposer()
+                },
+                onClose: { showRights = false }
+            )
+            .presentationBackground(.clear)
         }
     }
 
@@ -84,47 +97,63 @@ struct WebPromptComposer: View {
 
     private var attachmentsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 ForEach(chatVM.composerAttachments) { att in
-                    ZStack(alignment: .topTrailing) {
-                        Image(uiImage: att.image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 48, height: 48)
-                            .clipShape(RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous)
-                                    .stroke(WebTheme.Color.border, lineWidth: 1)
-                            )
-                            .overlay {
-                                if att.uploading {
-                                    ZStack {
-                                        Color.black.opacity(0.55)
-                                            .clipShape(RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous))
-                                        ProgressView()
-                                            .tint(.white)
-                                            .scaleEffect(0.6)
-                                    }
-                                }
-                            }
-
-                        Button {
-                            chatVM.removeComposerAttachment(id: att.id)
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 8, weight: .heavy))
-                                .foregroundColor(.white)
-                                .frame(width: 16, height: 16)
-                                .background(
-                                    UnevenRoundedRectangle(
-                                        cornerRadii: .init(topLeading: 0, bottomLeading: WebTheme.Radius.btn, bottomTrailing: 0, topTrailing: WebTheme.Radius.btn)
-                                    )
-                                    .fill(Color.black.opacity(0.7))
-                                )
+                    thumb(att)
+                        .overlay(alignment: .topTrailing) {
+                            removeBadge { chatVM.removeComposerAttachment(id: att.id) }
                         }
-                        .buttonStyle(.plain)
-                    }
                 }
+            }
+            // Headroom so the overhanging remove badges aren't clipped.
+            .padding(.top, 6)
+            .padding(.trailing, 6)
+            .padding(.horizontal, 2)
+        }
+    }
+
+    /// Clean floating circular remove button, matching the web composer.
+    private func removeBadge(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(.white)
+                .frame(width: 18, height: 18)
+                .background(Circle().fill(Color.black.opacity(0.65)))
+                .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1))
+                .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+        }
+        .buttonStyle(.plain)
+        .offset(x: 6, y: -6)
+    }
+
+    @ViewBuilder
+    private func thumb(_ att: StudioAttachment) -> some View {
+        Group {
+            if let img = att.image {
+                Image(uiImage: img).resizable().scaledToFill()
+            } else if let url = URL(string: att.remoteUrl) {
+                AsyncImage(url: url) { phase in
+                    if case .success(let image) = phase { image.resizable().scaledToFill() }
+                    else { WebTheme.Color.elevated }
+                }
+            } else {
+                WebTheme.Color.elevated
+            }
+        }
+        .frame(width: 48, height: 48)
+        .clipShape(RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous)
+                .stroke(WebTheme.Color.border, lineWidth: 1)
+        )
+        .overlay {
+            if att.uploading {
+                ZStack {
+                    Color.black.opacity(0.35)
+                    ProgressView().tint(.white)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous))
             }
         }
     }
@@ -132,39 +161,44 @@ struct WebPromptComposer: View {
     // MARK: - Textarea
 
     private var textArea: some View {
-        // Reserve a fixed 3 lines of vertical space at all times — never
-        // less, never more. `reservesSpace: true` is the key bit: it
-        // pads the empty state to the same height it has when filled, so
-        // the composer doesn't shrink when blank and doesn't grow as the
-        // user types. (Previously this was `1...4`, which made the bar
-        // jitter from 1 to 4 lines as the user typed.)
-        TextField(
-            "",
-            text: $chatVM.composerPrompt,
-            prompt: Text("Describe the video you want…")
-                .foregroundColor(WebTheme.Color.placeholder),
-            axis: .vertical
-        )
-        .lineLimit(3, reservesSpace: true)
-        .font(WebTheme.Font.body(14))
-        .foregroundColor(.white)
-        .tint(.white)
-        .padding(.vertical, 4)
-        .padding(.horizontal, 2)
-        .focused($focused)
+        // A `TextEditor` (UITextView-backed), NOT `TextField(axis: .vertical)`.
+        // The invisible-typed-text bug was actually caused by the composer
+        // panel's drop-shadow being an *ancestor* of this input (see the
+        // ZStack above, where the shadow now lives on a standalone background
+        // layer instead). Either control works once the shadow is off the
+        // ancestor chain; TextEditor is kept to match the app's other
+        // multiline inputs.
+        //
+        // IMPORTANT: a TextEditor is greedy — it expands to fill whatever
+        // vertical space the parent offers. Use a FIXED height (not minHeight)
+        // so it stays ~3 lines tall and scrolls internally past that, instead
+        // of ballooning to fill the screen.
+        ZStack(alignment: .topLeading) {
+            if chatVM.composerPrompt.isEmpty {
+                Text("Describe your product ad. Drop in a product photo too.")
+                    .font(WebTheme.Font.body(14))
+                    .foregroundColor(WebTheme.Color.placeholder)
+                    .padding(.top, 8)
+                    .padding(.leading, 5)
+                    .allowsHitTesting(false)
+            }
+            TextEditor(text: $chatVM.composerPrompt)
+                .scrollContentBackground(.hidden)
+                .frame(height: 70)
+                .font(WebTheme.Font.body(14))
+                .foregroundStyle(.white)
+                .tint(.white)
+                .focused($focused)
+        }
     }
 
     // MARK: - Footer row
-    //
-    // Phone widths can't fit paperclip + aspect pill (3 options) + duration
-    // pill (2 options) + send button comfortably on a single row. We split
-    // into two rows on tight widths and keep send pinned bottom-right.
 
     private var footerRow: some View {
         HStack(spacing: 6) {
             PhotosPicker(
                 selection: $photoPickerItems,
-                maxSelectionCount: MAX_ATTACHMENTS - chatVM.composerAttachments.count,
+                maxSelectionCount: max(0, ChatViewModel.MAX_ATTACHMENTS - chatVM.composerAttachments.count),
                 matching: .images
             ) {
                 Image(systemName: "paperclip")
@@ -174,8 +208,8 @@ struct WebPromptComposer: View {
                     .background(Circle().fill(WebTheme.Color.elevated))
                     .overlay(Circle().stroke(WebTheme.Color.border, lineWidth: 1))
             }
-            .disabled(chatVM.composerAttachments.count >= MAX_ATTACHMENTS)
-            .opacity(chatVM.composerAttachments.count >= MAX_ATTACHMENTS ? 0.4 : 1)
+            .disabled(chatVM.composerAttachments.count >= ChatViewModel.MAX_ATTACHMENTS)
+            .opacity(chatVM.composerAttachments.count >= ChatViewModel.MAX_ATTACHMENTS ? 0.4 : 1)
             .onChange(of: photoPickerItems) { _, items in
                 Task { await handlePicked(items) }
             }
@@ -199,43 +233,32 @@ struct WebPromptComposer: View {
     }
 
     private var sendButton: some View {
-        Button {
-            chatVM.submitDirectPrompt()
-        } label: {
-            Group {
-                if chatVM.isParsingPrompt {
-                    ProgressView()
-                        .tint(.white)
-                        .scaleEffect(0.6)
-                } else {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white)
-                }
-            }
-            .frame(width: 28, height: 28)
-            .background(Circle().fill(Color.white.opacity(0.10)))
-            .overlay(Circle().stroke(WebTheme.Color.borderStrong, lineWidth: 1))
+        Button(action: attemptSubmit) {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(.white)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Color.white.opacity(0.10)))
+                .overlay(Circle().stroke(WebTheme.Color.borderStrong, lineWidth: 1))
         }
         .buttonStyle(WebPressStyle())
-        .disabled(
-            chatVM.isParsingPrompt ||
-            chatVM.composerAttachments.contains(where: { $0.uploading }) ||
-            chatVM.composerPrompt.trimmingCharacters(in: .whitespacesAndNewlines).count < 10
-        )
-        .opacity(
-            (chatVM.isParsingPrompt ||
-             chatVM.composerAttachments.contains(where: { $0.uploading }) ||
-             chatVM.composerPrompt.trimmingCharacters(in: .whitespacesAndNewlines).count < 10)
-            ? 0.4 : 1
-        )
+        .disabled(!chatVM.canSubmitComposer)
+        .opacity(chatVM.canSubmitComposer ? 1 : 0.4)
+    }
+
+    private func attemptSubmit() {
+        guard chatVM.canSubmitComposer else { return }
+        let urls = chatVM.composerRemoteURLs
+        if ImageRights.hasUnconfirmed(urls) {
+            showRights = true
+            return
+        }
+        chatVM.submitComposer()
     }
 
     // MARK: - Glow background
 
     private var glow: some View {
-        // Subtle blue glow biased above the composer. Sized for phone — the
-        // desktop version is huge and looks oppressive on a 6.1" screen.
         Ellipse()
             .fill(
                 RadialGradient(
@@ -253,19 +276,15 @@ struct WebPromptComposer: View {
             .blur(radius: 40)
     }
 
-    // MARK: - PhotosPicker -> UIImage handoff
+    // MARK: - PhotosPicker → UIImage handoff
 
     private func handlePicked(_ items: [PhotosPickerItem]) async {
         for item in items {
             if let data = try? await item.loadTransferable(type: Data.self),
                let img = UIImage(data: data) {
-                await MainActor.run {
-                    chatVM.addComposerAttachment(img)
-                }
+                await MainActor.run { chatVM.addComposerAttachment(img) }
             }
         }
-        await MainActor.run {
-            photoPickerItems = []
-        }
+        await MainActor.run { photoPickerItems = [] }
     }
 }

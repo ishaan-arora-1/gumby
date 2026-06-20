@@ -30,7 +30,10 @@ struct UGCMyVideosView: View {
                     LazyVGrid(columns: gridColumns, spacing: 8) {
                         ForEach(ugcVM.jobs) { job in
                             UGCJobCard(job: job, onTap: {
-                                if job.status == .completed { openJob = job }
+                                // Open for any status — the sheet shows the
+                                // generating screen for in-flight jobs and the
+                                // detail view once finished.
+                                openJob = job
                             })
                             .contextMenu {
                                 Button(role: .destructive) {
@@ -101,7 +104,7 @@ struct UGCMyVideosView: View {
             Text("No videos yet")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(.white)
-            Text("Tap a template, drop in your product, hit generate. We'll do the rest.")
+            Text("Head to the studio and generate your first ad. Everything you make will appear here.")
                 .font(.system(size: 14))
                 .foregroundColor(AppConstants.textSecondary)
                 .multilineTextAlignment(.center)
@@ -217,7 +220,7 @@ struct UGCJobCard: View {
             Circle()
                 .fill(chipColor)
                 .frame(width: 6, height: 6)
-            Text(job.productName.isEmpty ? (job.templateSnapshot?.name ?? "Video") : job.productName)
+            Text(job.displayTitle)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(.white)
                 .lineLimit(1)
@@ -248,6 +251,17 @@ struct UGCVideoPlayerSheet: View {
     /// `chatVM.pickTemplate(_:)` and a navigation jump back to Studio.
     var onUseTemplate: ((UGCTemplate) -> Void)? = nil
 
+    /// Live copy of the job. Seeded from `job`, then refreshed by polling so
+    /// that a still-rendering job opened from History/Recents shows the
+    /// generating screen and flips to the finished detail view in place.
+    @State private var liveJob: UGCJob
+
+    init(job: UGCJob, onUseTemplate: ((UGCTemplate) -> Void)? = nil) {
+        self.job = job
+        self.onUseTemplate = onUseTemplate
+        self._liveJob = State(initialValue: job)
+    }
+
     @Environment(\.dismiss) private var dismiss
     @State private var player: AVPlayer?
     @State private var saving = false
@@ -275,13 +289,74 @@ struct UGCVideoPlayerSheet: View {
         ZStack(alignment: .top) {
             Color(red: 0.04, green: 0.04, blue: 0.05).ignoresSafeArea()
 
-            ScrollView {
+            if liveJob.status.isTerminal {
+                detailContent
+            } else {
+                // In-flight job reopened from History/Recents — show the same
+                // progress screen the user saw in the Studio when they tapped
+                // Generate, not the default detail / "Still rendering…" view.
+                ScrollView {
+                    VStack(spacing: 0) {
+                        Color.clear.frame(height: 56)
+                        GeneratingProgressView(status: liveJob.status, progress: liveJob.progress)
+                    }
+                }
+            }
+
+            // Floating top bar with close + actions
+            topBar
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+        }
+        .preferredColorScheme(.dark)
+        .task { await pollUntilTerminal() }
+        .onAppear { setupPlayerIfReady() }
+        .onChange(of: liveJob.outputVideoURL) { _, _ in setupPlayerIfReady() }
+        .onDisappear { player?.pause() }
+        .sheet(isPresented: $showShare) {
+            if let url = liveJob.outputVideoURL.flatMap(URL.init(string:)) {
+                ShareSheet(items: [url])
+            }
+        }
+        .alert("Saved", isPresented: Binding(
+            get: { saveMessage != nil },
+            set: { if !$0 { saveMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { saveMessage = nil }
+        } message: {
+            Text(saveMessage ?? "")
+        }
+    }
+
+    /// Polls the job every 3s while it's still rendering, swapping in the
+    /// fresh row so the screen transitions from generating → finished in place.
+    private func pollUntilTerminal() async {
+        while !Task.isCancelled, !liveJob.status.isTerminal {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if Task.isCancelled { break }
+            if let fresh = try? await UGCService.shared.fetchJob(id: job.id) {
+                liveJob = fresh
+            }
+        }
+    }
+
+    private func setupPlayerIfReady() {
+        guard player == nil,
+              let url = liveJob.outputVideoURL.flatMap(URL.init(string:)) else { return }
+        let p = AVPlayer(url: url)
+        p.isMuted = false
+        p.play()
+        player = p
+    }
+
+    private var detailContent: some View {
+        ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     Color.clear.frame(height: 56) // headroom for the floating top bar
 
                     // Title
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(job.productName.isEmpty ? "Untitled ad" : job.productName)
+                        Text(liveJob.displayTitle)
                             .font(.system(size: 24, weight: .bold))
                             .foregroundColor(.white)
                         Text(subtitleLine)
@@ -299,8 +374,8 @@ struct UGCVideoPlayerSheet: View {
                     // when shown from the History destination, not from
                     // some hypothetical preview elsewhere).
                     if onUseTemplate != nil,
-                       job.status == .completed,
-                       (job.outputVideoURL ?? "").isEmpty == false {
+                       liveJob.status == .completed,
+                       (liveJob.outputVideoURL ?? "").isEmpty == false {
                         useCreatorButton
                             .padding(.horizontal, 20)
                     }
@@ -342,35 +417,7 @@ struct UGCVideoPlayerSheet: View {
                     Color.clear.frame(height: 24)
                 }
             }
-
-            // Floating top bar with close + actions
-            topBar
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
         }
-        .preferredColorScheme(.dark)
-        .onAppear {
-            if let url = job.outputVideoURL.flatMap(URL.init(string:)) {
-                player = AVPlayer(url: url)
-                player?.isMuted = false
-                player?.play()
-            }
-        }
-        .onDisappear { player?.pause() }
-        .sheet(isPresented: $showShare) {
-            if let url = job.outputVideoURL.flatMap(URL.init(string:)) {
-                ShareSheet(items: [url])
-            }
-        }
-        .alert("Saved", isPresented: Binding(
-            get: { saveMessage != nil },
-            set: { if !$0 { saveMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) { saveMessage = nil }
-        } message: {
-            Text(saveMessage ?? "")
-        }
-    }
 
     private var subtitleLine: String {
         var parts: [String] = []
@@ -461,12 +508,18 @@ struct UGCVideoPlayerSheet: View {
             if let player {
                 VideoPlayer(player: player)
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            } else if job.status == .completed {
+            } else if liveJob.status == .completed {
                 ProgressView().tint(.white)
             } else {
                 VStack(spacing: 10) {
-                    ProgressView().tint(.white)
-                    Text(job.status == .failed ? (job.error ?? "Failed") : "Still rendering…")
+                    if liveJob.status == .failed {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(.orange)
+                    } else {
+                        ProgressView().tint(.white)
+                    }
+                    Text(liveJob.status == .failed ? (liveJob.error ?? "Failed") : "Still rendering…")
                         .font(.system(size: 12))
                         .foregroundColor(.white.opacity(0.6))
                 }
@@ -487,7 +540,7 @@ struct UGCVideoPlayerSheet: View {
                     .background(Circle().fill(.ultraThinMaterial))
             }
             Spacer()
-            if let url = job.outputVideoURL, !url.isEmpty {
+            if let url = liveJob.outputVideoURL, !url.isEmpty {
                 Button { showShare = true } label: {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 14, weight: .bold))
@@ -575,7 +628,7 @@ struct UGCVideoPlayerSheet: View {
     }
 
     private func saveToPhotos() async {
-        guard let urlString = job.outputVideoURL,
+        guard let urlString = liveJob.outputVideoURL,
               let url = URL(string: urlString) else { return }
         saving = true
         defer { saving = false }

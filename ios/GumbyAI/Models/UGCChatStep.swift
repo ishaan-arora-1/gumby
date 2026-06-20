@@ -1,44 +1,40 @@
 import Foundation
 
-/// State machine for the UGC chat funnel.
+/// State machine for the studio funnel — a 1:1 mirror of the website's
+/// `web/app/(app)/studio/page.tsx` `Step` union:
 ///
-/// The chat supports three branching flows that converge in the studio:
+///   `'welcome' | 'studio' | 'generating_ad' | 'ad_done'`
 ///
-///   A. Models tab "Use" → chat opens already on `studio` with a curated
-///      template selected.
-///   B. Chat composer → user types a prompt → `generatingCreator` (Kling 3.0
-///      text-to-video) → `creatorReady` → "Make a full ad" → `studio`.
-///   C. Chat composer → user types a prompt → `generatingCreator` →
-///      `creatorReady` → "Just save this clip" → `standaloneComplete`.
+/// The flow is unified and free-form, exactly like the web:
 ///
-/// Note: the old step-by-step lipsync funnel (productEntry → scriptDraft →
-/// productShots → voicePicker → generating → complete) is gone. Everything
-/// the user fills in lives on the `studio` card now, and the final pipeline
-/// is a single Kling 3.0 Pro call with built-in audio + lip-sync.
+///   1. **welcome** — prompt composer (prompt + up to 5 reference images,
+///      aspect ratio, duration) over a "Featured creators" grid. Submitting
+///      the composer — or picking a creator — drops the user into the studio
+///      form. No `/parse-prompt` round-trip; the user's prompt is the single
+///      source of truth.
+///   2. **studio** — the unified `StudioForm`: prompt + references, format,
+///      talking-creator → script + captions. "Generate" fires a single
+///      `/ugc/generate` call (the backend classifies each image's role
+///      itself).
+///   3. **generatingAd** — progress card while the one-shot pipeline runs.
+///   4. **adDone** — the finished video with download / share / regenerate.
+///
+/// The old branched flows (template picker, standalone Kling text-to-video
+/// "creator generation", the multi-draft regenerate stack) are gone — the
+/// website removed them, so iOS does too.
 enum UGCChatStep: Int, Comparable, Codable {
-    // Branch root — composer with prompt input + "browse creators" affordance.
     case welcome = 0
-    // Optional alternative path: curated creator carousel.
-    case templatePicker = 1
-    // Text-to-video pipeline (B/C only).
-    case generatingCreator = 2
-    case creatorReady = 3
-    // Combined studio screen — single card with every input.
-    case studio = 4
-    // Parallel terminal — user opted out of the full ad funnel.
-    case standaloneComplete = 5
+    case studio = 1
+    case generatingAd = 2
+    case adDone = 3
 
     static func < (lhs: UGCChatStep, rhs: UGCChatStep) -> Bool {
         lhs.rawValue < rhs.rawValue
     }
 
-    /// True when the studio view should be shown.
-    var isStudioBranch: Bool {
-        self == .studio
-    }
+    /// True when the studio form should be shown.
+    var isStudioBranch: Bool { self == .studio }
 
-    /// True when the funnel has reached one of the terminal states.
-    var isTerminal: Bool {
-        self == .standaloneComplete
-    }
+    /// True when the funnel has reached its terminal state.
+    var isTerminal: Bool { self == .adDone }
 }

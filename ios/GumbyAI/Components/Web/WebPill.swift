@@ -7,6 +7,11 @@ struct WebSegmentedPill<Value: Hashable>: View {
     let options: [Value]
     @Binding var selection: Value
     let label: (Value) -> String
+    /// Sizing — defaults match the compact composer footer. Pass larger
+    /// values to match other controls (e.g. the studio form's Duration pill).
+    var height: CGFloat = 24
+    var fontSize: CGFloat = 11
+    var hPadding: CGFloat = 8
 
     var body: some View {
         HStack(spacing: 0) {
@@ -15,10 +20,10 @@ struct WebSegmentedPill<Value: Hashable>: View {
                     selection = opt
                 } label: {
                     Text(label(opt))
-                        .font(.custom("Inter-SemiBold", size: 11))
+                        .font(.custom("Inter-SemiBold", size: fontSize))
                         .foregroundColor(opt == selection ? .black : .white.opacity(0.6))
-                        .padding(.horizontal, 8)
-                        .frame(height: 24)
+                        .padding(.horizontal, hPadding)
+                        .frame(height: height)
                         .background(
                             Capsule(style: .continuous)
                                 .fill(opt == selection ? Color.white : Color.clear)

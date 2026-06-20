@@ -34,38 +34,10 @@ struct LoopingVideoView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea()
 
-            switch controller.state {
-            case .loading:
-                VStack(spacing: 8) {
-                    ProgressView().tint(.white)
-                    Text("Loading…")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white.opacity(0.85))
-                }
-                .padding(10)
-                .background(.ultraThinMaterial.opacity(0.6))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            case .failed(let message):
-                VStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 22))
-                        .foregroundColor(.orange)
-                    Text("Video failed")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
-                    Text(message)
-                        .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 12)
-                        .lineLimit(3)
-                }
-                .padding(14)
-                .background(.ultraThinMaterial.opacity(0.7))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            case .ready:
-                EmptyView()
-            }
+            // Intentionally no loading spinner / "Loading…" text or failure
+            // badge: a template whose video hasn't loaded (or failed) just
+            // stays on its black/poster background rather than covering the
+            // tile with a spinner or error overlay.
         }
         .onAppear {
             controller.attach(url: url, muted: muted, isActive: isActive)

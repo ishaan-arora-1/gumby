@@ -1,5 +1,6 @@
 import Foundation
 import AuthenticationServices
+import CryptoKit
 import SwiftUI
 import UIKit
 
@@ -151,29 +152,168 @@ class AuthService: ObservableObject {
         isLoading = false
     }
 
-    /// Entry point for the "Continue with Google" button: presents the
-    /// GoogleSignIn UI, then exchanges the ID token with Supabase.
+    // OAuth web flow plumbing. The session must be retained for the life of
+    // the flow, and the presentation provider supplies the anchor window.
+    private var webAuthSession: ASWebAuthenticationSession?
+    private let webAuthContextProvider = WebAuthPresentationContextProvider()
+
+    /// The custom URL scheme + redirect Supabase bounces back to. This must
+    /// be added to Supabase → Auth → URL Configuration → Redirect URLs.
+    private static let oauthCallbackScheme = "com.ishaan.gumby"
+    private static let oauthRedirectURL = "com.ishaan.gumby://login-callback"
+
+    /// Entry point for the "Continue with Google" button.
+    ///
+    /// We use the same mechanism as the website (`signInWithOAuth`): open
+    /// Supabase's `/authorize?provider=google` endpoint in an
+    /// `ASWebAuthenticationSession` and let Supabase run the Google OAuth +
+    /// PKCE exchange server-side. This sidesteps the native GoogleSignIn
+    /// id_token grant entirely — and with it the unsolvable nonce problem,
+    /// where GoogleSignIn bakes a hidden nonce into the token that GoTrue's
+    /// id_token grant then refuses to accept.
     func startSignInWithGoogle() {
         errorMessage = nil
-        Task {
-            isLoading = true
-            defer { isLoading = false }
-            do {
-                let idToken = try await GoogleSignInService.signIn()
-                await signInWithSupabase(
-                    provider: AuthProvider.google.rawValue,
-                    idToken: idToken,
-                    fullName: nil
-                )
-            } catch {
-                let nsError = error as NSError
-                // -5 == kGIDSignInErrorCodeCanceled
-                if nsError.domain == "com.google.GIDSignIn", nsError.code == -5 {
-                    return
-                }
-                errorMessage = error.localizedDescription
+
+        // PKCE: a high-entropy verifier kept on-device; only its SHA-256
+        // challenge goes out in the authorize URL. Supabase returns a code
+        // we exchange for a session using the verifier.
+        let verifier = Self.randomCodeVerifier()
+        let challenge = Self.codeChallenge(for: verifier)
+
+        var components = URLComponents(string: "\(AppConstants.supabaseURL)/auth/v1/authorize")
+        components?.queryItems = [
+            URLQueryItem(name: "provider", value: AuthProvider.google.rawValue),
+            URLQueryItem(name: "redirect_to", value: Self.oauthRedirectURL),
+            URLQueryItem(name: "code_challenge", value: challenge),
+            URLQueryItem(name: "code_challenge_method", value: "s256"),
+        ]
+        guard let authURL = components?.url else {
+            errorMessage = "Could not start Google sign-in."
+            return
+        }
+
+        isLoading = true
+        let session = ASWebAuthenticationSession(
+            url: authURL,
+            callbackURLScheme: Self.oauthCallbackScheme
+        ) { [weak self] callbackURL, error in
+            Task { @MainActor in
+                await self?.finishGoogleOAuth(callbackURL: callbackURL, error: error, verifier: verifier)
             }
         }
+        session.presentationContextProvider = webAuthContextProvider
+        // Reuse the system browser session so a user already signed into
+        // Google doesn't have to re-enter credentials — mirrors the web.
+        session.prefersEphemeralWebBrowserSession = false
+        webAuthSession = session
+        session.start()
+    }
+
+    /// Handles the ASWebAuthenticationSession callback: surfaces cancels /
+    /// errors, then exchanges the returned `code` for a Supabase session.
+    private func finishGoogleOAuth(callbackURL: URL?, error: Error?, verifier: String) async {
+        defer {
+            isLoading = false
+            webAuthSession = nil
+        }
+
+        if let error {
+            let ns = error as NSError
+            // User dismissed the sheet — not an error worth surfacing.
+            if ns.domain == ASWebAuthenticationSessionError.errorDomain,
+               ns.code == ASWebAuthenticationSessionError.canceledLogin.rawValue {
+                return
+            }
+            errorMessage = error.localizedDescription
+            return
+        }
+
+        guard let callbackURL,
+              let comps = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
+            errorMessage = "Google sign-in was cancelled."
+            return
+        }
+
+        let items = comps.queryItems ?? []
+        if let errDesc = items.first(where: { $0.name == "error_description" })?.value {
+            errorMessage = errDesc.replacingOccurrences(of: "+", with: " ")
+            return
+        }
+        guard let code = items.first(where: { $0.name == "code" })?.value else {
+            errorMessage = "Could not complete Google sign-in."
+            return
+        }
+
+        await exchangePKCECode(code, verifier: verifier)
+    }
+
+    /// Exchanges the PKCE `code` for a Supabase session
+    /// (`/token?grant_type=pkce`) and stores the resulting tokens.
+    private func exchangePKCECode(_ code: String, verifier: String) async {
+        do {
+            guard let url = URL(string: "\(AppConstants.supabaseURL)/auth/v1/token?grant_type=pkce") else {
+                errorMessage = "Invalid Supabase URL"
+                return
+            }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(AppConstants.supabaseAnonKey, forHTTPHeaderField: "apikey")
+            request.setValue("Bearer \(AppConstants.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+            request.httpBody = try JSONSerialization.data(withJSONObject: [
+                "auth_code": code,
+                "code_verifier": verifier,
+            ])
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                let env = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                errorMessage = (env?["error_description"] as? String)
+                    ?? (env?["msg"] as? String)
+                    ?? "Authentication failed"
+                return
+            }
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let accessToken = json["access_token"] as? String else {
+                errorMessage = "Invalid auth response"
+                return
+            }
+
+            self._token = accessToken
+            KeychainHelper.shared.save(key: "auth_token", value: accessToken)
+            if let refreshToken = json["refresh_token"] as? String {
+                KeychainHelper.shared.save(key: "refresh_token", value: refreshToken)
+            }
+
+            self.currentUser = userFromSupabaseResponse(json, fullName: nil)
+            self.isAuthenticated = true
+            self.errorMessage = nil
+            recordLastUsedProvider(AuthProvider.google.rawValue)
+
+            await syncWithBackend(accessToken, fullName: nil)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - PKCE helpers
+
+    /// RFC 7636 code verifier — 64 unreserved chars from a CSPRNG.
+    private static func randomCodeVerifier() -> String {
+        let charset = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        // UInt8.random uses SystemRandomNumberGenerator, which is a CSPRNG.
+        return String((0..<64).map { _ in charset[Int.random(in: 0..<charset.count)] })
+    }
+
+    /// base64url(SHA256(verifier)) with no padding — the S256 challenge.
+    private static func codeChallenge(for verifier: String) -> String {
+        let digest = SHA256.hash(data: Data(verifier.utf8))
+        return Data(digest)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 
     func handleGitHubSignIn(idToken: String) async {
@@ -239,7 +379,8 @@ class AuthService: ObservableObject {
     private func signInWithSupabase(
         provider: String,
         idToken: String,
-        fullName: PersonNameComponents?
+        fullName: PersonNameComponents?,
+        accessToken: String? = nil
     ) async {
         do {
             let supabaseURL = AppConstants.supabaseURL
@@ -256,20 +397,30 @@ class AuthService: ObservableObject {
             request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
             request.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization")
 
-            let clientID: String = {
-                switch provider {
-                case AuthProvider.google.rawValue:
-                    return AppConstants.googleClientID
-                default:
-                    return Bundle.main.bundleIdentifier ?? "com.ishaan.gumby"
-                }
-            }()
-
-            let body: [String: Any] = [
+            var body: [String: Any] = [
                 "provider": provider,
                 "id_token": idToken,
-                "client_id": clientID,
             ]
+
+            if provider == AuthProvider.google.rawValue {
+                // Supabase's documented native-Google exchange: id_token +
+                // access_token, no client_id. Sending client_id pushes GoTrue
+                // onto its generic-OIDC path, which enforces a nonce match —
+                // impossible here because GoogleSignIn auto-generates the
+                // token's nonce internally and never exposes it. Omitting
+                // client_id keeps GoTrue on the named-Google verifier, which
+                // validates signature + audience instead. GoTrue checks the
+                // token's `aud` against the client IDs configured for the
+                // Google provider in the Supabase dashboard.
+                if let accessToken, !accessToken.isEmpty {
+                    body["access_token"] = accessToken
+                }
+            } else {
+                // Apple / GitHub: their ID tokens carry no nonce claim, so the
+                // client_id path is fine and unchanged.
+                body["client_id"] = Bundle.main.bundleIdentifier ?? "com.ishaan.gumby"
+            }
+
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -506,5 +657,18 @@ private final class AppleSignInCoordinator: NSObject, ASAuthorizationControllerD
 
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
         onCompletion?(.failure(error))
+    }
+}
+
+/// Supplies the anchor window for `ASWebAuthenticationSession` (the Google
+/// OAuth web flow).
+private final class WebAuthPresentationContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+        return windows.first { $0.isKeyWindow }
+            ?? windows.first
+            ?? ASPresentationAnchor()
     }
 }

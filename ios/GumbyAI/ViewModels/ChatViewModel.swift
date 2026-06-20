@@ -2,22 +2,35 @@ import SwiftUI
 import PhotosUI
 import UIKit
 
-/// The AI chat in Gumby is a guided UGC video studio with three flows that
-/// converge on the studio card:
+/// One reference image attached to the composer or the studio form. Mirrors
+/// the web `ComposerAttachment` / `AttachmentState`: a local preview while
+/// the file is in hand, plus the remote URL once the upload to
+/// `/ugc/upload-attachment` lands. `image` is nil when the attachment was
+/// carried over from the composer (we only have the URL by then).
+struct StudioAttachment: Identifiable, Equatable {
+    let id: UUID
+    var image: UIImage?
+    var remoteUrl: String      // "" while uploading
+    var uploading: Bool
+    var failed: Bool
+}
+
+/// The studio funnel — a 1:1 port of `web/app/(app)/studio/page.tsx`.
 ///
-///   A. Models tab → user picks a curated template → chat lands on `.studio`
-///      with `pickedTemplate` populated.
-///   B. Chat composer → user types a free-form prompt → backend runs Kling
-///      3.0 Pro text-to-video → `creatorReady` shows the silent clip → user
-///      taps "Make a full ad", which promotes the creator into a hidden
-///      `UGCTemplate` row and routes into the studio.
-///   C. Same as (B) but the user taps "Just save this clip" → terminates at
-///      `standaloneComplete` with the silent creator video.
+/// The flow is unified and free-form: the user writes one prompt, optionally
+/// attaches up to five reference images (the backend classifies each image's
+/// role itself), and hits Generate. There is no `/parse-prompt` round-trip,
+/// no structured product/creator fields, no multi-draft stack, and no
+/// standalone Kling text-to-video "creator generation" — the website removed
+/// all of those, so iOS matches.
 ///
-/// Final ad generation is a single Kling 3.0 Pro call with built-in audio +
-/// lip-sync — no TTS, no voice picker, no shot plan, no B-roll.
+///   welcome → studio → generatingAd → adDone
+///
+/// Picking a "Featured creator" (or a history "Use creator") drops the user
+/// into the same studio form with that creator fixed as the on-camera person.
 @MainActor
 class ChatViewModel: ObservableObject {
+
     // MARK: - Funnel state
 
     @Published var step: UGCChatStep = .welcome
@@ -26,91 +39,61 @@ class ChatViewModel: ObservableObject {
 
     @Published var composerPrompt: String = ""
     @Published var composerAspectRatio: String = "9:16"
-    @Published var composerDuration: Int = 5
+    @Published var composerDuration: Int = 10
     @Published var composerError: String?
-    @Published var isStartingCreator: Bool = false
+    @Published var composerAttachments: [StudioAttachment] = []
 
-    /// Up to MAX_COMPOSER_ATTACHMENTS images attached to the welcome
-    /// composer. Each is uploaded to /ugc/upload-attachment as soon as
-    /// the user picks it; the resulting URL is sent to /parse-prompt
-    /// for vision classification (product / inspiration / both) which
-    /// then routes the URL into the studio draft's product or
-    /// inspiration slot — or both, for a creator-with-product shot.
-    struct ComposerAttachment: Identifiable, Equatable {
-        let id: UUID
-        var image: UIImage
-        var remoteURL: String?
-        var uploading: Bool
-        var failed: Bool
-    }
-    @Published var composerAttachments: [ComposerAttachment] = []
-    static let MAX_COMPOSER_ATTACHMENTS: Int = 2
+    /// Matches web's `MAX_ATTACHMENTS = 5` in both the composer and the form.
+    static let MAX_ATTACHMENTS: Int = 5
 
-    // MARK: - Catalog
+    // MARK: - Catalog (featured creators + Creators grid)
 
     @Published var templates: [UGCTemplate] = []
     @Published var isLoadingTemplates: Bool = false
     @Published var templatesError: String?
 
-    @Published var pickedTemplate: UGCTemplate?
+    // MARK: - Studio form (unified)
 
-    // MARK: - Library
+    /// Fixed creator image (set when arriving from a template / "use
+    /// creator"). When non-nil the ad stars this exact person; the user adds
+    /// product images + the prompt exactly like the normal flow.
+    @Published var formCreatorImageUrl: String?
+    @Published var formCreatorName: String?
 
-    enum WelcomeFeed: String, CaseIterable, Hashable {
-        case templates = "Templates"
-        case library = "Library"
-    }
-    @Published var welcomeFeed: WelcomeFeed = .templates
-    @Published var library: [UGCCreatorJob] = []
-    @Published var isLoadingLibrary: Bool = false
-    @Published var libraryError: String?
-
-    // MARK: - Standalone creator (flows B & C)
-
-    @Published var activeCreatorJob: UGCCreatorJob?
-    @Published var creatorError: String?
-    @Published var isPromotingCreator: Bool = false
+    @Published var formPrompt: String = ""
+    @Published var formAttachments: [StudioAttachment] = []
+    @Published var formAspectRatio: String = "9:16"
+    @Published var formDuration: Int = 10
+    @Published var formCreatorSpeaks: Bool = true
+    @Published var formScript: String = ""
+    @Published var formIsGeneratingScript: Bool = false
+    @Published var formScriptError: String?
+    @Published var formCaptionsEnabled: Bool = true
+    @Published var formCaptionPresetId: String = CaptionPreset.defaultId
+    @Published var formError: String?
 
     // MARK: - Ad generation
 
     @Published var activeJob: UGCJob?
-    @Published var isSubmittingJob: Bool = false
-    @Published var submitError: String?
+    @Published var isGenerating: Bool = false
 
     // MARK: - Credits / paywall
 
-    /// Presents the credit paywall when true (bound by `ChatView`).
     @Published var showPaywall: Bool = false
-    /// Optional banner shown atop the paywall explaining why it appeared.
     @Published var paywallContext: String?
-
-    // MARK: - Studio drafts (iterative regeneration)
-
-    @Published var drafts: [UGCDraft] = []
-    @Published var activeDraftIndex: Int = 0
-
-    var activeDraft: UGCDraft? {
-        drafts.indices.contains(activeDraftIndex) ? drafts[activeDraftIndex] : nil
-    }
 
     // MARK: - Services
 
     private let service = UGCService.shared
     private var pollTask: Task<Void, Never>?
-    private var creatorPollTask: Task<Void, Never>?
 
-    /// On-device credit ledger, injected from the app on launch. The full
-    /// ad pipeline is credit-gated; the silent creator pipeline is free
-    /// (matching the backend, where only `/ugc/generate` charges).
+    /// On-device credit ledger, injected from the app on launch. The full ad
+    /// pipeline is credit-gated (50 for ≤7s, 100 for ≥8s), matching the
+    /// backend.
     weak var credits: CreditsManager?
 
-    /// Called once from the app/root view to hand the shared credit ledger
-    /// to the view model so generation can preflight + spend + refund.
-    func attachCredits(_ manager: CreditsManager) {
-        self.credits = manager
-    }
+    func attachCredits(_ manager: CreditsManager) { self.credits = manager }
 
-    /// Opens the paywall with an optional explanatory banner.
     func presentPaywall(context: String? = nil) {
         paywallContext = context
         showPaywall = true
@@ -119,12 +102,7 @@ class ChatViewModel: ObservableObject {
     // MARK: - Init
 
     init() {
-        Task { await self.bootstrap() }
-    }
-
-    private func bootstrap() async {
-        await loadTemplates(force: false)
-        await loadLibrary(force: false)
+        Task { await self.loadTemplates(force: false) }
     }
 
     // MARK: - Catalog
@@ -134,10 +112,8 @@ class ChatViewModel: ObservableObject {
         isLoadingTemplates = true
         defer { isLoadingTemplates = false }
         do {
-            var fetched = try await service.fetchTemplates(page: 1)
-            if fetched.count >= 2 {
-                fetched.swapAt(0, fetched.count - 1)
-            }
+            // No reordering — the website renders `listTemplates(1)` as-is.
+            let fetched = try await service.fetchTemplates(page: 1)
             self.templates = fetched
             VideoPreloader.shared.preload(urlStrings: fetched.map { $0.videoURL })
             templatesError = nil
@@ -151,50 +127,6 @@ class ChatViewModel: ObservableObject {
         await loadTemplates(force: true)
     }
 
-    // MARK: - Library
-
-    func loadLibrary(force: Bool = false) async {
-        if !force, !library.isEmpty { return }
-        isLoadingLibrary = true
-        defer { isLoadingLibrary = false }
-        do {
-            library = try await service.fetchLibrary()
-            VideoPreloader.shared.preload(urlStrings: library.map { $0.videoURL })
-            libraryError = nil
-        } catch {
-            libraryError = error.localizedDescription
-        }
-    }
-
-    func useLibraryItem(_ creator: UGCCreatorJob) {
-        guard creator.status == .completed else { return }
-        guard !isPromotingCreator else { return }
-        isPromotingCreator = true
-        creatorError = nil
-        Task {
-            do {
-                let template = try await self.service.promoteCreatorToTemplate(
-                    jobId: creator.id,
-                    actorName: "Your creator",
-                    sampleScript: nil
-                )
-                await MainActor.run {
-                    self.resetFunnelStateForNewRun()
-                    self.pickedTemplate = template
-                    self.isPromotingCreator = false
-                    self.activeCreatorJob = creator
-                    self.createFirstDraft()
-                    self.advance(to: .studio)
-                }
-            } catch {
-                await MainActor.run {
-                    self.isPromotingCreator = false
-                    self.creatorError = error.localizedDescription
-                }
-            }
-        }
-    }
-
     // MARK: - Navigation
 
     func advance(to newStep: UGCChatStep) {
@@ -204,358 +136,292 @@ class ChatViewModel: ObservableObject {
         }
     }
 
-    func revisit(_ targetStep: UGCChatStep) {
-        guard targetStep < step else { return }
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.85)) {
-            step = targetStep
-        }
-    }
-
+    /// Mirrors web's `reset()` / the logo "fresh studio" event — back to the
+    /// welcome composer with everything cleared.
     func newConversation() {
-        stopAllPolling()
+        stopPolling()
         withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
             step = .welcome
             composerPrompt = ""
             composerAspectRatio = "9:16"
-            composerDuration = 5
+            composerDuration = 10
             composerError = nil
-            isStartingCreator = false
-            isParsingPrompt = false
             composerAttachments = []
-            pickedTemplate = nil
-            activeCreatorJob = nil
-            creatorError = nil
-            isPromotingCreator = false
+            clearForm()
             activeJob = nil
-            isSubmittingJob = false
-            submitError = nil
-        }
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            self.drafts = []
-            self.activeDraftIndex = 0
+            isGenerating = false
         }
     }
 
-    // MARK: - Compatibility shims
+    private func clearForm() {
+        formCreatorImageUrl = nil
+        formCreatorName = nil
+        formPrompt = ""
+        formAttachments = []
+        formAspectRatio = "9:16"
+        formDuration = 10
+        formCreatorSpeaks = true
+        formScript = ""
+        formIsGeneratingScript = false
+        formScriptError = nil
+        formCaptionsEnabled = true
+        formCaptionPresetId = CaptionPreset.defaultId
+        formError = nil
+    }
+
+    private func resetGeneration() {
+        stopPolling()
+        activeJob = nil
+        isGenerating = false
+        formError = nil
+    }
+
+    // MARK: - Compatibility shims (share-to-chat from Library / Explore)
 
     func attachAsset(url: String) {
-        // Library / Explore dropped an asset URL — treat it as a product
-        // image on the active draft (creating one if needed). Used by the
-        // existing share-to-chat integrations.
-        if drafts.isEmpty { createFirstDraft() }
-        if drafts.indices.contains(activeDraftIndex) {
-            drafts[activeDraftIndex].productImageURL = url
-            drafts[activeDraftIndex].productImage = nil
-        }
         if step < .studio {
-            advance(to: .studio)
+            clearForm()
+            formPrompt = composerPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         }
+        if formAttachments.count < Self.MAX_ATTACHMENTS,
+           !formAttachments.contains(where: { $0.remoteUrl == url }) {
+            formAttachments.append(
+                StudioAttachment(id: UUID(), image: nil, remoteUrl: url, uploading: false, failed: false)
+            )
+        }
+        advance(to: .studio)
     }
 
-    func loadConversation(_ id: String, title: String? = nil) async {
-        _ = id; _ = title
-        newConversation()
-    }
+    // MARK: - Attachment uploads
 
-    // MARK: - Composer (flows B & C)
-
-    func submitCreatorPrompt() {
-        let prompt = composerPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard prompt.count >= 6 else {
-            composerError = "Describe your creator in a few more words."
-            return
-        }
-        composerError = nil
-        Task { await self.startCreatorGeneration(prompt: prompt) }
-    }
-
-    // MARK: - Direct prompt (flow D — skip template, go straight to studio)
-
-    @Published var isParsingPrompt: Bool = false
-
-    func submitDirectPrompt() {
-        let prompt = composerPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard prompt.count >= 10 else {
-            composerError = "Describe your video in a bit more detail."
-            return
-        }
-        guard !composerAttachments.contains(where: { $0.uploading }) else {
-            composerError = "Wait for your images to finish uploading."
-            return
-        }
-        composerError = nil
-        isParsingPrompt = true
-        let attachmentURLs = composerAttachments.compactMap { $0.remoteURL }
-        Task {
-            do {
-                let parsed = try await service.parsePrompt(prompt, attachmentURLs: attachmentURLs)
-                await MainActor.run {
-                    self.isParsingPrompt = false
-                    self.resetFunnelStateForNewRun()
-                    self.pickedTemplate = nil
-
-                    // Inspiration upload was removed everywhere — any image
-                    // the user attaches in the composer goes straight to
-                    // the product slot. First-uploaded wins; extras are
-                    // dropped silently.
-                    let routedProductURL: String? = attachmentURLs.first
-
-                    var draft = UGCDraft.empty()
-                    draft.creatorDescription = parsed.creatorDescription
-                    // An uploaded image implies intent to feature a product
-                    // even when the parser didn't infer one from the text.
-                    draft.includeProduct = parsed.includeProduct || routedProductURL != nil
-                    draft.productName = parsed.productName
-                    draft.productDescription = parsed.productDescription
-                    draft.videoDescription = parsed.videoDescription
-                    draft.videoDuration = parsed.suggestedDuration
-                    draft.productImageURL = routedProductURL
-                    self.drafts = [draft]
-                    self.activeDraftIndex = 0
-
-                    // Composer attachments handed off to the draft — clear so
-                    // the next welcome session starts clean.
-                    self.composerAttachments = []
-
-                    self.advance(to: .studio)
-                }
-            } catch {
-                await MainActor.run {
-                    self.isParsingPrompt = false
-                    self.composerError = error.localizedDescription
-                }
-            }
-        }
-    }
-
-    // MARK: - Composer attachments
-
-    /// Start uploading a freshly-picked image in the background. The
-    /// attachment shows as a thumbnail immediately with a spinner;
-    /// upload completion flips `remoteURL` and `uploading=false`.
     func addComposerAttachment(_ image: UIImage) {
-        guard composerAttachments.count < Self.MAX_COMPOSER_ATTACHMENTS else { return }
+        guard composerAttachments.count < Self.MAX_ATTACHMENTS else { return }
         let id = UUID()
         composerAttachments.append(
-            ComposerAttachment(id: id, image: image, remoteURL: nil, uploading: true, failed: false)
+            StudioAttachment(id: id, image: image, remoteUrl: "", uploading: true, failed: false)
         )
+        uploadAttachment(image, id: id, isComposer: true)
+    }
+
+    func removeComposerAttachment(id: UUID) {
+        composerAttachments.removeAll { $0.id == id }
+    }
+
+    func addFormAttachment(_ image: UIImage) {
+        guard formAttachments.count < Self.MAX_ATTACHMENTS else { return }
+        let id = UUID()
+        formAttachments.append(
+            StudioAttachment(id: id, image: image, remoteUrl: "", uploading: true, failed: false)
+        )
+        uploadAttachment(image, id: id, isComposer: false)
+    }
+
+    func removeFormAttachment(id: UUID) {
+        formAttachments.removeAll { $0.id == id }
+    }
+
+    private func uploadAttachment(_ image: UIImage, id: UUID, isComposer: Bool) {
         Task {
             do {
                 let url = try await self.service.uploadAttachment(image)
                 await MainActor.run {
-                    if let idx = self.composerAttachments.firstIndex(where: { $0.id == id }) {
-                        self.composerAttachments[idx].remoteURL = url
-                        self.composerAttachments[idx].uploading = false
+                    if isComposer {
+                        if let i = self.composerAttachments.firstIndex(where: { $0.id == id }) {
+                            self.composerAttachments[i].remoteUrl = url
+                            self.composerAttachments[i].uploading = false
+                        }
+                    } else {
+                        if let i = self.formAttachments.firstIndex(where: { $0.id == id }) {
+                            self.formAttachments[i].remoteUrl = url
+                            self.formAttachments[i].uploading = false
+                        }
                     }
                 }
             } catch {
                 await MainActor.run {
-                    if let idx = self.composerAttachments.firstIndex(where: { $0.id == id }) {
-                        self.composerAttachments[idx].uploading = false
-                        self.composerAttachments[idx].failed = true
+                    // Drop the failed thumbnail and surface the reason. The
+                    // server rejects nudity/explicit content with a 422 whose
+                    // message is already user-facing.
+                    let message = self.uploadErrorMessage(error)
+                    if isComposer {
+                        self.composerAttachments.removeAll { $0.id == id }
+                        self.composerError = message
+                    } else {
+                        self.formAttachments.removeAll { $0.id == id }
+                        self.formError = message
                     }
                 }
             }
         }
     }
 
-    func removeComposerAttachment(id: UUID) {
-        composerAttachments.removeAll(where: { $0.id == id })
+    private func uploadErrorMessage(_ error: Error) -> String {
+        if case APIError.custom(let msg) = error, !msg.isEmpty { return msg }
+        return "Image upload failed. Try a different photo."
     }
 
-    private func startCreatorGeneration(prompt: String) async {
-        guard !isStartingCreator else { return }
-        isStartingCreator = true
-        creatorError = nil
+    // MARK: - Composer → studio hand-off
+
+    var composerRemoteURLs: [String] {
+        composerAttachments.compactMap { $0.remoteUrl.isEmpty ? nil : $0.remoteUrl }
+    }
+
+    var canSubmitComposer: Bool {
+        composerPrompt.trimmingCharacters(in: .whitespacesAndNewlines).count >= 10
+            && !composerAttachments.contains(where: { $0.uploading })
+    }
+
+    /// The "proceed" half of the composer submit — seeds the studio form and
+    /// advances. The rights-confirmation gate is owned by the composer view
+    /// (it presents the modal and calls this once the user confirms),
+    /// matching web's `PromptComposer.submit()` → `proceed()`.
+    func submitComposer() {
+        let prompt = composerPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard prompt.count >= 10 else {
+            composerError = "Describe your video in a sentence or two."
+            return
+        }
+        guard !composerAttachments.contains(where: { $0.uploading }) else { return }
         composerError = nil
-        defer { isStartingCreator = false }
-        do {
-            let job = try await service.startCreatorGeneration(
-                UGCService.CreatorRequest(
-                    prompt: prompt,
-                    aspectRatio: composerAspectRatio,
-                    durationSeconds: composerDuration
-                )
-            )
-            self.activeCreatorJob = job
-            advance(to: .generatingCreator)
-            startCreatorPollingIfNeeded()
-        } catch {
-            composerError = error.localizedDescription
-        }
-    }
 
-    func openTemplatePicker() {
-        advance(to: .templatePicker)
-        Task { await self.ensureTemplatesLoaded() }
-    }
+        resetGeneration()
+        formCreatorImageUrl = nil
+        formCreatorName = nil
+        formPrompt = prompt
+        // Carry the already-loaded UIImage across (not just the URL) so the
+        // studio form shows instant, reliable previews instead of blank cards
+        // while it re-fetches each image from Supabase via AsyncImage.
+        formAttachments = composerAttachments
+            .filter { !$0.remoteUrl.isEmpty }
+            .map { StudioAttachment(id: UUID(), image: $0.image, remoteUrl: $0.remoteUrl, uploading: false, failed: false) }
+        formAspectRatio = composerAspectRatio
+        formDuration = composerDuration
+        formCreatorSpeaks = true
+        formScript = ""
+        formCaptionsEnabled = true
+        formCaptionPresetId = CaptionPreset.defaultId
+        formScriptError = nil
 
-    // MARK: - creatorReady actions
-
-    func useCreatorForFullAd() {
-        guard let job = activeCreatorJob, job.status == .completed else { return }
-        guard !isPromotingCreator else { return }
-        isPromotingCreator = true
-        creatorError = nil
-        Task {
-            do {
-                let template = try await self.service.promoteCreatorToTemplate(
-                    jobId: job.id,
-                    actorName: "Your creator",
-                    sampleScript: nil
-                )
-                await MainActor.run {
-                    self.pickedTemplate = template
-                    self.isPromotingCreator = false
-                    self.createFirstDraft()
-                    self.advance(to: .studio)
-                }
-            } catch {
-                await MainActor.run {
-                    self.isPromotingCreator = false
-                    self.creatorError = error.localizedDescription
-                }
-            }
-        }
-    }
-
-    func keepCreatorAsStandalone() {
-        stopCreatorPolling()
-        advance(to: .standaloneComplete)
-    }
-
-    func discardCreatorAndRestart() {
-        stopCreatorPolling()
-        activeCreatorJob = nil
-        creatorError = nil
-        advance(to: .welcome)
-    }
-
-    // MARK: - Template pick (flow A)
-
-    func pickTemplate(_ template: UGCTemplate) {
-        resetFunnelStateForNewRun()
-        pickedTemplate = template
-        createFirstDraft()
         advance(to: .studio)
     }
 
-    private func resetFunnelStateForNewRun() {
-        stopAllPolling()
-        activeJob = nil
-        isSubmittingJob = false
-        submitError = nil
-        drafts = []
-        activeDraftIndex = 0
+    // MARK: - Pick a creator (template / history hand-off)
+
+    /// Mirrors web's `useTemplate(tpl)`: the creator's still becomes the
+    /// fixed creator image and the rest of the flow is identical.
+    func pickTemplate(_ tpl: UGCTemplate) {
+        let imageUrl = !tpl.thumbnailURL.isEmpty
+            ? tpl.thumbnailURL
+            : (tpl.actorAvatarURL ?? "")
+        guard !imageUrl.isEmpty else { return } // no usable still — ignore
+
+        resetGeneration()
+        formCreatorImageUrl = imageUrl
+        formCreatorName = tpl.actorName.isEmpty ? tpl.name : tpl.actorName
+        formPrompt = ""
+        formAttachments = []
+        formAspectRatio = ["9:16", "16:9", "1:1"].contains(tpl.aspectRatio) ? tpl.aspectRatio : "9:16"
+        formDuration = 10
+        formCreatorSpeaks = true
+        formScript = tpl.sampleScript     // templates ship a sample script
+        formCaptionsEnabled = true
+        formCaptionPresetId = CaptionPreset.defaultId
+        formScriptError = nil
+
+        advance(to: .studio)
     }
 
-    // MARK: - Polling (creator generation)
+    // MARK: - Script (AI)
 
-    private func startCreatorPollingIfNeeded() {
-        guard creatorPollTask == nil else { return }
-        guard let job = activeCreatorJob, !job.status.isTerminal else { return }
-        creatorPollTask = Task { [weak self] in
-            guard let self else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 2_500_000_000)
-                if Task.isCancelled { break }
-                await self.refreshCreatorJob()
-                let stillRunning = await MainActor.run { () -> Bool in
-                    guard let j = self.activeCreatorJob else { return false }
-                    return !j.status.isTerminal
-                }
-                if !stillRunning { break }
-            }
-            await MainActor.run { self.creatorPollTask = nil }
+    func generateScriptForForm() async {
+        let prompt = formPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else {
+            formScriptError = "Write the prompt first — the AI uses it to draft the script."
+            return
         }
-    }
+        formIsGeneratingScript = true
+        formScriptError = nil
+        defer { formIsGeneratingScript = false }
 
-    private func stopCreatorPolling() {
-        creatorPollTask?.cancel()
-        creatorPollTask = nil
-    }
-
-    private func stopPolling() {
-        pollTask?.cancel()
-        pollTask = nil
-    }
-
-    private func stopAllPolling() {
-        stopPolling()
-        stopCreatorPolling()
-    }
-
-    private func refreshCreatorJob() async {
-        guard let id = activeCreatorJob?.id else { return }
+        // The first request often hits a cold backend (Railway spins the
+        // process back up) and fails, then succeeds a few seconds later —
+        // which is why clicking again "just worked". Retry once automatically
+        // after a short delay so the user never has to double-tap.
         do {
-            let updated = try await service.fetchCreatorJob(id: id)
-            await MainActor.run {
-                self.activeCreatorJob = updated
-                switch updated.status {
-                case .completed:
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                        self.step = .creatorReady
-                    }
-                    Task { await self.loadLibrary(force: true) }
-                case .failed:
-                    self.creatorError = updated.error ?? "Creator generation failed"
-                default:
-                    break
+            let script = try await generateScriptWithRetry(prompt: prompt)
+            withAnimation(.easeOut(duration: 0.25)) { self.formScript = script }
+        } catch {
+            formScriptError = "Could not generate a script. Try again or write your own."
+        }
+    }
+
+    private func generateScriptWithRetry(prompt: String, attempts: Int = 2) async throws -> String {
+        var lastError: Error?
+        for attempt in 0..<attempts {
+            do {
+                return try await service.generateScriptUnified(prompt: prompt, targetSeconds: formDuration)
+            } catch {
+                lastError = error
+                if attempt < attempts - 1 {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s before retry
                 }
             }
-        } catch {
-            // single failure shouldn't kill polling
         }
+        throw lastError ?? APIError.noData
     }
 
-    // MARK: - Convenience
+    // MARK: - Generate
 
-    var canSubmitCreatorPrompt: Bool {
-        composerPrompt.trimmingCharacters(in: .whitespacesAndNewlines).count >= 6
+    var formRemoteURLs: [String] {
+        formAttachments.compactMap { $0.remoteUrl.isEmpty ? nil : $0.remoteUrl }
     }
 
-    var canSubmitDirectPrompt: Bool {
-        composerPrompt.trimmingCharacters(in: .whitespacesAndNewlines).count >= 10
+    var canGenerate: Bool {
+        formPrompt.trimmingCharacters(in: .whitespacesAndNewlines).count >= 8
+            && !formAttachments.contains(where: { $0.uploading })
+            && (!formCreatorSpeaks || !formScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
-    // MARK: - Studio draft lifecycle
-
-    func createFirstDraft() {
-        drafts = [UGCDraft.empty()]
-        activeDraftIndex = 0
-    }
-
-    func regenerate() {
-        guard let last = drafts.last else { return }
-        let newDraft = UGCDraft.cloneFrom(last, number: drafts.count + 1)
-        drafts.append(newDraft)
-        activeDraftIndex = drafts.count - 1
-    }
-
-    /// Kicks off ad generation for the active studio draft. Works with both
-    /// template mode (pickedTemplate != nil) and direct mode.
-    func generateForActiveDraft() {
-        guard drafts.indices.contains(activeDraftIndex) else { return }
-        guard drafts[activeDraftIndex].canGenerate else { return }
-        let isDirectMode = pickedTemplate == nil
-        if isDirectMode {
-            guard !drafts[activeDraftIndex].creatorDescription
-                .trimmingCharacters(in: .whitespaces).isEmpty else {
-                drafts[activeDraftIndex].submitError = "Describe the creator for your video."
-                return
-            }
+    /// Validates like web's `StudioForm.submit()`. If uploaded images still
+    /// need rights confirmation, calls `showRights` instead of generating —
+    /// the form view owns the modal and calls `confirmRightsAndGenerate()`.
+    func attemptGenerate(showRights: () -> Void) {
+        guard !isGenerating else { return }
+        let prompt = formPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if prompt.count < 8 {
+            formError = "Describe the scene in a sentence or two."
+            return
         }
-        guard !drafts[activeDraftIndex].isSubmitting else { return }
+        if formAttachments.contains(where: { $0.uploading }) {
+            formError = "Wait for your images to finish uploading."
+            return
+        }
+        if formCreatorSpeaks && formScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            formError = "Write or generate a script (or turn off \"Talking creator\")."
+            return
+        }
+        formError = nil
+        let urls = formRemoteURLs
+        if ImageRights.hasUnconfirmed(urls) {
+            showRights()
+            return
+        }
+        generateAd(remoteUrls: urls)
+    }
 
-        // ---- Credit preflight ----
-        // The full ad pipeline costs credits (50 for ≤7s, 100 for ≥8s),
-        // mirroring the backend. Check the on-device balance before doing
-        // any work so we can route straight to the paywall. The silent
-        // creator pipeline is free and skips this entirely.
-        let durationSeconds = drafts[activeDraftIndex].videoDuration
-        let requiredCredits = credits?.cost(forSeconds: durationSeconds) ?? 0
-        if let credits, !credits.hasSufficient(forSeconds: durationSeconds) {
+    func confirmRightsAndGenerate() {
+        let urls = formRemoteURLs
+        ImageRights.markConfirmed(urls)
+        generateAd(remoteUrls: urls)
+    }
+
+    private func generateAd(remoteUrls: [String]) {
+        guard !isGenerating else { return }
+
+        // ---- Credit preflight (mirrors backend: 50 ≤7s, 100 ≥8s) ----
+        let duration = formDuration
+        let requiredCredits = credits?.cost(forSeconds: duration) ?? 0
+        if let credits, !credits.hasSufficient(forSeconds: duration) {
             let shortfall = max(0, requiredCredits - credits.balance)
             presentPaywall(
                 context: "This video costs \(requiredCredits) credits — you need \(shortfall) more."
@@ -563,119 +429,77 @@ class ChatViewModel: ObservableObject {
             return
         }
 
-        drafts[activeDraftIndex].isSubmitting = true
-        drafts[activeDraftIndex].submitError = nil
+        isGenerating = true
+        formError = nil
 
-        let draftIndex = activeDraftIndex
+        let speaks = formCreatorSpeaks
+        let req = UGCService.AdRequest(
+            prompt: formPrompt.trimmingCharacters(in: .whitespacesAndNewlines),
+            attachmentUrls: remoteUrls,
+            creatorImageUrl: formCreatorImageUrl,
+            script: speaks ? formScript : "",
+            creatorSpeaks: speaks,
+            videoDuration: duration,
+            aspectRatio: formAspectRatio,
+            captionsEnabled: speaks && formCaptionsEnabled,
+            captionPresetId: (speaks && formCaptionsEnabled) ? formCaptionPresetId : nil
+        )
+
         Task {
             do {
-                guard drafts.indices.contains(draftIndex) else { return }
-                let hasProduct = drafts[draftIndex].includeProduct
-                var imageURL = drafts[draftIndex].productImageURL
-                if hasProduct, imageURL == nil, let img = drafts[draftIndex].productImage {
-                    imageURL = try await service.uploadProductImage(img)
-                    guard drafts.indices.contains(draftIndex) else { return }
-                    drafts[draftIndex].productImageURL = imageURL
-                }
-                var inspirationURL = drafts[draftIndex].inspirationImageURL
-                if inspirationURL == nil, let img = drafts[draftIndex].inspirationImage {
-                    inspirationURL = try await service.uploadInspirationImage(img)
-                    guard drafts.indices.contains(draftIndex) else { return }
-                    drafts[draftIndex].inspirationImageURL = inspirationURL
-                }
-
-                let tweaks = drafts[draftIndex].creatorTweaks
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                // Mirrors web's StudioForm.submit(): a silent creator
-                // sends an empty script + captions=false, and the backend
-                // skips TTS/captions entirely.
-                let speaks = drafts[draftIndex].creatorSpeaks
-                let job = try await service.startGeneration(
-                    UGCService.GenerateRequest(
-                        templateId: pickedTemplate?.id,
-                        creatorDescription: isDirectMode
-                            ? drafts[draftIndex].creatorDescription : nil,
-                        creatorTweaks: (!isDirectMode && !tweaks.isEmpty) ? tweaks : nil,
-                        productName: hasProduct ? drafts[draftIndex].productName : "",
-                        productDescription: hasProduct ? drafts[draftIndex].productDescription : "",
-                        productImageURL: hasProduct ? imageURL : nil,
-                        inspirationImageURL: inspirationURL,
-                        script: speaks ? drafts[draftIndex].script : "",
-                        videoDescription: drafts[draftIndex].videoDescription
-                            .trimmingCharacters(in: .whitespacesAndNewlines),
-                        videoDuration: drafts[draftIndex].videoDuration,
-                        captionsEnabled: speaks && drafts[draftIndex].captionsEnabled,
-                        captionPresetId: (speaks && drafts[draftIndex].captionsEnabled)
-                            ? drafts[draftIndex].captionPresetId
-                            : nil,
-                        creatorEthnicity: isDirectMode
-                            ? drafts[draftIndex].creatorEthnicity
-                            : nil,
-                        creatorSpeaks: speaks
-                    )
-                )
-                guard drafts.indices.contains(draftIndex) else { return }
-                // Debit credits now that we have a stable job id for the
-                // ledger ref (mirrors the backend's debit-on-accept). The
-                // matching refund happens if the job later fails.
+                let job = try await service.startAdGeneration(req)
+                // Debit now that we have a stable job id (mirrors backend's
+                // debit-on-accept; refunded if the job later fails).
                 if let credits, requiredCredits > 0 {
                     try? await credits.spend(amount: requiredCredits, jobID: job.id)
                 }
-                drafts[draftIndex].isSubmitting = false
-                drafts[draftIndex].job = job
-                drafts[draftIndex].status = .generating
-                activeJob = job
-                startStudioPolling(draftIndex: draftIndex)
+                self.activeJob = job
+                self.isGenerating = false
+                self.advance(to: .generatingAd)
+                self.startPolling(jobId: job.id, duration: duration)
             } catch {
-                guard drafts.indices.contains(draftIndex) else { return }
-                drafts[draftIndex].isSubmitting = false
-                // If the server itself reports insufficient credits (only
-                // once server-side credits are switched on), route to the
-                // paywall instead of showing a raw error.
+                self.isGenerating = false
                 if case APIError.insufficientCredits(_, let required) = error {
                     let need = required ?? requiredCredits
-                    presentPaywall(context: "This video costs \(need) credits.")
+                    self.presentPaywall(context: "This video costs \(need) credits.")
                 } else {
-                    drafts[draftIndex].submitError = error.localizedDescription
+                    self.formError = error.localizedDescription
                 }
             }
         }
     }
 
-    private func startStudioPolling(draftIndex: Int) {
-        stopPolling()
-        guard drafts.indices.contains(draftIndex),
-              let job = drafts[draftIndex].job,
-              !job.status.isTerminal else { return }
+    /// VideoResult "regenerate" / ad_done back-to-form, keeping the entered
+    /// values so the user can tweak and re-generate.
+    func regenerateFromResult() {
+        advance(to: .studio)
+    }
 
+    // MARK: - Polling
+
+    private func startPolling(jobId: String, duration: Int) {
+        stopPolling()
         pollTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 2_500_000_000)
                 if Task.isCancelled { break }
-                guard self.drafts.indices.contains(draftIndex),
-                      let jobId = self.drafts[draftIndex].job?.id else { break }
                 do {
                     let updated = try await self.service.fetchJob(id: jobId)
                     await MainActor.run {
-                        guard self.drafts.indices.contains(draftIndex) else { return }
-                        self.drafts[draftIndex].job = updated
                         self.activeJob = updated
                         if updated.status == .completed {
                             withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                                self.drafts[draftIndex].status = .completed
+                                self.step = .adDone
                             }
                         } else if updated.status == .failed {
-                            self.drafts[draftIndex].status = .failed
-                            // Refund the credits we debited when the job
-                            // started (idempotent on job id — mirrors the
-                            // backend's refund-on-failure).
+                            // Refund the debit (idempotent on job id).
                             if let credits = self.credits {
-                                let refundAmount = credits.cost(
-                                    forSeconds: self.drafts[draftIndex].videoDuration
-                                )
-                                Task { await credits.refund(amount: refundAmount, jobID: updated.id) }
+                                let amt = credits.cost(forSeconds: duration)
+                                Task { await credits.refund(amount: amt, jobID: updated.id) }
                             }
+                            self.formError = updated.error ?? "Ad generation failed"
+                            self.step = .studio
                         }
                     }
                     if updated.status.isTerminal { break }
@@ -687,100 +511,8 @@ class ChatViewModel: ObservableObject {
         }
     }
 
-    /// AI script generation scoped to the active draft.
-    func generateScriptForActiveDraft() async {
-        guard drafts.indices.contains(activeDraftIndex) else { return }
-        let templateForScript: UGCTemplate
-        if let tpl = pickedTemplate {
-            templateForScript = tpl
-        } else {
-            let desc = drafts[activeDraftIndex].creatorDescription
-            templateForScript = UGCTemplate(
-                id: "direct",
-                name: "Direct",
-                actorName: desc,
-                actorAvatarURL: nil,
-                description: "",
-                setting: "",
-                videoURL: "",
-                thumbnailURL: "",
-                sampleScript: "",
-                voiceId: "",
-                aspectRatio: "9:16",
-                durationSeconds: drafts[activeDraftIndex].videoDuration,
-                tags: nil,
-                category: ""
-            )
-        }
-        let draftIndex = activeDraftIndex
-        drafts[draftIndex].isGeneratingScript = true
-        drafts[draftIndex].scriptError = nil
-        defer {
-            if drafts.indices.contains(draftIndex) {
-                drafts[draftIndex].isGeneratingScript = false
-            }
-        }
-        do {
-            var req = UGCService.ScriptRequest(
-                productName: drafts[draftIndex].productName,
-                productDescription: drafts[draftIndex].productDescription,
-                template: templateForScript,
-                tone: drafts[draftIndex].productTone
-            )
-            req.targetSeconds = drafts[draftIndex].videoDuration
-            let result = try await service.generateScript(req)
-            guard drafts.indices.contains(draftIndex) else { return }
-            withAnimation(.easeOut(duration: 0.25)) {
-                self.drafts[draftIndex].script = result
-            }
-        } catch {
-            guard drafts.indices.contains(draftIndex) else { return }
-            drafts[draftIndex].scriptError = error.localizedDescription
-        }
-    }
-
-    func loadProductPhotoForActiveDraft() async {
-        guard drafts.indices.contains(activeDraftIndex) else { return }
-        let draftIndex = activeDraftIndex
-        guard let item = drafts[draftIndex].productPhotoItem else { return }
-        if let data = try? await item.loadTransferable(type: Data.self),
-           let img = UIImage(data: data) {
-            guard drafts.indices.contains(draftIndex) else { return }
-            drafts[draftIndex].productImage = img
-            drafts[draftIndex].productImageURL = nil
-        }
-    }
-
-    func clearProductImageForActiveDraft() {
-        guard drafts.indices.contains(activeDraftIndex) else { return }
-        drafts[activeDraftIndex].productImage = nil
-        drafts[activeDraftIndex].productImageURL = nil
-        drafts[activeDraftIndex].productPhotoItem = nil
-    }
-
-    func loadInspirationPhotoForActiveDraft() async {
-        guard drafts.indices.contains(activeDraftIndex) else { return }
-        let draftIndex = activeDraftIndex
-        guard let item = drafts[draftIndex].inspirationPhotoItem else { return }
-        if let data = try? await item.loadTransferable(type: Data.self),
-           let img = UIImage(data: data) {
-            guard drafts.indices.contains(draftIndex) else { return }
-            drafts[draftIndex].inspirationImage = img
-            drafts[draftIndex].inspirationImageURL = nil
-        }
-    }
-
-    func clearInspirationImageForActiveDraft() {
-        guard drafts.indices.contains(activeDraftIndex) else { return }
-        drafts[activeDraftIndex].inspirationImage = nil
-        drafts[activeDraftIndex].inspirationImageURL = nil
-        drafts[activeDraftIndex].inspirationPhotoItem = nil
+    private func stopPolling() {
+        pollTask?.cancel()
+        pollTask = nil
     }
 }
-
-
-
-
-
-
-

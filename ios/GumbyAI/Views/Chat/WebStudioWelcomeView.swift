@@ -8,14 +8,14 @@ import PhotosUI
 ///   • Floating header (Blink UGC logo + menu + new-chat buttons). Background
 ///     is transparent at the top of the page and fades to a translucent
 ///     surface the moment the user scrolls — same behavior as the website.
-///   • Centered italic serif headline ("Describe your content…")
+///   • Centered serif headline ("UGC ads for your product.") + subtitle
 ///   • WebPromptComposer
 ///   • Suggestion chip row
-///   • Section label + "Featured templates" heading
-///   • 2-column grid of 9:16 template cards
+///   • Section label + "Featured creators" heading
+///   • 2-column grid of 9:16 creator cards
 ///
-/// State plumbing is unchanged — same `chatVM.composerPrompt`,
-/// `submitDirectPrompt()`, etc. Pure UI swap.
+/// Submitting the composer seeds the studio form (`chatVM.submitComposer()`);
+/// tapping a creator fixes it via `chatVM.pickTemplate(_:)`.
 struct WebStudioWelcomeView: View {
     @EnvironmentObject var chatVM: ChatViewModel
     @EnvironmentObject var sidebarVM: SidebarViewModel
@@ -114,18 +114,14 @@ struct WebStudioWelcomeView: View {
             // centered block sits at the visual middle of the page.
             Spacer(minLength: 0)
 
-            // The centered block — headline + composer together.
+            // The centered block — headline + composer together. (The web
+            // shows a subtitle + suggestion chips here; iOS intentionally
+            // omits both.)
             VStack(spacing: 18) {
                 headline
                 WebPromptComposer()
             }
             .padding(.horizontal, 14)
-
-            // "A little gap" between the composer and the suggestion row.
-            Color.clear.frame(height: 0)
-
-            suggestionRow
-                .padding(.horizontal, 14)
 
             // Bottom spacer — same flex as top so the centered block stays
             // centered, with the templates peeking up from below it.
@@ -183,70 +179,26 @@ struct WebStudioWelcomeView: View {
     // MARK: - Headline ("Describe your content…")
 
     private var headline: some View {
-        // Web uses clamp(28px, 4.4vw, 64px). On a 390px-wide iPhone the
-        // 4.4vw value resolves to ~17px so the floor (28px) wins — that's
-        // what shows on mobile. Match it at 28pt.
-        Text("Describe your content…")
-            .font(WebTheme.Font.serifItalic(28))
+        // Web: `font-serif text-[clamp(28px,4.4vw,64px)]`. On a ~390px iPhone
+        // the 4.4vw value resolves to ~17px so the 28px floor wins.
+        Text("UGC ads for your product.")
+            .font(WebTheme.Font.serif(30))
             .foregroundColor(.white)
             .multilineTextAlignment(.center)
             .lineSpacing(2)
-            .tracking(-0.2)
+            .tracking(-0.4)
             .frame(maxWidth: .infinity)
-    }
-
-    // MARK: - Suggestion chips
-
-    private static let suggestions: [String] = [
-        "20-year-old skincare creator unboxing serum in her kitchen, daylight",
-        "Fitness creator in a gym holding a protein shake, neon lights",
-        "Cozy creator on a couch sipping coffee, golden hour",
-        "Tech creator at a desk holding a sleek gadget, studio light",
-    ]
-
-    private var suggestionRow: some View {
-        WebFlowLayout(spacing: 6) {
-            ForEach(Self.suggestions, id: \.self) { s in
-                Button {
-                    chatVM.composerPrompt = s
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(WebTheme.Color.accent2)
-                        Text(truncate(s, max: 38))
-                            .font(WebTheme.Font.body(11, weight: .medium))
-                            .foregroundColor(.white.opacity(0.7))
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule(style: .continuous).fill(Color.white.opacity(0.03))
-                    )
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(WebTheme.Color.border, lineWidth: 1)
-                    )
-                }
-                .buttonStyle(WebPressStyle())
-            }
-        }
-    }
-
-    private func truncate(_ s: String, max: Int) -> String {
-        s.count > max ? String(s.prefix(max)) + "…" : s
     }
 
     // MARK: - Templates section
 
     private var templatesSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Or pick a creator")
+            Text("Or start with a creator")
                 .webSectionLabel()
                 .padding(.bottom, 6)
 
-            Text("Featured templates")
+            Text("Featured creators")
                 .font(WebTheme.Font.display(18, weight: .bold))
                 .foregroundColor(.white)
                 .tracking(-0.2)
@@ -291,52 +243,5 @@ struct WebStudioWelcomeView: View {
                 RoundedRectangle(cornerRadius: WebTheme.Radius.card, style: .continuous)
                     .stroke(WebTheme.Color.borderSubtle, lineWidth: 1)
             )
-    }
-}
-
-// MARK: - Flow layout (SwiftUI flex-wrap equivalent)
-
-struct WebFlowLayout: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var rowWidth: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var totalHeight: CGFloat = 0
-        var maxRowWidth: CGFloat = 0
-        for sub in subviews {
-            let s = sub.sizeThatFits(.unspecified)
-            if rowWidth + s.width > maxWidth, rowWidth > 0 {
-                totalHeight += rowHeight + spacing
-                maxRowWidth = max(maxRowWidth, rowWidth - spacing)
-                rowWidth = 0
-                rowHeight = 0
-            }
-            rowWidth += s.width + spacing
-            rowHeight = max(rowHeight, s.height)
-        }
-        totalHeight += rowHeight
-        maxRowWidth = max(maxRowWidth, rowWidth - spacing)
-        return CGSize(width: maxRowWidth, height: totalHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let maxWidth = bounds.width
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        for sub in subviews {
-            let s = sub.sizeThatFits(.unspecified)
-            if x + s.width > maxWidth, x > 0 {
-                y += rowHeight + spacing
-                x = 0
-                rowHeight = 0
-            }
-            sub.place(at: CGPoint(x: bounds.minX + x, y: bounds.minY + y),
-                      proposal: ProposedViewSize(width: s.width, height: s.height))
-            x += s.width + spacing
-            rowHeight = max(rowHeight, s.height)
-        }
     }
 }

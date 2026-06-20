@@ -252,18 +252,13 @@ private struct RecentRow: View {
         .contentShape(Rectangle())
     }
 
-    private var title: String {
-        let t = job.productName.trimmingCharacters(in: .whitespaces)
-        if !t.isEmpty { return t }
-        if let name = job.templateSnapshot?.name, !name.isEmpty { return name }
-        return "Untitled"
-    }
+    private var title: String { job.displayTitle }
 
     @ViewBuilder
     private var thumb: some View {
         if let urlStr = job.outputThumbnailURL ?? job.templateSnapshot?.thumbnailURL,
            let url = URL(string: urlStr) {
-            AsyncImage(url: url) { phase in
+            CachedAsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):
                     image.resizable().scaledToFill()
