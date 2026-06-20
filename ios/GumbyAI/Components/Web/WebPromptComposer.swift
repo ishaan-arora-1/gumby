@@ -211,7 +211,7 @@ struct WebPromptComposer: View {
             )
 
             WebSegmentedPill(
-                options: [5, 10],
+                options: [5, 10, 15],
                 selection: $chatVM.composerDuration,
                 label: { "\($0)s" }
             )

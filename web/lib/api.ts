@@ -228,7 +228,7 @@ export const api = {
     creatorImageUrl?: string;
     script?: string;
     creatorSpeaks?: boolean;
-    videoDuration?: 5 | 10;
+    videoDuration?: 5 | 10 | 15;
     aspectRatio?: '9:16' | '16:9' | '1:1';
     captionsEnabled?: boolean;
     captionPreset?: string;

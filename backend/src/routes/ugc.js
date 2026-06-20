@@ -477,8 +477,14 @@ router.post('/generate', aiLimiter, async (req, res) => {
   const captionPresetSafe = typeof captionPreset === 'string' && captionPreset.length
     ? captionPreset.slice(0, 32)
     : null;
+  // Snap the requested length to one of the three supported buckets
+  // (5 / 10 / 15s). Kling v3 Pro accepts any 3-15s, but the product exposes
+  // these three and prices them per bucket. Default to 10 when unspecified.
   const rawDuration = Number(videoDuration);
-  const videoDurationSafe = rawDuration >= 8 ? 10 : (rawDuration > 0 ? 5 : 10);
+  const videoDurationSafe = rawDuration >= 13 ? 15
+    : rawDuration >= 8 ? 10
+    : rawDuration > 0 ? 5
+    : 10;
 
   try {
     const job = {
@@ -516,7 +522,7 @@ router.post('/generate', aiLimiter, async (req, res) => {
     };
 
     // ---- Credit preflight ----
-    // 5s video costs 50 credits, 10s costs 100. We check (not debit)
+    // 5s = 50, 10s = 100, 15s = 150 credits. We check (not debit)
     // here so we can return a clean 402 before the heavy work begins.
     // The debit happens inside the pipeline once Kling actually
     // succeeds — see runUGCJob.

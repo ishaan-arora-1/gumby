@@ -61,7 +61,7 @@ final class UGCService {
         let creatorImageUrl: String?
         let script: String
         let creatorSpeaks: Bool
-        let videoDuration: Int          // 5 or 10
+        let videoDuration: Int          // 5, 10, or 15
         let aspectRatio: String         // 9:16 / 16:9 / 1:1
         let captionsEnabled: Bool
         let captionPresetId: String?

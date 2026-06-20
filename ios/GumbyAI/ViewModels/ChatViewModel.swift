@@ -88,8 +88,8 @@ class ChatViewModel: ObservableObject {
     private var pollTask: Task<Void, Never>?
 
     /// On-device credit ledger, injected from the app on launch. The full ad
-    /// pipeline is credit-gated (50 for ≤7s, 100 for ≥8s), matching the
-    /// backend.
+    /// pipeline is credit-gated (50 for ≤7s, 100 for 8–12s, 150 for ≥13s),
+    /// matching the backend.
     weak var credits: CreditsManager?
 
     func attachCredits(_ manager: CreditsManager) { self.credits = manager }
@@ -418,7 +418,7 @@ class ChatViewModel: ObservableObject {
     private func generateAd(remoteUrls: [String]) {
         guard !isGenerating else { return }
 
-        // ---- Credit preflight (mirrors backend: 50 ≤7s, 100 ≥8s) ----
+        // ---- Credit preflight (mirrors backend: 50 ≤7s, 100 8–12s, 150 ≥13s) ----
         let duration = formDuration
         let requiredCredits = credits?.cost(forSeconds: duration) ?? 0
         if let credits, !credits.hasSufficient(forSeconds: duration) {

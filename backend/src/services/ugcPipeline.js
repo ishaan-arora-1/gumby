@@ -271,7 +271,10 @@ async function composeSeedImage({ attachments, userPrompt, aspectRatio, onProgre
 // ---------------------------------------------------------------------------
 
 function klingDurationEnum(seconds) {
-  return Number(seconds) >= 8 ? '10' : '5';
+  const n = Number(seconds);
+  if (n >= 13) return '15';
+  if (n >= 8) return '10';
+  return '5';
 }
 
 // Negative prompt — intentionally MINIMAL.

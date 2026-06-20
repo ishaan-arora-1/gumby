@@ -80,7 +80,7 @@ export default function StudioPage() {
     prompt: string,
     opts: {
       aspectRatio: '9:16' | '1:1' | '16:9';
-      durationSeconds: 5 | 10;
+      durationSeconds: 5 | 10 | 15;
       attachmentUrls: string[];
     }
   ) => {
@@ -127,8 +127,8 @@ export default function StudioPage() {
       if (genRef.current !== myGen) return;
       // 402 — insufficient credits → pop the buy-credits modal.
       if (e instanceof ApiError && e.status === 402) {
-        const required =
-          payload?.videoDuration && Number(payload.videoDuration) >= 8 ? 100 : 50;
+        const reqDur = Number(payload?.videoDuration) || 0;
+        const required = reqDur >= 13 ? 150 : reqDur >= 8 ? 100 : 50;
         let balance = 0;
         try { balance = (await api.getCreditBalance()).data.balance; } catch {}
         setInsufficient({ required, balance });

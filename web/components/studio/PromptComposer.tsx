@@ -17,7 +17,7 @@ interface Props {
     prompt: string,
     opts: {
       aspectRatio: '9:16' | '1:1' | '16:9';
-      durationSeconds: 5 | 10;
+      durationSeconds: 5 | 10 | 15;
       attachmentUrls: string[];
     }
   ) => void;
@@ -39,7 +39,7 @@ const SUGGESTIONS = [
 export function PromptComposer({ onSubmit, loading }: Props) {
   const [prompt, setPrompt] = useState('');
   const [aspect, setAspect] = useState<'9:16' | '1:1' | '16:9'>('9:16');
-  const [dur, setDur] = useState<5 | 10>(10);
+  const [dur, setDur] = useState<5 | 10 | 15>(10);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [showRightsModal, setShowRightsModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -234,7 +234,7 @@ export function PromptComposer({ onSubmit, loading }: Props) {
                 ))}
               </div>
               <div className="flex bg-elevated rounded-pill p-0.5 text-xs">
-                {([5, 10] as const).map((d) => (
+                {([5, 10, 15] as const).map((d) => (
                   <button
                     key={d}
                     onClick={() => setDur(d)}

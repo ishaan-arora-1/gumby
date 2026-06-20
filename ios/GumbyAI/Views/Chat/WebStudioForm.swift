@@ -15,7 +15,7 @@ struct WebStudioForm: View {
     @FocusState private var promptFocused: Bool
     @FocusState private var scriptFocused: Bool
 
-    private let creditCost: [Int: Int] = [5: 50, 10: 100]
+    private let creditCost: [Int: Int] = [5: 50, 10: 100, 15: 150]
 
     var body: some View {
         VStack(spacing: 16) {
@@ -202,7 +202,7 @@ struct WebStudioForm: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("DURATION").webSectionLabel()
                     HStack(spacing: 0) {
-                        ForEach([5, 10], id: \.self) { d in
+                        ForEach([5, 10, 15], id: \.self) { d in
                             Button {
                                 chatVM.formDuration = d
                             } label: {

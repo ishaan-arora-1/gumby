@@ -5,17 +5,20 @@ import Foundation
 /// when server-side credits are switched on.
 ///
 /// Backend reference (`backend/src/services/credits.js`):
-///   COST_PER_VIDEO = { 5: 50, 10: 100 }
-///   creditsForVideoDuration(seconds): seconds >= 8 ? 100 : 50
+///   COST_PER_VIDEO = { 5: 50, 10: 100, 15: 150 }
+///   creditsForVideoDuration(seconds): seconds >= 13 ? 150 : seconds >= 8 ? 100 : 50
 enum CreditCosts {
-    static let costShortVideo = 50   // ≤ ~7s  → 5s bucket
-    static let costLongVideo = 100   // ≥ 8s   → 10s bucket
+    static let costShortVideo = 50    // ≤ ~7s  → 5s bucket
+    static let costLongVideo = 100    // 8–12s  → 10s bucket
+    static let costExtraVideo = 150   // ≥ 13s  → 15s bucket
 
     /// Credits required to generate a full ad of the given duration.
     /// Only the full-ad ("talking creator") pipeline is charged — silent
     /// creator text-to-video is free on the backend, so we don't charge
     /// for it on the client either.
     static func cost(forSeconds seconds: Int) -> Int {
-        seconds >= 8 ? costLongVideo : costShortVideo
+        if seconds >= 13 { return costExtraVideo }
+        if seconds >= 8 { return costLongVideo }
+        return costShortVideo
     }
 }

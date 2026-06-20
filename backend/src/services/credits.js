@@ -12,6 +12,7 @@ const supabase = require('../config/supabase');
 const COST_PER_VIDEO = {
   5: 50,
   10: 100,
+  15: 150,
 };
 
 /**
@@ -40,7 +41,7 @@ function isEnabled() {
 
 function creditsForVideoDuration(seconds) {
   const n = Number(seconds) || 10;
-  const bucket = n >= 8 ? 10 : 5;
+  const bucket = n >= 13 ? 15 : (n >= 8 ? 10 : 5);
   return COST_PER_VIDEO[bucket];
 }
 
