@@ -462,15 +462,17 @@ struct WebTextEditor: View {
                     .padding(.vertical, 12)
                     .allowsHitTesting(false)
             }
-            TextEditor(text: $text)
-                .scrollContentBackground(.hidden)
-                .frame(minHeight: minHeight)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .font(WebTheme.Font.body(14))
-                .foregroundColor(.white)
-                .tint(.white)
-                .focused(focused)
+            // UITextView-backed (see WebUITextView): SwiftUI's TextEditor lets
+            // typed text go invisible after edits like backspacing. `focus`
+            // bridges the existing @FocusState so the keyboard dismiss and the
+            // focus-driven border highlight below still work.
+            WebUITextView(
+                text: $text,
+                contentInset: UIEdgeInsets(top: 12, left: 16, bottom: 12, right: 16),
+                isScrollEnabled: false,
+                focus: focused
+            )
+            .frame(minHeight: minHeight)
         }
         .background(
             RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous)

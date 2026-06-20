@@ -13,7 +13,6 @@ struct WebPromptComposer: View {
     @EnvironmentObject var chatVM: ChatViewModel
     @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var showRights = false
-    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(spacing: 8) {
@@ -161,18 +160,14 @@ struct WebPromptComposer: View {
     // MARK: - Textarea
 
     private var textArea: some View {
-        // A `TextEditor` (UITextView-backed), NOT `TextField(axis: .vertical)`.
-        // The invisible-typed-text bug was actually caused by the composer
-        // panel's drop-shadow being an *ancestor* of this input (see the
-        // ZStack above, where the shadow now lives on a standalone background
-        // layer instead). Either control works once the shadow is off the
-        // ancestor chain; TextEditor is kept to match the app's other
-        // multiline inputs.
-        //
-        // IMPORTANT: a TextEditor is greedy — it expands to fill whatever
-        // vertical space the parent offers. Use a FIXED height (not minHeight)
-        // so it stays ~3 lines tall and scrolls internally past that, instead
-        // of ballooning to fill the screen.
+        // Backed by `WebUITextView` (a UITextView wrapper), NOT SwiftUI's
+        // `TextEditor`. TextEditor has a rendering bug where typed text goes
+        // invisible after edits like backspacing until the field is
+        // re-selected — it persisted even after the panel drop-shadow was
+        // moved off the text's ancestor, because the bug is intrinsic to
+        // TextEditor. WebUITextView re-pins the text colour every update cycle
+        // so it can never be dropped. Fixed height (70) → ~3 lines, scrolls
+        // internally past that.
         ZStack(alignment: .topLeading) {
             if chatVM.composerPrompt.isEmpty {
                 Text("Describe your product ad. Drop in a product photo too.")
@@ -182,13 +177,8 @@ struct WebPromptComposer: View {
                     .padding(.leading, 5)
                     .allowsHitTesting(false)
             }
-            TextEditor(text: $chatVM.composerPrompt)
-                .scrollContentBackground(.hidden)
+            WebUITextView(text: $chatVM.composerPrompt)
                 .frame(height: 70)
-                .font(WebTheme.Font.body(14))
-                .foregroundStyle(.white)
-                .tint(.white)
-                .focused($focused)
         }
     }
 
