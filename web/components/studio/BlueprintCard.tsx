@@ -8,9 +8,6 @@ interface Props {
   onUse: (b: Blueprint) => void;
 }
 
-const creditsFor = (seconds: number) =>
-  seconds >= 13 ? 150 : seconds >= 8 ? 100 : 50;
-
 /**
  * Gallery card for a blueprint template. Once preview videos are rendered
  * (scripts/generate-blueprint-previews.js) the card autoplays the example
@@ -55,14 +52,10 @@ export function BlueprintCard({ blueprint, onUse }: Props) {
         {blueprint.has_creator ? 'Creator' : 'Product shot'}
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black via-black/75 to-transparent">
+      {/* Name only — the tagline/pricing details live in the modal, so the
+          card stays clean in the mixed grid. */}
+      <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black via-black/70 to-transparent">
         <div className="font-bold text-sm truncate">{blueprint.name}</div>
-        <div className="text-[11px] text-white/55 line-clamp-2 leading-snug mt-0.5">
-          {blueprint.tagline}
-        </div>
-        <div className="mt-1.5 text-[10px] font-semibold text-white/45 uppercase tracking-wider">
-          {blueprint.duration_seconds}s · {creditsFor(blueprint.duration_seconds)} credits
-        </div>
       </div>
 
       <div className="absolute top-2 right-2 px-2.5 py-1 rounded-pill bg-white text-black text-[10px] font-bold uppercase tracking-wider opacity-0 group-hover:opacity-100 transition">

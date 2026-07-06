@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, pollJob, ApiError } from '@/lib/api';
 import type { Blueprint, UGCJob, UGCTemplate } from '@/lib/types';
@@ -89,6 +89,26 @@ export default function StudioPage() {
       useTemplate(JSON.parse(raw) as UGCTemplate);
     } catch {}
   }, []);
+
+  // One mixed gallery: blueprints (one-photo viral formats) and featured
+  // creators shuffled together. The shuffle is memoized on the loaded data
+  // so it stays stable across re-renders — it only reshuffles on a fresh
+  // page load.
+  type GalleryItem =
+    | { kind: 'blueprint'; bp: Blueprint }
+    | { kind: 'creator'; tpl: UGCTemplate };
+  const galleryItems = useMemo<GalleryItem[]>(() => {
+    const items: GalleryItem[] = [
+      ...blueprints.map((bp) => ({ kind: 'blueprint' as const, bp })),
+      ...templates.map((tpl) => ({ kind: 'creator' as const, tpl })),
+    ];
+    // Fisher–Yates
+    for (let i = items.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [items[i], items[j]] = [items[j], items[i]];
+    }
+    return items;
+  }, [blueprints, templates]);
 
   // The composer hands prompt + attachments directly to the studio form.
   // No more /parse-prompt round-trip; the user's free-form prompt is the
@@ -263,55 +283,41 @@ export default function StudioPage() {
             </div>
             <PromptComposer onSubmit={onComposerSubmit} loading={false} />
 
-            {/* Viral templates — the one-photo path. Each card is a locked
-                viral format: drop in a product photo and the exact video in
-                the template gets made for YOUR product. */}
-            {blueprints.length > 0 && (
-              <div className="mt-20 max-w-7xl mx-auto">
-                <div className="flex items-end justify-between mb-5">
-                  <div>
-                    <div className="text-[11px] uppercase tracking-[0.2em] text-white/40 mb-2">
-                      One photo. Done.
-                    </div>
-                    <h3 className="font-display font-bold text-2xl tracking-tight">
-                      Viral templates
-                    </h3>
-                    <p className="text-sm text-white/50 mt-1">
-                      Pick a format, drop your product photo — we make exactly
-                      that video for your product.
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-                  {blueprints.map((b) => (
-                    <BlueprintCard
-                      key={b.id}
-                      blueprint={b}
-                      onUse={setActiveBlueprint}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Featured creators — pick one to start with that creator
-                fixed, or scroll past and just describe your own. */}
+            {/* Templates — blueprints (one-photo viral formats) and featured
+                creators shuffled into one gallery. Blueprint cards open the
+                one-photo modal; creator cards open the preview → studio form. */}
             <div className="mt-20 max-w-7xl mx-auto">
               <div className="flex items-end justify-between mb-5">
                 <div>
                   <div className="text-[11px] uppercase tracking-[0.2em] text-white/40 mb-2">
-                    Or start with a creator
+                    One photo. Done.
                   </div>
                   <h3 className="font-display font-bold text-2xl tracking-tight">
-                    Featured creators
+                    Templates
                   </h3>
+                  <p className="text-sm text-white/50 mt-1">
+                    Pick a template or a creator, drop your product photo, and
+                    we make the video.
+                  </p>
                 </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                {templates.map((t) => (
-                  <TemplateCard key={t.id} template={t} onUse={useTemplate} />
-                ))}
-                {templates.length === 0 &&
+                {galleryItems.map((item) =>
+                  item.kind === 'blueprint' ? (
+                    <BlueprintCard
+                      key={`bp-${item.bp.id}`}
+                      blueprint={item.bp}
+                      onUse={setActiveBlueprint}
+                    />
+                  ) : (
+                    <TemplateCard
+                      key={`tpl-${item.tpl.id}`}
+                      template={item.tpl}
+                      onUse={useTemplate}
+                    />
+                  )
+                )}
+                {galleryItems.length === 0 &&
                   [...Array(10)].map((_, i) => (
                     <div
                       key={i}

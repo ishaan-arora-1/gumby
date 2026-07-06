@@ -231,40 +231,6 @@ const BLUEPRINTS = [
     promptTemplate:
       '{{product}} stands perfectly centered on a glossy reflective pedestal against a seamless warm beige studio backdrop, every detail of the product exactly faithful to the reference image, casting a soft mirror reflection beneath it. The pedestal rotates slowly like a turntable so the product does one graceful full turn, while warm key light and a cool edge light slide across its surfaces, making the label and materials glint. Immaculate premium product photography brought to life. No people, no hands, no text overlays.',
   },
-  {
-    id: 'splash-macro',
-    name: 'Splash Macro',
-    tagline: 'Slow-motion water crown around your product. Pure drama.',
-    format: 'Product only · silent',
-    hasCreator: false,
-    creatorSpeaks: false,
-    captionPreset: null,
-    durationSeconds: 5,
-    aspectRatio: '9:16',
-    accent: ['#0ea5e9', '#022c44'],
-    sortOrder: 11,
-    previewVideoUrl: 'https://zsmwvjrvuucuablyibko.supabase.co/storage/v1/object/sign/ugc-videos/jobs/e53dec0c-f1b0-4858-b08f-5c71ba00d027/video/019d78a0-9ffe-44c8-88fa-c6917fe75f5a.mp4?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9lYTY4NDExZS00OTE3LTQ3NWMtYjk0MS0wODIyMTJiYzhkNTciLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJ1Z2MtdmlkZW9zL2pvYnMvZTUzZGVjMGMtZjFiMC00ODU4LWIwOGYtNWM3MWJhMDBkMDI3L3ZpZGVvLzAxOWQ3OGEwLTlmZmUtNDRjOC04OGZhLWM2OTE3ZmU3NWY1YS5tcDQiLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzgzMzUyODA1LCJleHAiOjE4MTQ4ODg4MDV9.tYL8fOox2DLA3g9wN_OhqVfr01_TrlWxgo7TJq8GRwQ',
-    previewPosterUrl: 'https://zsmwvjrvuucuablyibko.supabase.co/storage/v1/object/sign/ugc-videos/jobs/e53dec0c-f1b0-4858-b08f-5c71ba00d027/image/a6d5bffc-6c22-49b1-be98-147e61887811.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9lYTY4NDExZS00OTE3LTQ3NWMtYjk0MS0wODIyMTJiYzhkNTciLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJ1Z2MtdmlkZW9zL2pvYnMvZTUzZGVjMGMtZjFiMC00ODU4LWIwOGYtNWM3MWJhMDBkMDI3L2ltYWdlL2E2ZDViZmZjLTZjMjItNDliMS1iZTk4LTE0N2U2MTg4NzgxMS5wbmciLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzgzMzUyNjg3LCJleHAiOjE4MTQ4ODg2ODd9.xAgoWz1a85J4ygw-Z7NMdDkczR_UwVFO2gV-GnHGzBE',
-    promptTemplate:
-      '{{product}} stands on a shallow black mirror of water in a dark studio, perfectly faithful to the reference image, back-lit with a cool blue-white glow. Crystal-clear water erupts around it in slow motion — a crown-shaped splash rising and hanging in the air, droplets catching the light like glass beads as they arc past the product and fall back, ripples spreading across the mirrored surface. The product stays crisp, dry-looking and readable at the center of the drama. Ultra slow-motion luxury commercial macro shot. No people, no hands.',
-  },
-  {
-    id: 'neon-drop',
-    name: 'Neon Street Drop',
-    tagline: 'Rain-slick asphalt, neon glow, streetwear hype energy.',
-    format: 'Product only · silent',
-    hasCreator: false,
-    creatorSpeaks: false,
-    captionPreset: null,
-    durationSeconds: 5,
-    aspectRatio: '9:16',
-    accent: ['#ef4444', '#7c3aed'],
-    sortOrder: 12,
-    previewVideoUrl: 'https://zsmwvjrvuucuablyibko.supabase.co/storage/v1/object/sign/ugc-videos/jobs/6951bc15-8b77-4fba-8f3b-d94bafa69583/video/5400cf90-710d-452d-b7da-08cc284cc9d7.mp4?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9lYTY4NDExZS00OTE3LTQ3NWMtYjk0MS0wODIyMTJiYzhkNTciLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJ1Z2MtdmlkZW9zL2pvYnMvNjk1MWJjMTUtOGI3Ny00ZmJhLThmM2ItZDk0YmFmYTY5NTgzL3ZpZGVvLzU0MDBjZjkwLTcxMGQtNDUyZC1iN2RhLTA4Y2MyODRjYzlkNy5tcDQiLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzgzMzUyOTc5LCJleHAiOjE4MTQ4ODg5Nzl9.Nml07xGtwZZltnv2MhIZVRMfMvpsU8F-37GNRQ9lCw0',
-    previewPosterUrl: 'https://zsmwvjrvuucuablyibko.supabase.co/storage/v1/object/sign/ugc-videos/jobs/6951bc15-8b77-4fba-8f3b-d94bafa69583/image/93eae2ca-d3d5-4f1d-ba50-611f54282b67.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9lYTY4NDExZS00OTE3LTQ3NWMtYjk0MS0wODIyMTJiYzhkNTciLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJ1Z2MtdmlkZW9zL2pvYnMvNjk1MWJjMTUtOGI3Ny00ZmJhLThmM2ItZDk0YmFmYTY5NTgzL2ltYWdlLzkzZWFlMmNhLWQzZDUtNGYxZC1iYTUwLTYxMWY1NDI4MmI2Ny5wbmciLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzgzMzUyODY2LCJleHAiOjE4MTQ4ODg4NjZ9.fEvyXNVTmAK5ltPVqbmea8_ux2M9NBabFOtGdPSJ6xo',
-    promptTemplate:
-      '{{product}} sits on wet asphalt at night in a narrow city alley, exactly faithful to the reference image, surrounded by puddles reflecting magenta and cyan neon signs glowing out of focus behind it. Light rain falls, fine droplets beading and glinting on the ground around the product, steam drifting through the neon haze. A slow, low orbit around the product as the neon reflections slide across its surface and a passing car headlight sweeps a warm flare over it. Moody streetwear-drop hype film. No people, no hands, no readable signage text.',
-  },
 
   // ------------------------------------------------------------------
   // WAVE 2 — 5-second formats, one vertical each. Cheaper (50 credits),
@@ -290,27 +256,6 @@ const BLUEPRINTS = [
       'Five-second flex: one cocky hook about the product being the best part of the fit, then an instant CTA. Max three short sentences, streetwear energy.',
     fallbackScript:
       'The whole fit works because of this. {{product}}, no debate. Go get it.',
-  },
-  {
-    id: 'gym-flex',
-    name: 'Gym Check-In',
-    tagline: 'Mid-workout shoutout — sweat, energy, your product in hand.',
-    format: 'Creator · talking',
-    hasCreator: true,
-    creatorSpeaks: true,
-    captionPreset: 'bold',
-    durationSeconds: 5,
-    aspectRatio: '9:16',
-    accent: ['#22c55e', '#0f766e'],
-    sortOrder: 14,
-    previewVideoUrl: 'https://zsmwvjrvuucuablyibko.supabase.co/storage/v1/object/sign/ugc-videos/jobs/c9d1e968-e834-4317-9d00-3862b1399da2/video/73a20ec2-1df9-4a87-a568-a9ddd63a4c41.mp4?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9lYTY4NDExZS00OTE3LTQ3NWMtYjk0MS0wODIyMTJiYzhkNTciLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJ1Z2MtdmlkZW9zL2pvYnMvYzlkMWU5NjgtZTgzNC00MzE3LTlkMDAtMzg2MmIxMzk5ZGEyL3ZpZGVvLzczYTIwZWMyLTFkZjktNGE4Ny1hNTY4LWE5ZGRkNjNhNGM0MS5tcDQiLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzgzMzUzNzM0LCJleHAiOjE4MTQ4ODk3MzR9.qArIASXqEi4pNNb887AW3gSlCXelNdBgbdCtO-NoMgI',
-    previewPosterUrl: 'https://zsmwvjrvuucuablyibko.supabase.co/storage/v1/object/sign/ugc-videos/jobs/c9d1e968-e834-4317-9d00-3862b1399da2/image/c99dd262-ee3f-4123-aa5b-4f3f83cf45d7.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9lYTY4NDExZS00OTE3LTQ3NWMtYjk0MS0wODIyMTJiYzhkNTciLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJ1Z2MtdmlkZW9zL2pvYnMvYzlkMWU5NjgtZTgzNC00MzE3LTlkMDAtMzg2MmIxMzk5ZGEyL2ltYWdlL2M5OWRkMjYyLWVlM2YtNDEyMy1hYTViLTRmM2Y4M2NmNDVkNy5wbmciLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzgzMzUzNTI0LCJleHAiOjE4MTQ4ODk1MjR9.m7SpA6kQKUxcjwyR1NtjxdUx9vG9A-YTAfhajv2MdmA',
-    promptTemplate:
-      'An athletic man in his mid 20s in a sleeveless training shirt sits on a flat bench in a modern gym between sets, slightly out of breath, dumbbells racked behind him under cool bright gym lighting, filmed vertically from arm length in one continuous take. He lifts {{product}} into clear view next to his face, taps its side twice, then talks fast and matter-of-fact with a half-smile, still catching his breath, and finishes with a quick approving nod. Real mid-workout energy, sweat sheen, handheld phone realism.',
-    scriptVibe:
-      'Between-sets shoutout: breathy, quick, zero fluff. One line on why it is in the gym bag every day, then a blunt CTA. Max three short sentences.',
-    fallbackScript:
-      'Every single session, this comes with me. {{product}} just hits different. Get you one.',
   },
   {
     id: 'desk-setup',
