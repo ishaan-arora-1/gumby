@@ -23,6 +23,33 @@ final class UGCService {
         return data
     }
 
+    // MARK: - Blueprints (one-tap viral templates)
+
+    func fetchBlueprints() async throws -> [Blueprint] {
+        let resp: APIResponse<[Blueprint]> = try await api.get(path: "/ugc/blueprints")
+        return resp.data ?? []
+    }
+
+    /// One call does everything — the blueprint locks scene/motion/captions
+    /// and the server writes the script in the blueprint's voice. Mirrors
+    /// web's `api.generateFromBlueprint()` → `POST /ugc/blueprints/:id/generate`.
+    func generateFromBlueprint(
+        id: String,
+        productImageUrl: String,
+        productName: String?,
+        productDescription: String?
+    ) async throws -> UGCJob {
+        var body: [String: Any] = ["productImageUrl": productImageUrl]
+        if let n = productName, !n.isEmpty { body["productName"] = n }
+        if let d = productDescription, !d.isEmpty { body["productDescription"] = d }
+        let resp: APIResponse<UGCJob> = try await api.post(
+            path: "/ugc/blueprints/\(id)/generate",
+            body: body
+        )
+        guard let job = resp.data else { throw APIError.noData }
+        return job
+    }
+
     // MARK: - AI script (unified)
 
     /// Draft a script from the free-form prompt — mirrors web StudioForm's

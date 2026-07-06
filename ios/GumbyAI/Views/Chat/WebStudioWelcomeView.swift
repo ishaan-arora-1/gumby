@@ -72,6 +72,12 @@ struct WebStudioWelcomeView: View {
                 }
             )
         }
+        // One-tap blueprint sheet — pick a viral template, drop one product
+        // photo, generate. Mirrors web's BlueprintModal on /studio.
+        .sheet(item: $chatVM.activeBlueprint) { bp in
+            WebBlueprintModal(blueprint: bp)
+                .environmentObject(chatVM)
+        }
     }
 
     // MARK: - Scrollable content
@@ -194,6 +200,9 @@ struct WebStudioWelcomeView: View {
 
     private var templatesSection: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Viral templates first — the one-photo path is the pitch.
+            blueprintsSection
+
             Text("Or start with a creator")
                 .webSectionLabel()
                 .padding(.bottom, 6)
@@ -229,6 +238,53 @@ struct WebStudioWelcomeView: View {
                         // lets the user see the looping creator clip
                         // before committing.
                         previewTemplate = tpl
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Viral templates (blueprints)
+
+    @ViewBuilder
+    private var blueprintsSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("One photo. Done.")
+                .webSectionLabel()
+                .padding(.bottom, 6)
+
+            Text("Viral templates")
+                .font(WebTheme.Font.display(18, weight: .bold))
+                .foregroundColor(.white)
+                .tracking(-0.2)
+                .padding(.bottom, 4)
+
+            Text("Pick a format, drop your product photo — we make exactly that video for your product.")
+                .font(WebTheme.Font.body(12))
+                .foregroundColor(.white.opacity(0.5))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 14)
+
+            blueprintsGrid
+                .task { await chatVM.ensureBlueprintsLoaded() }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, 26)
+    }
+
+    @ViewBuilder
+    private var blueprintsGrid: some View {
+        let columns = [
+            GridItem(.flexible(), spacing: 8),
+            GridItem(.flexible(), spacing: 8),
+        ]
+        LazyVGrid(columns: columns, spacing: 8) {
+            if chatVM.blueprints.isEmpty {
+                ForEach(0..<4, id: \.self) { _ in skeletonCard }
+            } else {
+                ForEach(chatVM.blueprints) { bp in
+                    WebBlueprintCard(blueprint: bp) {
+                        chatVM.activeBlueprint = bp
                     }
                 }
             }

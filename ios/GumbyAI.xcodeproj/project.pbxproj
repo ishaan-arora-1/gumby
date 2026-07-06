@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00C5CD74110C2DB791C30305 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7BE904952BED650C8385B045 /* GoogleSignInSwift */; };
+		061C252D6B74997F1B301793 /* WebBlueprintCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C544B865BE0E77A9C049666 /* WebBlueprintCard.swift */; };
 		0690B9A282E594510FB22B7E /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CC4E60603CCD7ADF57B3E5 /* PaywallView.swift */; };
 		0B1C4B2B43CE5A24BDE88B06 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 1907199DF46B6F0E10978C8F /* GoogleSignIn */; };
 		0B8E15A54D83013FDEC17361 /* GeneratingProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 054A0B68AE7126D640E1816B /* GeneratingProgressView.swift */; };
@@ -42,6 +43,7 @@
 		5FB6ECD91382ECA0AEAE8B99 /* CreditsBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3DC13DF6B5426494220BD8D /* CreditsBackend.swift */; };
 		66610F10D4458EE409DA93F1 /* WebTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E77E41A23BA3AC29F34A71B5 /* WebTheme.swift */; };
 		6B8087D494DFBD72C153FAA0 /* UGCView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4531B869782BEAE63FD9391B /* UGCView.swift */; };
+		6C8467E4E0821C90869E2017 /* Blueprint.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE91D9FBFEA87F073AFF030B /* Blueprint.swift */; };
 		6D8DC7DE00FE54369B8A6BB6 /* LibrarySheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9FC0267D1F94F9EA78F407 /* LibrarySheetView.swift */; };
 		6FC25C9D4C83B6559D8EA263 /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = 571EC0C3971652212523B966 /* MessageBubble.swift */; };
 		73CBBF6C1388BEB0B050757A /* QuestionsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11B30E1041C4EF37EA31C37 /* QuestionsCard.swift */; };
@@ -81,6 +83,7 @@
 		C2ED662E7F0EAB7D08270B61 /* MoodBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBEF17698BEFA3AC4AAD357A /* MoodBoard.swift */; };
 		C314E1E99CBF292BBD15C1CD /* GeneratedImagesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AAE9C2588BE8C217586CEB1 /* GeneratedImagesStore.swift */; };
 		C37418BE90898A763B38DEB8 /* Inter-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C315094353468AE658194B67 /* Inter-Bold.ttf */; };
+		C7D6208CECAC08D6BCA212C0 /* WebBlueprintModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3155AD14BA5202275EDA1B4 /* WebBlueprintModal.swift */; };
 		C889F158256425EE5E9EE871 /* CaptionPreviewTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 180D64A0848ED160BB9EB159 /* CaptionPreviewTile.swift */; };
 		CB1E29F484C915E0CE4F8858 /* GoogleSignInService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E47E1A6D89D3FD31703C3948 /* GoogleSignInService.swift */; };
 		CF0826A194E22A2802BEFE89 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CD9275348378EB0E86328112 /* Assets.xcassets */; };
@@ -151,6 +154,7 @@
 		8BB5E0CE2B0B49CD3A450E1B /* ChatMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMode.swift; sourceTree = "<group>"; };
 		8E9FC0267D1F94F9EA78F407 /* LibrarySheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySheetView.swift; sourceTree = "<group>"; };
 		959DB453AB2603D0492A7177 /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
+		9C544B865BE0E77A9C049666 /* WebBlueprintCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebBlueprintCard.swift; sourceTree = "<group>"; };
 		A185C3375CD6065433434E3F /* UGCJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCJob.swift; sourceTree = "<group>"; };
 		A71B39D15E626999115943D9 /* CreditLedgerEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditLedgerEntry.swift; sourceTree = "<group>"; };
 		ABF6C8535B2DF52CF48A523E /* Anton-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Anton-Regular.ttf"; sourceTree = "<group>"; };
@@ -162,6 +166,7 @@
 		C09339B675B7600AEC3CDAFC /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
 		C0A4AB37C72BACEF26BABD1B /* GumbyAI.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GumbyAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C315094353468AE658194B67 /* Inter-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Inter-Bold.ttf"; sourceTree = "<group>"; };
+		C3155AD14BA5202275EDA1B4 /* WebBlueprintModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebBlueprintModal.swift; sourceTree = "<group>"; };
 		C56959688962B981A78D419E /* Inter-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Inter-SemiBold.ttf"; sourceTree = "<group>"; };
 		C61D9BF666BFF21E44438827 /* UGCTemplatesFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCTemplatesFeed.swift; sourceTree = "<group>"; };
 		CCE3A95ED2B0F4E6DCC8FD60 /* InstrumentSerif-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "InstrumentSerif-Regular.ttf"; sourceTree = "<group>"; };
@@ -183,6 +188,7 @@
 		F6ACAB05A4A7BCDD389879D2 /* PostsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostsView.swift; sourceTree = "<group>"; };
 		F74D46DF63978BF642F2075A /* WebButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebButton.swift; sourceTree = "<group>"; };
 		FBEF17698BEFA3AC4AAD357A /* MoodBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodBoard.swift; sourceTree = "<group>"; };
+		FE91D9FBFEA87F073AFF030B /* Blueprint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Blueprint.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -218,6 +224,7 @@
 			isa = PBXGroup;
 			children = (
 				139813E6321389D7719304EB /* RightsConfirmModal.swift */,
+				9C544B865BE0E77A9C049666 /* WebBlueprintCard.swift */,
 				F74D46DF63978BF642F2075A /* WebButton.swift */,
 				141493C2D32EDF50AC2CE95D /* WebPill.swift */,
 				EDCEFC6870938CE2C182A33B /* WebPromptComposer.swift */,
@@ -330,6 +337,7 @@
 			isa = PBXGroup;
 			children = (
 				5AC9B477DDC5B01DCFB15CC7 /* APIResponse.swift */,
+				FE91D9FBFEA87F073AFF030B /* Blueprint.swift */,
 				440E632218A146BB3B4B6632 /* CaptionPreset.swift */,
 				8BB5E0CE2B0B49CD3A450E1B /* ChatMode.swift */,
 				3114C00A186FD87DB2F25482 /* Conversation.swift */,
@@ -411,6 +419,7 @@
 			isa = PBXGroup;
 			children = (
 				440E91AFA494511C85FDD620 /* ChatView.swift */,
+				C3155AD14BA5202275EDA1B4 /* WebBlueprintModal.swift */,
 				E21D73C185006FD55F36178E /* WebStudioForm.swift */,
 				11E639FD23DCB1192B2CE3B5 /* WebStudioWelcomeView.swift */,
 			);
@@ -541,6 +550,7 @@
 				418E13255C25F0C3A925D087 /* APIService.swift in Sources */,
 				2B9F9B448A70F7800D9AD75B /* AuthService.swift in Sources */,
 				A29E4E60DC1A879A4A25ED70 /* AuthView.swift in Sources */,
+				6C8467E4E0821C90869E2017 /* Blueprint.swift in Sources */,
 				B97863B1D56B1311CEC436FB /* CachedAsyncImage.swift in Sources */,
 				B61F75B379A2D999A03D2672 /* CalendarView.swift in Sources */,
 				242C00803187219F86146340 /* CalendarViewModel.swift in Sources */,
@@ -603,6 +613,8 @@
 				1044B71DD818180882DCA91F /* UGCViewModel.swift in Sources */,
 				BCC22CB127474C7899DAF1C8 /* User.swift in Sources */,
 				1C760142EE279CE84D7CCD23 /* VideoPreloader.swift in Sources */,
+				061C252D6B74997F1B301793 /* WebBlueprintCard.swift in Sources */,
+				C7D6208CECAC08D6BCA212C0 /* WebBlueprintModal.swift in Sources */,
 				0CC11114B7186892E3BC8E8D /* WebButton.swift in Sources */,
 				4187CA81F6F8B23BD3BAFEDC /* WebPill.swift in Sources */,
 				A1D8CED01815955BBF661EEE /* WebPromptComposer.swift in Sources */,

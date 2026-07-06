@@ -52,6 +52,14 @@ class ChatViewModel: ObservableObject {
     @Published var isLoadingTemplates: Bool = false
     @Published var templatesError: String?
 
+    // MARK: - Blueprints (one-tap viral templates)
+
+    @Published var blueprints: [Blueprint] = []
+    /// Non-nil while the one-tap blueprint sheet is up (drives `.sheet(item:)`).
+    @Published var activeBlueprint: Blueprint?
+    /// Error surfaced inside the blueprint sheet (generation failures).
+    @Published var blueprintError: String?
+
     // MARK: - Studio form (unified)
 
     /// Fixed creator image (set when arriving from a template / "use
@@ -125,6 +133,78 @@ class ChatViewModel: ObservableObject {
     func ensureTemplatesLoaded() async {
         guard templates.isEmpty else { return }
         await loadTemplates(force: true)
+    }
+
+    func ensureBlueprintsLoaded() async {
+        guard blueprints.isEmpty else { return }
+        do {
+            let fetched = try await service.fetchBlueprints()
+            self.blueprints = fetched
+            VideoPreloader.shared.preload(
+                urlStrings: fetched.compactMap { $0.previewVideoURL }
+            )
+        } catch {
+            // Non-fatal — the gallery section simply doesn't render.
+        }
+    }
+
+    // MARK: - Blueprint generation (one-tap viral templates)
+
+    /// Fires `POST /ugc/blueprints/:id/generate` and drops into the exact
+    /// same generating → done screens as the studio form. The product image
+    /// is already uploaded by the sheet (via `/ugc/upload-attachment`, so the
+    /// moderation gate ran); everything else is locked by the blueprint.
+    /// Mirrors web's `onBlueprintStarted`.
+    func startBlueprintGeneration(
+        _ blueprint: Blueprint,
+        productImageUrl: String,
+        productName: String,
+        productDescription: String
+    ) {
+        guard !isGenerating else { return }
+
+        // ---- Credit preflight (same policy as the studio form) ----
+        let duration = blueprint.durationSeconds
+        let requiredCredits = credits?.cost(forSeconds: duration) ?? 0
+        if let credits, !credits.hasSufficient(forSeconds: duration) {
+            let shortfall = max(0, requiredCredits - credits.balance)
+            activeBlueprint = nil
+            presentPaywall(
+                context: "This video costs \(requiredCredits) credits — you need \(shortfall) more."
+            )
+            return
+        }
+
+        isGenerating = true
+        blueprintError = nil
+        Task {
+            do {
+                let job = try await service.generateFromBlueprint(
+                    id: blueprint.id,
+                    productImageUrl: productImageUrl,
+                    productName: productName.trimmingCharacters(in: .whitespacesAndNewlines),
+                    productDescription: productDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                if let credits, requiredCredits > 0 {
+                    try? await credits.spend(amount: requiredCredits, jobID: job.id)
+                }
+                self.activeBlueprint = nil
+                self.activeJob = job
+                self.isGenerating = false
+                self.advance(to: .generatingAd)
+                self.startPolling(jobId: job.id, duration: duration)
+            } catch {
+                self.isGenerating = false
+                if case APIError.insufficientCredits(_, let required) = error {
+                    let need = required ?? requiredCredits
+                    self.activeBlueprint = nil
+                    self.presentPaywall(context: "This video costs \(need) credits.")
+                } else {
+                    // Leave the sheet up; it surfaces the error inline.
+                    self.blueprintError = error.localizedDescription
+                }
+            }
+        }
     }
 
     // MARK: - Navigation
