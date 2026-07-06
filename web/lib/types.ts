@@ -1,3 +1,21 @@
+// Curated "viral format" blueprint — a locked prompt recipe where the user
+// only supplies a product photo. Display metadata only; the prompt recipes
+// live server-side.
+export interface Blueprint {
+  id: string;
+  name: string;
+  tagline: string;
+  format: string;
+  has_creator: boolean;
+  creator_speaks: boolean;
+  duration_seconds: number;
+  aspect_ratio: string;
+  accent: [string, string];
+  sort_order: number;
+  preview_video_url: string | null;
+  preview_poster_url: string | null;
+}
+
 export interface UGCTemplate {
   id: string;
   name: string;

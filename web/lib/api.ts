@@ -193,6 +193,27 @@ export const api = {
   getTemplate: (id: string) =>
     request<{ success: boolean; data: any }>(`/ugc/templates/${id}`),
 
+  // ---- Blueprint templates (one-tap viral formats) ----
+  listBlueprints: () =>
+    request<{ success: boolean; data: import('./types').Blueprint[] }>(
+      '/ugc/blueprints'
+    ),
+  // One call does everything: the blueprint locks the scene/motion/captions,
+  // the server writes the script in the blueprint's voice. Only the product
+  // photo is required.
+  generateFromBlueprint: (
+    id: string,
+    body: {
+      productImageUrl: string;
+      productName?: string;
+      productDescription?: string;
+    }
+  ) =>
+    request<{ success: boolean; data: any }>(`/ugc/blueprints/${id}/generate`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   // ---- UGC Script / Prompt ----
   generateScript: (body: {
     productName: string;

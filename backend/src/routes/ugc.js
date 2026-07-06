@@ -10,6 +10,7 @@ const { runUGCJob } = require('../services/ugcPipeline');
 const { runCreatorJob } = require('../services/creatorPipeline');
 const credits = require('../services/credits');
 const moderation = require('../services/moderation');
+const blueprints = require('../services/blueprints');
 
 // ---------- Public ----------
 // Public endpoint for the marketing site — returns a small set of active
@@ -42,6 +43,15 @@ router.get('/featured', async (req, res) => {
       res.json({ success: true, data: [] });
     }
   }
+});
+
+// Blueprint catalog — the curated "viral format" templates where the user
+// only supplies a product photo. Public (display metadata only; the prompt
+// recipes never leave the server) so the marketing site can render the
+// gallery too.
+router.get('/blueprints', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=60');
+  res.json({ success: true, data: blueprints.publicBlueprints() });
 });
 
 router.use(authMiddleware);
@@ -608,6 +618,172 @@ router.post('/generate', aiLimiter, async (req, res) => {
     return res.status(202).json({ success: true, data: inserted });
   } catch (err) {
     console.error('UGC generate error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to start generation' });
+  }
+});
+
+// ---------- Blueprint generation (one-tap viral templates) ----------
+//
+// The user picks a blueprint and uploads ONE product photo; everything
+// else — scene, casting, motion, pacing, captions, duration — is locked in
+// by the blueprint recipe. This compiles down to the exact same job shape
+// /generate produces, so the unified pipeline runs untouched: the product
+// image goes in as a pre-tagged `product`-role attachment (pixel-faithful
+// preservation) and the blueprint's compiled prompt drives both the Nano
+// Banana seed still and the Kling motion pass.
+
+/**
+ * Writes the spoken script for a talking blueprint, in that blueprint's
+ * specific voice (street-interview answer ≠ podcast take ≠ 1am bedroom
+ * rave). Falls back to the blueprint's canned script on any OpenAI failure
+ * so a flaky script call never blocks a paid generation.
+ */
+async function writeBlueprintScript(blueprint, { productName, productDescription }) {
+  const targetSeconds = blueprint.durationSeconds;
+  // 5s clips need a faster cadence (same rationale as /ugc/script): at
+  // 2.2 wps a 5s script is ~11 words — too thin for hook + CTA. Talking
+  // 5s blueprints get ~2.9 wps so the beat structure survives.
+  const wps = targetSeconds <= 5 ? 2.9 : 2.2;
+  const wpsMax = targetSeconds <= 5 ? 3.2 : 2.5;
+  const wordTarget = Math.round(targetSeconds * wps);
+  const wordMax = Math.round(targetSeconds * wpsMax);
+  const productLine = [
+    productName ? `Product: ${productName}.` : '',
+    productDescription ? `What it is / selling points: ${productDescription.slice(0, 400)}` : '',
+  ].filter(Boolean).join(' ');
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.9,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You write the exact words a person says in a short vertical UGC video. Output ONE script only — plain text, no quotes, no stage directions, no emojis, no hashtags.',
+            `FORMAT / VOICE (follow this exactly): ${blueprint.scriptVibe}`,
+            `LENGTH: aim for ${wordTarget} words, never more than ${wordMax}. Complete sentences only — the last sentence is a soft call to action ("get it", "trust me", "you need this") and it MUST be present. Never corporate phrases like "shop now" or "link in bio".`,
+            'The script must be unmistakably about the specific product described — pull a concrete detail from it. If only a product photo exists (no name), speak about it naturally ("this", "it") without inventing a brand name.',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: productLine || 'No product name given — the viewer sees the product on screen; refer to it naturally as "this".',
+        },
+      ],
+    });
+    const script = (completion.choices?.[0]?.message?.content || '').trim();
+    if (script) return trimScriptToWordBudget(script, wordMax);
+  } catch (err) {
+    console.warn(`[blueprint] script generation failed, using fallback: ${err?.message}`);
+  }
+  return blueprints.compileFallbackScript(blueprint, productName);
+}
+
+router.post('/blueprints/:id/generate', aiLimiter, async (req, res) => {
+  const userId = req.user.id;
+  const blueprint = blueprints.getBlueprint(req.params.id);
+  if (!blueprint) {
+    return res.status(404).json({ success: false, error: 'Template not found' });
+  }
+
+  const { productImageUrl, productName, productDescription, script } = req.body || {};
+  const productImageUrlSafe =
+    typeof productImageUrl === 'string' && /^https?:\/\//i.test(productImageUrl.trim())
+      ? productImageUrl.trim()
+      : null;
+  if (!productImageUrlSafe) {
+    return res.status(400).json({
+      success: false,
+      error: 'Add a photo of your product — that is all this template needs.',
+    });
+  }
+  const productNameSafe = typeof productName === 'string' ? productName.trim().slice(0, 120) : '';
+  const productDescSafe = typeof productDescription === 'string' ? productDescription.trim().slice(0, 500) : '';
+
+  try {
+    // ---- Credit preflight (same policy as /generate: check now, debit
+    // only after Kling succeeds) ----
+    const enforceCredits = credits.isEnabled();
+    let requiredCredits = 0;
+    if (enforceCredits) {
+      requiredCredits = credits.creditsForVideoDuration(blueprint.durationSeconds);
+      const currentBalance = await credits.getBalance(userId);
+      if (currentBalance < requiredCredits) {
+        return res.status(402).json({
+          success: false,
+          error: 'insufficient_credits',
+          data: {
+            balance: currentBalance,
+            required: requiredCredits,
+            shortfall: requiredCredits - currentBalance,
+          },
+        });
+      }
+    }
+
+    // ---- Script (talking blueprints only) ----
+    let finalScript = '';
+    if (blueprint.creatorSpeaks) {
+      finalScript = typeof script === 'string' && script.trim()
+        ? script.trim().slice(0, 1000)
+        : await writeBlueprintScript(blueprint, {
+            productName: productNameSafe,
+            productDescription: productDescSafe,
+          });
+    }
+
+    const prompt = blueprints.compilePrompt(blueprint, {
+      productName: productNameSafe,
+      productDescription: productDescSafe,
+    });
+
+    const job = {
+      id: uuidv4(),
+      user_id: userId,
+      template_id: null,
+      product_name: productNameSafe,
+      product_image_url: productImageUrlSafe,
+      product_description: productDescSafe,
+      inspiration_image_url: null,
+      script: finalScript,
+      status: 'queued',
+      progress: 0,
+      video_duration: blueprint.durationSeconds,
+      template_snapshot: {
+        blueprint_id: blueprint.id,
+        blueprint_name: blueprint.name,
+        prompt,
+        // Pre-tagged product role — skips the classifier and guarantees the
+        // pixel-faithful product directive in the Nano Banana seed step.
+        attachments: [{ url: productImageUrlSafe, role: 'product' }],
+        aspect_ratio: blueprint.aspectRatio,
+        creator_speaks: blueprint.creatorSpeaks,
+        captions_enabled: blueprint.creatorSpeaks && !!blueprint.captionPreset,
+        caption_preset: blueprint.captionPreset,
+      },
+    };
+
+    console.log(
+      `[ugc:new] user=${userId.slice(0, 8)} mode=blueprint:${blueprint.id} ` +
+      `dur=${blueprint.durationSeconds}s speaks=${blueprint.creatorSpeaks} ` +
+      `credits=${enforceCredits ? requiredCredits : 'off'}`
+    );
+
+    const { data: inserted, error: insErr } = await supabase
+      .from('ugc_jobs')
+      .insert(job)
+      .select()
+      .single();
+    if (insErr) throw insErr;
+
+    setImmediate(() => {
+      runUGCJob(inserted, { creditCost: enforceCredits ? requiredCredits : 0 })
+        .catch((e) => console.error('Background runUGCJob (blueprint) error:', e));
+    });
+
+    return res.status(202).json({ success: true, data: inserted });
+  } catch (err) {
+    console.error('UGC blueprint generate error:', err);
     return res.status(500).json({ success: false, error: 'Failed to start generation' });
   }
 });

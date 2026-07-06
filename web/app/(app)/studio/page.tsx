@@ -2,9 +2,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, pollJob, ApiError } from '@/lib/api';
-import type { UGCJob, UGCTemplate } from '@/lib/types';
+import type { Blueprint, UGCJob, UGCTemplate } from '@/lib/types';
 import { PromptComposer } from '@/components/studio/PromptComposer';
 import { TemplateCard } from '@/components/studio/TemplateCard';
+import { BlueprintCard } from '@/components/studio/BlueprintCard';
+import { BlueprintModal } from '@/components/studio/BlueprintModal';
 import { StudioForm, type StudioPrefill } from '@/components/studio/StudioForm';
 import { GeneratingCard } from '@/components/studio/GeneratingCard';
 import { VideoResult } from '@/components/studio/VideoResult';
@@ -18,6 +20,8 @@ export default function StudioPage() {
   const [step, setStep] = useState<Step>('welcome');
   const [prefill, setPrefill] = useState<StudioPrefill | null>(null);
   const [templates, setTemplates] = useState<UGCTemplate[]>([]);
+  const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
+  const [activeBlueprint, setActiveBlueprint] = useState<Blueprint | null>(null);
   const [adJob, setAdJob] = useState<UGCJob | null>(null);
   const [error, setError] = useState<string>('');
   const [insufficient, setInsufficient] = useState<{ required: number; balance: number } | null>(null);
@@ -57,6 +61,19 @@ export default function StudioPage() {
   // screen (same catalog as /templates).
   useEffect(() => {
     api.listTemplates(1).then((r) => setTemplates(r.data)).catch(() => {});
+    api.listBlueprints().then((r) => setBlueprints(r.data)).catch(() => {});
+  }, []);
+
+  // Hand-off from /templates' blueprint gallery — same sessionStorage
+  // pattern as pendingTemplate below: open the picked blueprint's modal
+  // right away.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('blinkugc:pendingBlueprint');
+      if (!raw) return;
+      sessionStorage.removeItem('blinkugc:pendingBlueprint');
+      setActiveBlueprint(JSON.parse(raw) as Blueprint);
+    } catch {}
   }, []);
 
   // Hand-off from /templates and /history's "Use creator" buttons. Both
@@ -96,6 +113,36 @@ export default function StudioPage() {
       duration: opts.durationSeconds,
     });
     setStep('studio');
+  };
+
+  // A blueprint generation was accepted (202) by the backend — the modal
+  // already did the POST, so this just owns the polling + step transitions,
+  // landing on the exact same generating/done screens as the studio form.
+  const onBlueprintStarted = async (data: UGCJob) => {
+    setActiveBlueprint(null);
+    setError('');
+    const myGen = ++genRef.current;
+    setAdJob(data);
+    setStep('generating_ad');
+    window.dispatchEvent(new Event('blinkugc:credits-changed'));
+    window.dispatchEvent(new Event('blinkugc:job-list-changed'));
+    try {
+      const final = await pollJob(
+        () => api.getJob(data.id),
+        (j) => {
+          if (genRef.current === myGen) setAdJob(j as UGCJob);
+        }
+      );
+      if (genRef.current !== myGen) return;
+      setAdJob(final as UGCJob);
+      setStep('ad_done');
+      window.dispatchEvent(new Event('blinkugc:job-list-changed'));
+      window.dispatchEvent(new Event('blinkugc:credits-changed'));
+    } catch (e: any) {
+      if (genRef.current !== myGen) return;
+      setError(e.message || 'Ad generation failed');
+      setStep('welcome');
+    }
   };
 
   const onGenerateAd = async (payload: any) => {
@@ -167,6 +214,21 @@ export default function StudioPage() {
         balance={insufficient?.balance ?? 0}
         onClose={() => setInsufficient(null)}
       />
+      {activeBlueprint && (
+        <BlueprintModal
+          blueprint={activeBlueprint}
+          onClose={() => setActiveBlueprint(null)}
+          onStarted={onBlueprintStarted}
+          onInsufficientCredits={async (required) => {
+            setActiveBlueprint(null);
+            let balance = 0;
+            try {
+              balance = (await api.getCreditBalance()).data.balance;
+            } catch {}
+            setInsufficient({ required, balance });
+          }}
+        />
+      )}
       {step !== 'welcome' && (
         <div className="px-6 lg:px-10 pt-10 pb-6 flex items-center justify-end">
           <Button variant="ghost" size="sm" onClick={reset}>
@@ -200,6 +262,37 @@ export default function StudioPage() {
               </p>
             </div>
             <PromptComposer onSubmit={onComposerSubmit} loading={false} />
+
+            {/* Viral templates — the one-photo path. Each card is a locked
+                viral format: drop in a product photo and the exact video in
+                the template gets made for YOUR product. */}
+            {blueprints.length > 0 && (
+              <div className="mt-20 max-w-7xl mx-auto">
+                <div className="flex items-end justify-between mb-5">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.2em] text-white/40 mb-2">
+                      One photo. Done.
+                    </div>
+                    <h3 className="font-display font-bold text-2xl tracking-tight">
+                      Viral templates
+                    </h3>
+                    <p className="text-sm text-white/50 mt-1">
+                      Pick a format, drop your product photo — we make exactly
+                      that video for your product.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                  {blueprints.map((b) => (
+                    <BlueprintCard
+                      key={b.id}
+                      blueprint={b}
+                      onUse={setActiveBlueprint}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Featured creators — pick one to start with that creator
                 fixed, or scroll past and just describe your own. */}
