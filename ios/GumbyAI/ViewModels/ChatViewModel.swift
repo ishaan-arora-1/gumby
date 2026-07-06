@@ -60,6 +60,42 @@ class ChatViewModel: ObservableObject {
     /// Error surfaced inside the blueprint sheet (generation failures).
     @Published var blueprintError: String?
 
+    /// One mixed gallery item — a one-photo blueprint or a featured creator.
+    enum StudioGalleryItem: Identifiable {
+        case blueprint(Blueprint)
+        case creator(UGCTemplate)
+
+        var id: String {
+            switch self {
+            case .blueprint(let bp): return "bp-\(bp.id)"
+            case .creator(let tpl): return "tpl-\(tpl.id)"
+            }
+        }
+
+        /// djb2 over the raw id — identical to the hash the website uses, so
+        /// web and iOS render the same fixed "shuffled-looking" order.
+        var mixKey: UInt32 {
+            let raw: String
+            switch self {
+            case .blueprint(let bp): raw = bp.id
+            case .creator(let tpl): raw = tpl.id
+            }
+            var h: Int32 = 5381
+            for b in raw.utf8 {
+                h = (h << 5) &+ h &+ Int32(b)
+            }
+            return UInt32(bitPattern: h)
+        }
+    }
+
+    /// Blueprints + featured creators woven together in a FIXED order
+    /// (hash-sorted, mirrors web's `galleryItems` on /studio).
+    var studioGallery: [StudioGalleryItem] {
+        let items = blueprints.map(StudioGalleryItem.blueprint)
+            + templates.map(StudioGalleryItem.creator)
+        return items.sorted { $0.mixKey < $1.mixKey }
+    }
+
     // MARK: - Studio form (unified)
 
     /// Fixed creator image (set when arriving from a template / "use

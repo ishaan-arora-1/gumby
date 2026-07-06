@@ -198,97 +198,92 @@ struct WebStudioWelcomeView: View {
 
     // MARK: - Templates section
 
+    /// One mixed "Templates" gallery — blueprints and featured creators in
+    /// the fixed hash-sorted order shared with the website. Starts with 4
+    /// cards (two rows of the 2-column grid) and grows by 4 per "View more"
+    /// tap so the phone never mounts every video-backed card at once.
     private var templatesSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Viral templates first — the one-photo path is the pitch.
-            blueprintsSection
-
-            Text("Or start with a creator")
-                .webSectionLabel()
-                .padding(.bottom, 6)
-
-            Text("Featured creators")
-                .font(WebTheme.Font.display(18, weight: .bold))
-                .foregroundColor(.white)
-                .tracking(-0.2)
-                .padding(.bottom, 14)
-
-            templatesGrid
-                .task { await chatVM.ensureTemplatesLoaded() }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder
-    private var templatesGrid: some View {
-        let columns = [
-            GridItem(.flexible(), spacing: 8),
-            GridItem(.flexible(), spacing: 8),
-        ]
-        LazyVGrid(columns: columns, spacing: 8) {
-            if chatVM.templates.isEmpty && chatVM.isLoadingTemplates {
-                ForEach(0..<6, id: \.self) { _ in
-                    skeletonCard
-                }
-            } else {
-                ForEach(chatVM.templates) { tpl in
-                    WebTemplateCard(template: tpl) {
-                        // Open the preview instead of going straight to
-                        // the studio form — matches the Creators tab and
-                        // lets the user see the looping creator clip
-                        // before committing.
-                        previewTemplate = tpl
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Viral templates (blueprints)
-
-    @ViewBuilder
-    private var blueprintsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("One photo. Done.")
                 .webSectionLabel()
                 .padding(.bottom, 6)
 
-            Text("Viral templates")
+            Text("Templates")
                 .font(WebTheme.Font.display(18, weight: .bold))
                 .foregroundColor(.white)
                 .tracking(-0.2)
                 .padding(.bottom, 4)
 
-            Text("Pick a format, drop your product photo — we make exactly that video for your product.")
+            Text("Pick a template or a creator, drop your product photo, and we make the video.")
                 .font(WebTheme.Font.body(12))
                 .foregroundColor(.white.opacity(0.5))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 14)
 
-            blueprintsGrid
-                .task { await chatVM.ensureBlueprintsLoaded() }
+            galleryGrid
+                .task {
+                    await chatVM.ensureBlueprintsLoaded()
+                    await chatVM.ensureTemplatesLoaded()
+                }
+
+            if visibleGalleryCount < chatVM.studioGallery.count {
+                viewMoreButton
+                    .padding(.top, 16)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, 26)
     }
 
+    /// Two rows of the 2-column grid to start; +4 per "View more".
+    private static let galleryBatch = 4
+    @State private var visibleGalleryCount = WebStudioWelcomeView.galleryBatch
+
     @ViewBuilder
-    private var blueprintsGrid: some View {
+    private var galleryGrid: some View {
         let columns = [
             GridItem(.flexible(), spacing: 8),
             GridItem(.flexible(), spacing: 8),
         ]
+        let items = chatVM.studioGallery
         LazyVGrid(columns: columns, spacing: 8) {
-            if chatVM.blueprints.isEmpty {
+            if items.isEmpty {
                 ForEach(0..<4, id: \.self) { _ in skeletonCard }
             } else {
-                ForEach(chatVM.blueprints) { bp in
-                    WebBlueprintCard(blueprint: bp) {
-                        chatVM.activeBlueprint = bp
+                ForEach(items.prefix(visibleGalleryCount)) { item in
+                    switch item {
+                    case .blueprint(let bp):
+                        WebBlueprintCard(blueprint: bp) {
+                            chatVM.activeBlueprint = bp
+                        }
+                    case .creator(let tpl):
+                        WebTemplateCard(template: tpl) {
+                            // Open the preview instead of going straight to
+                            // the studio form — lets the user watch the
+                            // looping creator clip before committing.
+                            previewTemplate = tpl
+                        }
                     }
                 }
             }
         }
+    }
+
+    private var viewMoreButton: some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.25)) {
+                visibleGalleryCount += Self.galleryBatch
+            }
+        } label: {
+            Text("View more")
+                .font(WebTheme.Font.body(14, weight: .semibold))
+                .foregroundColor(.white.opacity(0.8))
+                .padding(.horizontal, 28)
+                .frame(height: 42)
+                .background(Capsule().fill(Color.white.opacity(0.04)))
+                .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1))
+        }
+        .buttonStyle(WebPressStyle())
+        .frame(maxWidth: .infinity)
     }
 
     private var skeletonCard: some View {

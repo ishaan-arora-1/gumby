@@ -91,9 +91,9 @@ export default function StudioPage() {
   }, []);
 
   // One mixed gallery: blueprints (one-photo viral formats) and featured
-  // creators shuffled together. The shuffle is memoized on the loaded data
-  // so it stays stable across re-renders — it only reshuffles on a fresh
-  // page load.
+  // creators woven together in a FIXED order — sorted by a hash of each
+  // item's id, so it reads as shuffled but is identical on every page load
+  // (and matches the iOS app, which uses the same hash).
   type GalleryItem =
     | { kind: 'blueprint'; bp: Blueprint }
     | { kind: 'creator'; tpl: UGCTemplate };
@@ -102,13 +102,31 @@ export default function StudioPage() {
       ...blueprints.map((bp) => ({ kind: 'blueprint' as const, bp })),
       ...templates.map((tpl) => ({ kind: 'creator' as const, tpl })),
     ];
-    // Fisher–Yates
-    for (let i = items.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [items[i], items[j]] = [items[j], items[i]];
-    }
+    const mixHash = (s: string) => {
+      let h = 5381;
+      for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+      return h >>> 0;
+    };
+    items.sort(
+      (a, b) =>
+        mixHash(a.kind === 'blueprint' ? a.bp.id : a.tpl.id) -
+        mixHash(b.kind === 'blueprint' ? b.bp.id : b.tpl.id)
+    );
     return items;
   }, [blueprints, templates]);
+
+  // Progressive loading: start with ONE grid row (5 on desktop, 4 on a
+  // 2-column phone) and grow by the same batch per "View more" tap, so a
+  // phone never mounts the whole gallery at once.
+  const [galleryBatch, setGalleryBatch] = useState(4);
+  const [galleryVisible, setGalleryVisible] = useState(4);
+  useEffect(() => {
+    const w = window.innerWidth;
+    // Matches the grid's breakpoints: 2 cols → 4 items (two rows), else one row.
+    const batch = w >= 1280 ? 5 : w >= 1024 ? 4 : w >= 640 ? 3 : 4;
+    setGalleryBatch(batch);
+    setGalleryVisible(batch);
+  }, []);
 
   // The composer hands prompt + attachments directly to the studio form.
   // No more /parse-prompt round-trip; the user's free-form prompt is the
@@ -302,7 +320,7 @@ export default function StudioPage() {
                 </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                {galleryItems.map((item) =>
+                {galleryItems.slice(0, galleryVisible).map((item) =>
                   item.kind === 'blueprint' ? (
                     <BlueprintCard
                       key={`bp-${item.bp.id}`}
@@ -318,13 +336,24 @@ export default function StudioPage() {
                   )
                 )}
                 {galleryItems.length === 0 &&
-                  [...Array(10)].map((_, i) => (
+                  [...Array(4)].map((_, i) => (
                     <div
                       key={i}
                       className="aspect-[9/16] rounded-card bg-elevated/40 animate-pulse"
                     />
                   ))}
               </div>
+              {galleryVisible < galleryItems.length && (
+                <div className="mt-6 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setGalleryVisible((c) => c + galleryBatch)}
+                    className="inline-flex items-center justify-center h-11 px-8 rounded-pill border border-white/15 bg-white/[0.04] text-sm font-semibold text-white/80 hover:text-white hover:border-white/35 active:scale-[0.99] transition"
+                  >
+                    View more
+                  </button>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

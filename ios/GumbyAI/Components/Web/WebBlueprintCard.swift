@@ -9,10 +9,6 @@ struct WebBlueprintCard: View {
     let blueprint: Blueprint
     let onTap: () -> Void
 
-    private var credits: Int {
-        blueprint.durationSeconds >= 13 ? 150 : blueprint.durationSeconds >= 8 ? 100 : 50
-    }
-
     var body: some View {
         Button(action: onTap) {
             ZStack(alignment: .bottomLeading) {
@@ -31,23 +27,13 @@ struct WebBlueprintCard: View {
                 .frame(maxWidth: .infinity, alignment: .bottom)
                 .allowsHitTesting(false)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(blueprint.name)
-                        .font(WebTheme.Font.body(13, weight: .bold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                    Text(blueprint.tagline)
-                        .font(WebTheme.Font.body(10))
-                        .foregroundColor(.white.opacity(0.55))
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    Text("\(blueprint.durationSeconds)S · \(credits) CREDITS")
-                        .font(WebTheme.Font.body(9, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.45))
-                        .tracking(0.8)
-                        .padding(.top, 2)
-                }
-                .padding(10)
+                // Name only — tagline/pricing live in the modal, keeping the
+                // card clean in the mixed gallery (mirrors web).
+                Text(blueprint.name)
+                    .font(WebTheme.Font.body(13, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .padding(10)
             }
             .aspectRatio(9.0/16.0, contentMode: .fit)
             .background(WebTheme.Color.elevated)

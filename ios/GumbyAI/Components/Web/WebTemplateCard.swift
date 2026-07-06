@@ -30,19 +30,13 @@ struct WebTemplateCard: View {
                 .frame(maxWidth: .infinity, alignment: .bottom)
                 .allowsHitTesting(false)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(template.actorName.isEmpty ? template.name : template.actorName)
-                        .font(WebTheme.Font.body(13, weight: .semibold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                    if !template.setting.isEmpty {
-                        Text(template.setting)
-                            .font(WebTheme.Font.body(10))
-                            .foregroundColor(.white.opacity(0.65))
-                            .lineLimit(1)
-                    }
-                }
-                .padding(10)
+                // Name only — the setting line made the mixed gallery feel
+                // cluttered (mirrors web's TemplateCard cleanup).
+                Text(template.actorName.isEmpty ? template.name : template.actorName)
+                    .font(WebTheme.Font.body(13, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .padding(10)
             }
             .aspectRatio(9.0/16.0, contentMode: .fit)
             .background(WebTheme.Color.elevated)
