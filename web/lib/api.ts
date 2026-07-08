@@ -209,6 +209,7 @@ export const api = {
       productDescription?: string;
       script?: string;
       tweaks?: string;
+      captionsEnabled?: boolean;
       captionPreset?: string;
     }
   ) =>

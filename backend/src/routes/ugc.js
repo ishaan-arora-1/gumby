@@ -725,6 +725,14 @@ router.post('/blueprints/:id/generate', aiLimiter, async (req, res) => {
     // Optional caption preset override (the modal's style picker). Falls
     // back to the blueprint's own default when omitted.
     captionPreset,
+    // Explicit on/off — mirrors /ugc/generate's `captionsEnabled`. Absent
+    // (older clients) defaults to on, same as before this field existed.
+    // This is the only way to force captions OFF for a talking blueprint;
+    // omitting captionPreset alone still falls back to the blueprint's own
+    // default preset and captions stay on. Renamed on destructure (rather
+    // than `captionsEnabled`) so it doesn't collide with the `const
+    // captionsEnabled` computed further down from this + the blueprint.
+    captionsEnabled: captionsEnabledInput,
   } = req.body || {};
   const productImageUrlSafe =
     typeof productImageUrl === 'string' && /^https?:\/\//i.test(productImageUrl.trim())
@@ -742,6 +750,7 @@ router.post('/blueprints/:id/generate', aiLimiter, async (req, res) => {
   const captionPresetSafe = typeof captionPreset === 'string' && captionPreset.length
     ? captionPreset.slice(0, 32)
     : null;
+  const captionsEnabledSafe = captionsEnabledInput !== false;
 
   try {
     // ---- Credit preflight (same policy as /generate: check now, debit
@@ -784,10 +793,11 @@ router.post('/blueprints/:id/generate', aiLimiter, async (req, res) => {
       prompt = `${prompt} Additional direction: ${tweaksSafe}`.slice(0, 3800);
     }
 
-    // Captions: honor the modal's picker when the blueprint talks. Silent
-    // product-shot blueprints never get captions.
-    const captionsEnabled = blueprint.creatorSpeaks && !!(captionPresetSafe || blueprint.captionPreset);
-    const effectiveCaptionPreset = blueprint.creatorSpeaks
+    // Captions: honor the modal's on/off toggle + picker when the blueprint
+    // talks. Silent product-shot blueprints never get captions regardless.
+    const captionsEnabled = blueprint.creatorSpeaks && captionsEnabledSafe
+      && !!(captionPresetSafe || blueprint.captionPreset);
+    const effectiveCaptionPreset = captionsEnabled
       ? (captionPresetSafe || blueprint.captionPreset)
       : null;
 

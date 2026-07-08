@@ -24,6 +24,7 @@ struct WebTemplateModal: View {
     @State private var script = ""
     @State private var generatingScript = false
     @State private var tweaks = ""
+    @State private var captionsEnabled = true
     @State private var captionPresetId = CaptionPreset.defaultId
 
     @FocusState private var focusedField: Field?
@@ -52,7 +53,7 @@ struct WebTemplateModal: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 generateButton
-                Text("\(target.durationSeconds)s vertical video · \(talking ? "captions included" : "silent product shot")")
+                Text("\(target.durationSeconds)s vertical video · \(talking ? (captionsEnabled ? "captions included" : "no captions") : "silent product shot")")
                     .font(WebTheme.Font.body(11))
                     .foregroundColor(.white.opacity(0.35))
                     .frame(maxWidth: .infinity)
@@ -186,18 +187,24 @@ struct WebTemplateModal: View {
 
     private var captionSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("CAPTION STYLE").webSectionLabel()
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 14) {
-                    ForEach(CaptionPreset.all) { preset in
-                        CaptionPreviewTile(
-                            preset: preset,
-                            selected: captionPresetId == preset.id,
-                            onTap: { captionPresetId = preset.id }
-                        )
+            HStack {
+                Text("CAPTIONS").webSectionLabel()
+                Spacer()
+                WebToggle(isOn: $captionsEnabled)
+            }
+            if captionsEnabled {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(CaptionPreset.all) { preset in
+                            CaptionPreviewTile(
+                                preset: preset,
+                                selected: captionPresetId == preset.id,
+                                onTap: { captionPresetId = preset.id }
+                            )
+                        }
                     }
+                    .padding(.vertical, 2)
                 }
-                .padding(.vertical, 2)
             }
         }
     }
@@ -215,6 +222,7 @@ struct WebTemplateModal: View {
                 productDescription: productDescription,
                 script: script,
                 tweaks: tweaks,
+                captionsEnabled: captionsEnabled,
                 captionPresetId: captionPresetId
             )
         } label: {

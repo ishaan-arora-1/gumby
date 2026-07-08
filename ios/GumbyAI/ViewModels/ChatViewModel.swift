@@ -264,6 +264,7 @@ class ChatViewModel: ObservableObject {
         productDescription: String,
         script: String,
         tweaks: String,
+        captionsEnabled: Bool,
         captionPresetId: String
     ) {
         guard !isGenerating else { return }
@@ -299,7 +300,8 @@ class ChatViewModel: ObservableObject {
                         productDescription: desc,
                         script: target.talking ? scriptTrim : nil,
                         tweaks: tweaksTrim,
-                        captionPreset: target.talking ? captionPresetId : nil
+                        captionsEnabled: target.talking ? captionsEnabled : nil,
+                        captionPreset: (target.talking && captionsEnabled) ? captionPresetId : nil
                     )
                 case .creator:
                     // Compile a "creator shows product" prompt (+ tweaks) and
@@ -316,8 +318,8 @@ class ChatViewModel: ObservableObject {
                         creatorSpeaks: true,
                         videoDuration: duration,
                         aspectRatio: target.aspectRatio,
-                        captionsEnabled: true,
-                        captionPresetId: captionPresetId
+                        captionsEnabled: captionsEnabled,
+                        captionPresetId: captionsEnabled ? captionPresetId : nil
                     )
                     job = try await service.startAdGeneration(req)
                 }

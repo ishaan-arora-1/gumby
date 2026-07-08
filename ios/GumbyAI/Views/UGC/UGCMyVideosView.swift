@@ -289,19 +289,15 @@ struct UGCVideoPlayerSheet: View {
         ZStack(alignment: .top) {
             Color(red: 0.04, green: 0.04, blue: 0.05).ignoresSafeArea()
 
-            if liveJob.status.isTerminal {
-                detailContent
-            } else {
-                // In-flight job reopened from History/Recents — show the same
-                // progress screen the user saw in the Studio when they tapped
-                // Generate, not the default detail / "Still rendering…" view.
-                ScrollView {
-                    VStack(spacing: 0) {
-                        Color.clear.frame(height: 56)
-                        GeneratingProgressView(status: liveJob.status, progress: liveJob.progress)
-                    }
-                }
-            }
+            // Always show the full detail layout — video/progress card on
+            // top, THE BRIEF (every input the user filled in) below it —
+            // regardless of whether the job is still rendering. Previously
+            // an in-flight job showed ONLY the progress screen with no
+            // brief at all, so closing the app mid-generation and reopening
+            // from History hid the product/script/captions recap until the
+            // job finished. Mirrors web's /history/[id], which always
+            // renders the brief section next to the live progress bar.
+            detailContent
 
             // Floating top bar with close + actions
             topBar
@@ -423,6 +419,11 @@ struct UGCVideoPlayerSheet: View {
 
     private var subtitleLine: String {
         var parts: [String] = []
+        if liveJob.status == .failed {
+            parts.append("Generation failed")
+        } else if !liveJob.status.isTerminal {
+            parts.append("\(liveJob.status.displayLabel)… \(liveJob.progress)%")
+        }
         if let d = job.videoDuration { parts.append("\(d)s") }
         parts.append(isTemplate ? "Template mode" : "Direct prompt")
         return parts.joined(separator: " · ")
@@ -512,18 +513,39 @@ struct UGCVideoPlayerSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             } else if liveJob.status == .completed {
                 ProgressView().tint(.white)
-            } else {
+            } else if liveJob.status == .failed {
                 VStack(spacing: 10) {
-                    if liveJob.status == .failed {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(.orange)
-                    } else {
-                        ProgressView().tint(.white)
-                    }
-                    Text(liveJob.status == .failed ? (liveJob.error ?? "Failed") : "Still rendering…")
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.orange)
+                    Text(liveJob.error ?? "Failed")
                         .font(.system(size: 12))
                         .foregroundColor(.white.opacity(0.6))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                }
+            } else {
+                // Still rendering — show the live percentage, not just a
+                // bare spinner, so reopening from History (mid-generation)
+                // tells the user exactly how far along their video is.
+                VStack(spacing: 14) {
+                    ProgressView().tint(.white)
+                    Text(liveJob.status.displayLabel)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.12)).frame(height: 5)
+                            Capsule()
+                                .fill(Color.white)
+                                .frame(width: max(5, geo.size.width * CGFloat(liveJob.progress) / 100), height: 5)
+                        }
+                    }
+                    .frame(height: 5)
+                    .padding(.horizontal, 32)
+                    Text("\(liveJob.progress)%")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.5))
                 }
             }
         }

@@ -37,6 +37,7 @@ export function TemplateModal({ target, onClose, onStarted, onInsufficientCredit
   const [script, setScript] = useState(target.sampleScript ?? '');
   const [genScript, setGenScript] = useState(false);
   const [tweaks, setTweaks] = useState('');
+  const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [captionPresetId, setCaptionPresetId] = useState(DEFAULT_CAPTION_PRESET_ID);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -136,7 +137,8 @@ export function TemplateModal({ target, onClose, onStarted, onInsufficientCredit
           productDescription: productDescription.trim() || undefined,
           script: talking ? script.trim() || undefined : undefined,
           tweaks: tweaks.trim() || undefined,
-          captionPreset: talking ? captionPresetId : undefined,
+          captionsEnabled: talking ? captionsEnabled : undefined,
+          captionPreset: talking && captionsEnabled ? captionPresetId : undefined,
         }));
       } else {
         ({ data } = await api.generateAd({
@@ -147,8 +149,8 @@ export function TemplateModal({ target, onClose, onStarted, onInsufficientCredit
           creatorSpeaks: true,
           videoDuration: target.durationSeconds as 5 | 10 | 15,
           aspectRatio: target.aspectRatio,
-          captionsEnabled: true,
-          captionPreset: captionPresetId,
+          captionsEnabled,
+          captionPreset: captionsEnabled ? captionPresetId : undefined,
         }));
       }
       onStarted(data);
@@ -286,22 +288,41 @@ export function TemplateModal({ target, onClose, onStarted, onInsufficientCredit
             />
           </div>
 
-          {/* Caption style (talking templates only) */}
+          {/* Captions on/off + style (talking templates only) */}
           {talking && (
-            <div className="space-y-2">
-              <div className="text-xs font-semibold uppercase tracking-wider text-white/50">
-                Caption style
-              </div>
-              <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
-                {CAPTION_PRESETS.map((p) => (
-                  <CaptionPreview
-                    key={p.id}
-                    preset={p}
-                    selected={captionPresetId === p.id}
-                    onSelect={() => setCaptionPresetId(p.id)}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-semibold uppercase tracking-wider text-white/50">
+                  Captions
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={captionsEnabled}
+                  onClick={() => setCaptionsEnabled((v) => !v)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                    captionsEnabled ? 'bg-accent2' : 'bg-white/15'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
+                      captionsEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                    }`}
                   />
-                ))}
+                </button>
               </div>
+              {captionsEnabled && (
+                <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
+                  {CAPTION_PRESETS.map((p) => (
+                    <CaptionPreview
+                      key={p.id}
+                      preset={p}
+                      selected={captionPresetId === p.id}
+                      onSelect={() => setCaptionPresetId(p.id)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -326,7 +347,7 @@ export function TemplateModal({ target, onClose, onStarted, onInsufficientCredit
           </button>
           <p className="text-center text-[11px] text-white/35">
             {target.durationSeconds}s vertical video
-            {talking ? ' · captions included' : ' · silent product shot'}
+            {talking ? (captionsEnabled ? ' · captions included' : ' · no captions') : ' · silent product shot'}
           </p>
         </div>
       </div>

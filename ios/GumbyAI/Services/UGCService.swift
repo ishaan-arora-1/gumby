@@ -41,6 +41,7 @@ final class UGCService {
         productDescription: String?,
         script: String? = nil,
         tweaks: String? = nil,
+        captionsEnabled: Bool? = nil,
         captionPreset: String? = nil
     ) async throws -> UGCJob {
         var body: [String: Any] = ["productImageUrl": productImageUrl]
@@ -48,6 +49,7 @@ final class UGCService {
         if let d = productDescription, !d.isEmpty { body["productDescription"] = d }
         if let s = script, !s.isEmpty { body["script"] = s }
         if let t = tweaks, !t.isEmpty { body["tweaks"] = t }
+        if let ce = captionsEnabled { body["captionsEnabled"] = ce }
         if let c = captionPreset, !c.isEmpty { body["captionPreset"] = c }
         let resp: APIResponse<UGCJob> = try await api.post(
             path: "/ugc/blueprints/\(id)/generate",
