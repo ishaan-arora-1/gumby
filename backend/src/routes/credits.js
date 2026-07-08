@@ -15,6 +15,7 @@ const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth');
 const credits = require('../services/credits');
+const appleIAP = require('../services/appleIAP');
 const supabase = require('../config/supabase');
 const razorpay = require('../config/razorpay');
 
@@ -172,6 +173,79 @@ router.post('/checkout', async (req, res) => {
       success: false,
       error: err?.error?.description || err?.message || 'Failed to start checkout',
     });
+  }
+});
+
+/**
+ * Apple In-App Purchase delivery — the iOS twin of the Razorpay webhook.
+ *
+ * iOS completes a StoreKit 2 purchase, then POSTs the transaction's
+ * `jwsRepresentation` here. We verify the JWS server-side (certificate
+ * chain pinned to Apple's real root + ES256 signature + bundle/product
+ * checks — see services/appleIAP.js) and grant the pack's credits into
+ * `user_credits`, idempotently on the Apple transaction id. iOS only
+ * `finish()`es the StoreKit transaction after this returns success, so
+ * an unreachable server means StoreKit redelivers later — a paid user
+ * can never permanently lose credits.
+ */
+router.post('/apple/validate', async (req, res) => {
+  const { jws } = req.body || {};
+  if (!jws || typeof jws !== 'string') {
+    return res.status(400).json({ success: false, error: 'jws is required' });
+  }
+
+  let purchase;
+  try {
+    purchase = await appleIAP.validateCreditPurchase(jws);
+  } catch (err) {
+    console.warn(
+      `[apple-iap] validation rejected user=${req.user.id.slice(0, 8)}: ${err.message}`
+    );
+    return res.status(422).json({
+      success: false,
+      error: 'Purchase could not be verified with the App Store.',
+    });
+  }
+
+  const refId = `apple:${purchase.transactionId}`;
+  try {
+    // Idempotency — `credit_grant` itself is append-only, so dedupe on the
+    // Apple transaction id exactly like the Razorpay webhook dedupes on
+    // payment id. A redelivered transaction credits exactly once.
+    const { data: existing } = await supabase
+      .from('credit_transactions')
+      .select('id')
+      .eq('user_id', req.user.id)
+      .eq('reason', 'purchase')
+      .eq('ref_id', refId)
+      .maybeSingle();
+    if (existing) {
+      const balance = await credits.getBalance(req.user.id);
+      return res.json({
+        success: true,
+        data: { balance, granted: false, credits: purchase.pack.credits },
+      });
+    }
+
+    const balance = await credits.grant({
+      userId: req.user.id,
+      amount: purchase.pack.credits,
+      reason: 'purchase',
+      refId,
+      packId: purchase.pack.packId,
+    });
+    console.log(
+      `[apple-iap] granted ${purchase.pack.credits} credits ` +
+      `user=${req.user.id.slice(0, 8)} product=${purchase.productId} ` +
+      `env=${purchase.environment} tx=${purchase.transactionId}`
+    );
+    return res.json({
+      success: true,
+      data: { balance, granted: true, credits: purchase.pack.credits },
+    });
+  } catch (err) {
+    console.error('[apple-iap] grant failed:', err);
+    return res.status(500).json({ success: false, error: 'Failed to deliver credits' });
   }
 });
 

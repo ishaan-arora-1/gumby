@@ -33,6 +33,12 @@ protocol CreditsBackend {
     /// job that was already refunded is a no-op. Returns the new balance.
     @discardableResult
     func refund(amount: Int, jobID: String) async throws -> Int
+    /// Deliver a verified StoreKit purchase. `jws` is the transaction's
+    /// `jwsRepresentation` — the server-backed ledger re-verifies it with
+    /// Apple before granting; the local ledger just credits the pack.
+    /// Idempotent on `transactionID`. Returns the new balance.
+    @discardableResult
+    func applePurchase(jws: String, transactionID: String, pack: CreditPack) async throws -> Int
 }
 
 /// On-device credit ledger, persisted per user in `UserDefaults`.
@@ -132,5 +138,12 @@ final class LocalLedgerBackend: CreditsBackend {
             writeEntries(entries)
             return entries.reduce(0) { $0 + $1.delta }
         }
+    }
+
+    @discardableResult
+    func applePurchase(jws: String, transactionID: String, pack: CreditPack) async throws -> Int {
+        // Local ledger can't validate with Apple — StoreKit already verified
+        // the transaction on-device, so just credit the pack.
+        try await grant(amount: pack.credits, reason: .purchase, refID: transactionID, packID: pack.id)
     }
 }

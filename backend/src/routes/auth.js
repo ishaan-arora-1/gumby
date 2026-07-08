@@ -1,6 +1,32 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../config/supabase');
+const credits = require('../services/credits');
+
+// One free 5s video for every new account (50 credits). Makes the first
+// session land — the user (and the App Review tester) can generate a real
+// video before ever seeing the paywall. Idempotent on `welcome:<userId>`.
+const WELCOME_CREDITS = 50;
+
+async function grantWelcomeCredits(userId) {
+  if (!credits.isEnabled()) return;
+  const refId = `welcome:${userId}`;
+  try {
+    const { data: existing } = await supabase
+      .from('credit_transactions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('reason', 'grant')
+      .eq('ref_id', refId)
+      .maybeSingle();
+    if (existing) return;
+    await credits.grant({ userId, amount: WELCOME_CREDITS, reason: 'grant', refId });
+    console.log(`[auth] welcome credits granted user=${userId.slice(0, 8)}`);
+  } catch (err) {
+    // Non-fatal — sign-in must never fail because a promo grant hiccuped.
+    console.warn('[auth] welcome grant failed:', err?.message || err);
+  }
+}
 
 router.post('/verify', async (req, res) => {
   const authHeader = req.headers.authorization;
@@ -39,6 +65,7 @@ router.post('/verify', async (req, res) => {
         avatar_url: user.user_metadata?.avatar_url || null,
       });
       if (insertError) console.error('User insert error:', insertError);
+      await grantWelcomeCredits(user.id);
     }
 
     return res.json({

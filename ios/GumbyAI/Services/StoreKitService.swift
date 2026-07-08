@@ -166,13 +166,23 @@ final class StoreKitService: ObservableObject {
         // Only our consumable credit packs grant credits. (Guards against
         // any future product types sharing this listener.)
         if let pack = CreditPack.pack(forProductID: transaction.productID) {
-            await credits?.applyPurchase(
+            let delivered = await credits?.applyPurchase(
                 pack: pack,
-                transactionID: String(transaction.id)
-            )
+                transactionID: String(transaction.id),
+                jws: result.jwsRepresentation
+            ) ?? false
+            guard delivered else {
+                // Server validation/grant didn't land (offline, 5xx…).
+                // Do NOT finish — StoreKit keeps the transaction in the
+                // unfinished queue and redelivers it, so the user's paid
+                // credits arrive as soon as the server is reachable.
+                lastError = "Purchase received — delivering your credits shortly."
+                return
+            }
         }
 
-        // Always finish — an unfinished transaction is redelivered forever.
+        // Finish only after delivery — an unfinished transaction is
+        // redelivered until we do.
         await transaction.finish()
     }
 }

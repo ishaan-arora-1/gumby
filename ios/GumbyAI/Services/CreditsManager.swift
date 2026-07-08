@@ -15,9 +15,17 @@ final class CreditsManager: ObservableObject {
     private var backend: CreditsBackend
     private var currentUserID: String?
 
+    /// Signed-in users read/write the SERVER ledger (`user_credits`) — the
+    /// same balance the generation route enforces, so the paywall, the
+    /// balance chip, and the 402 preflight can never disagree. The local
+    /// UserDefaults ledger only backs the signed-out state.
+    private static func makeBackend(userID: String?) -> CreditsBackend {
+        userID != nil ? ServerCreditsBackend() : LocalLedgerBackend(userID: userID)
+    }
+
     init(userID: String? = nil) {
         self.currentUserID = userID
-        self.backend = LocalLedgerBackend(userID: userID)
+        self.backend = Self.makeBackend(userID: userID)
     }
 
     /// Re-point the ledger at a (possibly different) user — call on sign
@@ -25,7 +33,7 @@ final class CreditsManager: ObservableObject {
     func reload(forUserID userID: String?) async {
         if userID != currentUserID {
             currentUserID = userID
-            backend = LocalLedgerBackend(userID: userID)
+            backend = Self.makeBackend(userID: userID)
         }
         await refresh()
     }
@@ -80,18 +88,25 @@ final class CreditsManager: ObservableObject {
 
     // MARK: - Purchases (StoreKit)
 
-    /// Apply a verified In-App Purchase. `transactionID` is StoreKit's id
-    /// for the transaction and is used as the idempotency key so a
-    /// redelivered transaction (app relaunch, `Transaction.updates`)
-    /// credits exactly once.
-    func applyPurchase(pack: CreditPack, transactionID: String) async {
-        _ = try? await backend.grant(
-            amount: pack.credits,
-            reason: .purchase,
-            refID: transactionID,
-            packID: pack.id
-        )
-        await refresh()
+    /// Deliver a verified In-App Purchase. The server backend re-validates
+    /// the transaction's JWS with Apple and grants server-side credits
+    /// (idempotent on `transactionID`). Returns `true` only when delivery
+    /// succeeded — the caller must NOT `finish()` the StoreKit transaction
+    /// otherwise, so an offline/unreachable server just means StoreKit
+    /// redelivers the purchase later.
+    func applyPurchase(pack: CreditPack, transactionID: String, jws: String) async -> Bool {
+        do {
+            _ = try await backend.applePurchase(
+                jws: jws,
+                transactionID: transactionID,
+                pack: pack
+            )
+            await refresh()
+            return true
+        } catch {
+            await refresh()
+            return false
+        }
     }
 
     // MARK: - Debug / promo
