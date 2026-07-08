@@ -3,12 +3,16 @@ const router = express.Router();
 const supabase = require('../config/supabase');
 const credits = require('../services/credits');
 
-// One free 5s video for every new account (50 credits). Makes the first
-// session land — the user (and the App Review tester) can generate a real
-// video before ever seeing the paywall. Idempotent on `welcome:<userId>`.
-const WELCOME_CREDITS = 50;
+// Optional signup promo, OFF by default (every generated video costs real
+// FAL money). Set WELCOME_CREDITS=50 in the environment to give each new
+// account one free 5s video — a growth lever, not a launch requirement.
+// App Review doesn't need it: reviewers purchase in Apple's sandbox (free
+// for everyone) and the /credits/apple/validate endpoint grants normally.
+// Idempotent on `welcome:<userId>`.
+const WELCOME_CREDITS = Math.max(0, parseInt(process.env.WELCOME_CREDITS, 10) || 0);
 
 async function grantWelcomeCredits(userId) {
+  if (WELCOME_CREDITS <= 0) return;
   if (!credits.isEnabled()) return;
   const refId = `welcome:${userId}`;
   try {
