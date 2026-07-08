@@ -308,23 +308,6 @@ const BLUEPRINTS = [
     promptTemplate:
       'A first-person view: an outstretched hand holds {{product}} up against a breathtaking golden-hour sky, exactly faithful to the reference image, the low sun flaring warmly around its silhouette with soft orange and pink clouds behind. The hand slowly rotates the product so the sunset light rolls across its surface and the label catches a warm glint, a light breeze moving in the background. Dreamy, warm, effortlessly viral POV aesthetic. Only the hand and forearm visible, no face, no other people.',
   },
-  {
-    id: 'perfume-luxe',
-    name: 'Silk & Light',
-    tagline: 'Silk, shadows and caustic light — pure luxury for your product.',
-    format: 'Product only · silent',
-    hasCreator: false,
-    creatorSpeaks: false,
-    captionPreset: null,
-    durationSeconds: 5,
-    aspectRatio: '9:16',
-    accent: ['#e2c26a', '#3b2f1e'],
-    sortOrder: 18,
-    previewVideoUrl: null,
-    previewPosterUrl: null,
-    promptTemplate:
-      '{{product}} stands on flowing champagne-colored silk fabric in a dark luxurious studio, exactly faithful to the reference image, lit by a single warm shaft of light that casts elegant moving caustic reflections and long soft shadows. The silk ripples slowly around the base of the product as the light shaft sweeps gently across it, making the glass and label glow, with fine golden dust particles floating through the beam. Ultra-premium fragrance-commercial elegance, slow and hypnotic. No people, no hands, no text.',
-  },
 ];
 
 const NEUTRAL_PRODUCT_REF = 'the product from the reference image';
