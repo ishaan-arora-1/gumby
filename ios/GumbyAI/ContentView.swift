@@ -117,8 +117,10 @@ private struct HistoryDestinationView: View {
                 // player sheet → backend mints a hidden template → we
                 // pick it on ChatViewModel and jump to the Studio.
                 UGCMyVideosView(onUseTemplate: { tpl in
+                    // Route into the unified template flow (same modal the
+                    // studio gallery uses) instead of the old studio form.
                     chatVM.newConversation()
-                    chatVM.pickTemplate(tpl)
+                    chatVM.activeTemplate = .from(template: tpl)
                     selectedDestination = .chat
                 })
             }

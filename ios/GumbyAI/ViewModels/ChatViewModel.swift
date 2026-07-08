@@ -55,9 +55,12 @@ class ChatViewModel: ObservableObject {
     // MARK: - Blueprints (one-tap viral templates)
 
     @Published var blueprints: [Blueprint] = []
-    /// Non-nil while the one-tap blueprint sheet is up (drives `.sheet(item:)`).
-    @Published var activeBlueprint: Blueprint?
-    /// Error surfaced inside the blueprint sheet (generation failures).
+    /// Two-step template flow (mirrors web): tapping a card sets
+    /// `previewTarget` (video + "Use as template"); tapping Use promotes it
+    /// to `activeTemplate` (the input modal). Both kinds use this path.
+    @Published var previewTarget: TemplateTarget?
+    @Published var activeTemplate: TemplateTarget?
+    /// Error surfaced inside the template input modal (generation failures).
     @Published var blueprintError: String?
 
     /// One mixed gallery item — a one-photo blueprint or a featured creator.
@@ -184,47 +187,110 @@ class ChatViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Blueprint generation (one-tap viral templates)
+    // MARK: - Template generation (unified: blueprint or creator)
 
-    /// Fires `POST /ugc/blueprints/:id/generate` and drops into the exact
-    /// same generating → done screens as the studio form. The product image
-    /// is already uploaded by the sheet (via `/ugc/upload-attachment`, so the
-    /// moderation gate ran); everything else is locked by the blueprint.
-    /// Mirrors web's `onBlueprintStarted`.
-    func startBlueprintGeneration(
-        _ blueprint: Blueprint,
-        productImageUrl: String,
+    /// Draft a script inside the template modal, in the right voice for the
+    /// kind. Blueprints use their server-side voice; creators reuse the
+    /// generic UGC writer seeded with the creator's setting/sample.
+    func generateScriptForTemplate(
+        _ target: TemplateTarget,
         productName: String,
         productDescription: String
+    ) async -> String? {
+        let name = productName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let desc = productDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            switch target.kind {
+            case .blueprint:
+                return try await service.generateBlueprintScript(
+                    id: target.id, productName: name, productDescription: desc
+                )
+            case .creator:
+                // Seed the generic writer with the product line so the script
+                // is about THIS product (the creator's voice is generic).
+                let brief = [name.isEmpty ? "" : name, desc].filter { !$0.isEmpty }.joined(separator: " — ")
+                return try await service.generateScriptUnified(
+                    prompt: brief.isEmpty ? "this product" : brief,
+                    targetSeconds: target.durationSeconds
+                )
+            }
+        } catch {
+            return nil
+        }
+    }
+
+    /// Fire the generation for a template (either kind) and drop into the
+    /// same generating → done screens as the studio form. The product image
+    /// was already uploaded (moderated) by the modal. Mirrors web's
+    /// `TemplateModal.generate` + `onTemplateStarted`.
+    func startTemplateGeneration(
+        _ target: TemplateTarget,
+        productImageUrl: String,
+        productName: String,
+        productDescription: String,
+        script: String,
+        tweaks: String,
+        captionPresetId: String
     ) {
         guard !isGenerating else { return }
 
         // ---- Credit preflight (same policy as the studio form) ----
-        let duration = blueprint.durationSeconds
+        let duration = target.durationSeconds
         let requiredCredits = credits?.cost(forSeconds: duration) ?? 0
         if let credits, !credits.hasSufficient(forSeconds: duration) {
             let shortfall = max(0, requiredCredits - credits.balance)
-            activeBlueprint = nil
+            activeTemplate = nil
             presentPaywall(
                 context: "This video costs \(requiredCredits) credits — you need \(shortfall) more."
             )
             return
         }
 
+        let name = productName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let desc = productDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let scriptTrim = script.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tweaksTrim = tweaks.trimmingCharacters(in: .whitespacesAndNewlines)
+
         isGenerating = true
         blueprintError = nil
         Task {
             do {
-                let job = try await service.generateFromBlueprint(
-                    id: blueprint.id,
-                    productImageUrl: productImageUrl,
-                    productName: productName.trimmingCharacters(in: .whitespacesAndNewlines),
-                    productDescription: productDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
+                let job: UGCJob
+                switch target.kind {
+                case .blueprint:
+                    job = try await service.generateFromBlueprint(
+                        id: target.id,
+                        productImageUrl: productImageUrl,
+                        productName: name,
+                        productDescription: desc,
+                        script: target.talking ? scriptTrim : nil,
+                        tweaks: tweaksTrim,
+                        captionPreset: target.talking ? captionPresetId : nil
+                    )
+                case .creator:
+                    // Compile a "creator shows product" prompt (+ tweaks) and
+                    // run the unified pipeline with the creator fixed.
+                    let where0 = target.setting.isEmpty ? "" : " in \(target.setting)"
+                    let productRef = name.isEmpty ? "the product" : name
+                    var prompt = "The creator holds up and shows \(productRef)\(where0), speaking naturally and casually to the viewer about it. Keep the creator exactly as in the reference image — same face, hair, and outfit."
+                    if !tweaksTrim.isEmpty { prompt += " \(tweaksTrim)" }
+                    let req = UGCService.AdRequest(
+                        prompt: prompt,
+                        attachmentUrls: [productImageUrl],
+                        creatorImageUrl: target.creatorImageURL,
+                        script: scriptTrim,
+                        creatorSpeaks: true,
+                        videoDuration: duration,
+                        aspectRatio: target.aspectRatio,
+                        captionsEnabled: true,
+                        captionPresetId: captionPresetId
+                    )
+                    job = try await service.startAdGeneration(req)
+                }
                 if let credits, requiredCredits > 0 {
                     try? await credits.spend(amount: requiredCredits, jobID: job.id)
                 }
-                self.activeBlueprint = nil
+                self.activeTemplate = nil
                 self.activeJob = job
                 self.isGenerating = false
                 self.advance(to: .generatingAd)
@@ -233,10 +299,10 @@ class ChatViewModel: ObservableObject {
                 self.isGenerating = false
                 if case APIError.insufficientCredits(_, let required) = error {
                     let need = required ?? requiredCredits
-                    self.activeBlueprint = nil
+                    self.activeTemplate = nil
                     self.presentPaywall(context: "This video costs \(need) credits.")
                 } else {
-                    // Leave the sheet up; it surfaces the error inline.
+                    // Leave the modal up; it surfaces the error inline.
                     self.blueprintError = error.localizedDescription
                 }
             }
@@ -266,6 +332,9 @@ class ChatViewModel: ObservableObject {
             clearForm()
             activeJob = nil
             isGenerating = false
+            previewTarget = nil
+            activeTemplate = nil
+            blueprintError = nil
         }
     }
 

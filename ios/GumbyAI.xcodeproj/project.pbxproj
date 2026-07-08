@@ -25,10 +25,12 @@
 		2B246C20145CE0D2B11B52E7 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 440E91AFA494511C85FDD620 /* ChatView.swift */; };
 		2B9F9B448A70F7800D9AD75B /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E85FEFFD6A23FF4D0F258C7 /* AuthService.swift */; };
 		2DAD618D6A41FAB6FF12AE4E /* CaptionPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 440E632218A146BB3B4B6632 /* CaptionPreset.swift */; };
+		2E9E7D3DADE4399651E97376 /* TemplateTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADD973E141D23EA872157B4E /* TemplateTarget.swift */; };
 		34D691774AD966B2AFE0049E /* Inter-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 08F85FB706CEE00AD05D4EAC /* Inter-Medium.ttf */; };
 		38BA2916EECAC0B11BC58767 /* UGCMyVideosView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAA930662A81E1CC581D1992 /* UGCMyVideosView.swift */; };
 		3B4DDE0BB1022D96948CC683 /* UGCTemplatesGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68CB199C8A83C5AD8B113128 /* UGCTemplatesGrid.swift */; };
 		3B68C13C408A1B4B8880FBD8 /* UGCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A38374DAEC0E93F48539A18 /* UGCService.swift */; };
+		3BC6F82B8D774753D4BC36EA /* WebTemplateModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF4D72A5076A5DA9DAA799A /* WebTemplateModal.swift */; };
 		4187CA81F6F8B23BD3BAFEDC /* WebPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 141493C2D32EDF50AC2CE95D /* WebPill.swift */; };
 		418E13255C25F0C3A925D087 /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78CC595D4EF5EFE0FEC1553F /* APIService.swift */; };
 		440329F1BB496C312961A721 /* ImageUploadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2558987DC923669B848A5BE0 /* ImageUploadService.swift */; };
@@ -84,7 +86,6 @@
 		C2ED662E7F0EAB7D08270B61 /* MoodBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBEF17698BEFA3AC4AAD357A /* MoodBoard.swift */; };
 		C314E1E99CBF292BBD15C1CD /* GeneratedImagesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AAE9C2588BE8C217586CEB1 /* GeneratedImagesStore.swift */; };
 		C37418BE90898A763B38DEB8 /* Inter-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C315094353468AE658194B67 /* Inter-Bold.ttf */; };
-		C7D6208CECAC08D6BCA212C0 /* WebBlueprintModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3155AD14BA5202275EDA1B4 /* WebBlueprintModal.swift */; };
 		C889F158256425EE5E9EE871 /* CaptionPreviewTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 180D64A0848ED160BB9EB159 /* CaptionPreviewTile.swift */; };
 		CB1E29F484C915E0CE4F8858 /* GoogleSignInService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E47E1A6D89D3FD31703C3948 /* GoogleSignInService.swift */; };
 		CF0826A194E22A2802BEFE89 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CD9275348378EB0E86328112 /* Assets.xcassets */; };
@@ -95,6 +96,7 @@
 		E64FBC538F4864A9149B19FC /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 145484090FFA9D4B8A99D9C4 /* Constants.swift */; };
 		EE43A0FDA7F532203CDEA9C2 /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = C09339B675B7600AEC3CDAFC /* Message.swift */; };
 		EFBD7FB5597BB2A387D37D05 /* CreditCosts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33E9FF378E2AAF72E4BD57D0 /* CreditCosts.swift */; };
+		F86AE7256B8B8E74E6105703 /* WebTemplatePreviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AAE8CFCFEE21B1967131087 /* WebTemplatePreviewSheet.swift */; };
 		FDF8CB7027704F1BE3BD49E7 /* WebTemplateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63FC27D75A099D1BF88BAF99 /* WebTemplateCard.swift */; };
 		FED0ACA7630A2788500EC366 /* CreditLedgerEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71B39D15E626999115943D9 /* CreditLedgerEntry.swift */; };
 /* End PBXBuildFile section */
@@ -118,6 +120,7 @@
 		180D64A0848ED160BB9EB159 /* CaptionPreviewTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionPreviewTile.swift; sourceTree = "<group>"; };
 		18E5CDA325A4881BEF156230 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		1AB9D873D860C587B1DEAACF /* UGCTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCTemplate.swift; sourceTree = "<group>"; };
+		1EF4D72A5076A5DA9DAA799A /* WebTemplateModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebTemplateModal.swift; sourceTree = "<group>"; };
 		20FDC14CD331B2EDD6EF7166 /* CachedAsyncImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedAsyncImage.swift; sourceTree = "<group>"; };
 		243C6684EE4A6F1E6DE70E2D /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		2558987DC923669B848A5BE0 /* ImageUploadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUploadService.swift; sourceTree = "<group>"; };
@@ -127,6 +130,7 @@
 		33E9FF378E2AAF72E4BD57D0 /* CreditCosts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditCosts.swift; sourceTree = "<group>"; };
 		3431D0747F2A18B493F345E2 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		398C4C0EEEB163EE0C37B2B7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		3AAE8CFCFEE21B1967131087 /* WebTemplatePreviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebTemplatePreviewSheet.swift; sourceTree = "<group>"; };
 		3AAE9C2588BE8C217586CEB1 /* GeneratedImagesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedImagesStore.swift; sourceTree = "<group>"; };
 		440E632218A146BB3B4B6632 /* CaptionPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionPreset.swift; sourceTree = "<group>"; };
 		440E91AFA494511C85FDD620 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
@@ -159,6 +163,7 @@
 		A185C3375CD6065433434E3F /* UGCJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCJob.swift; sourceTree = "<group>"; };
 		A71B39D15E626999115943D9 /* CreditLedgerEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditLedgerEntry.swift; sourceTree = "<group>"; };
 		ABF6C8535B2DF52CF48A523E /* Anton-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Anton-Regular.ttf"; sourceTree = "<group>"; };
+		ADD973E141D23EA872157B4E /* TemplateTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplateTarget.swift; sourceTree = "<group>"; };
 		B11B30E1041C4EF37EA31C37 /* QuestionsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestionsCard.swift; sourceTree = "<group>"; };
 		B1A303DBF13E2E28C56E66B5 /* GumbyAI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GumbyAI.entitlements; sourceTree = "<group>"; };
 		B3DC13DF6B5426494220BD8D /* CreditsBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditsBackend.swift; sourceTree = "<group>"; };
@@ -167,7 +172,6 @@
 		C09339B675B7600AEC3CDAFC /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
 		C0A4AB37C72BACEF26BABD1B /* GumbyAI.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GumbyAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C315094353468AE658194B67 /* Inter-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Inter-Bold.ttf"; sourceTree = "<group>"; };
-		C3155AD14BA5202275EDA1B4 /* WebBlueprintModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebBlueprintModal.swift; sourceTree = "<group>"; };
 		C56959688962B981A78D419E /* Inter-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Inter-SemiBold.ttf"; sourceTree = "<group>"; };
 		C61D9BF666BFF21E44438827 /* UGCTemplatesFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UGCTemplatesFeed.swift; sourceTree = "<group>"; };
 		CCE3A95ED2B0F4E6DCC8FD60 /* InstrumentSerif-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "InstrumentSerif-Regular.ttf"; sourceTree = "<group>"; };
@@ -352,6 +356,7 @@
 				FBEF17698BEFA3AC4AAD357A /* MoodBoard.swift */,
 				4A2DCF5E5A1710A795552781 /* Post.swift */,
 				0C39A51F75B689665FBA8360 /* SavedAsset.swift */,
+				ADD973E141D23EA872157B4E /* TemplateTarget.swift */,
 				338678292C25E6F3C300A453 /* UGCChatStep.swift */,
 				A185C3375CD6065433434E3F /* UGCJob.swift */,
 				1AB9D873D860C587B1DEAACF /* UGCTemplate.swift */,
@@ -422,9 +427,10 @@
 			isa = PBXGroup;
 			children = (
 				440E91AFA494511C85FDD620 /* ChatView.swift */,
-				C3155AD14BA5202275EDA1B4 /* WebBlueprintModal.swift */,
 				E21D73C185006FD55F36178E /* WebStudioForm.swift */,
 				11E639FD23DCB1192B2CE3B5 /* WebStudioWelcomeView.swift */,
+				1EF4D72A5076A5DA9DAA799A /* WebTemplateModal.swift */,
+				3AAE8CFCFEE21B1967131087 /* WebTemplatePreviewSheet.swift */,
 			);
 			path = Chat;
 			sourceTree = "<group>";
@@ -606,6 +612,7 @@
 				BDBB3249AF208C37DD9BE5F9 /* SidebarViewModel.swift in Sources */,
 				AF2851BC3C68D303D999872A /* StoreKitService.swift in Sources */,
 				D07CCDC33414A192D05D4ED6 /* SuggestionChip.swift in Sources */,
+				2E9E7D3DADE4399651E97376 /* TemplateTarget.swift in Sources */,
 				219CE888BD3EF1F30E648106 /* UGCChatStep.swift in Sources */,
 				4849CD5F37E043CACB031CC5 /* UGCJob.swift in Sources */,
 				38BA2916EECAC0B11BC58767 /* UGCMyVideosView.swift in Sources */,
@@ -618,13 +625,14 @@
 				BCC22CB127474C7899DAF1C8 /* User.swift in Sources */,
 				1C760142EE279CE84D7CCD23 /* VideoPreloader.swift in Sources */,
 				061C252D6B74997F1B301793 /* WebBlueprintCard.swift in Sources */,
-				C7D6208CECAC08D6BCA212C0 /* WebBlueprintModal.swift in Sources */,
 				0CC11114B7186892E3BC8E8D /* WebButton.swift in Sources */,
 				4187CA81F6F8B23BD3BAFEDC /* WebPill.swift in Sources */,
 				A1D8CED01815955BBF661EEE /* WebPromptComposer.swift in Sources */,
 				59E8409AA4793F193D636EC2 /* WebStudioForm.swift in Sources */,
 				DC29B54836122E3E5754D93D /* WebStudioWelcomeView.swift in Sources */,
 				FDF8CB7027704F1BE3BD49E7 /* WebTemplateCard.swift in Sources */,
+				3BC6F82B8D774753D4BC36EA /* WebTemplateModal.swift in Sources */,
+				F86AE7256B8B8E74E6105703 /* WebTemplatePreviewSheet.swift in Sources */,
 				66610F10D4458EE409DA93F1 /* WebTheme.swift in Sources */,
 				B58C01911ECE590FC652C50F /* WebUITextView.swift in Sources */,
 			);

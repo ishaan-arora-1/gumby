@@ -30,24 +30,49 @@ final class UGCService {
         return resp.data ?? []
     }
 
-    /// One call does everything — the blueprint locks scene/motion/captions
-    /// and the server writes the script in the blueprint's voice. Mirrors
-    /// web's `api.generateFromBlueprint()` → `POST /ugc/blueprints/:id/generate`.
+    /// One call does everything — the blueprint locks scene/motion. The
+    /// modal can additionally pass an edited `script`, a free-text `tweaks`
+    /// nudge, and a `captionPreset` override. Mirrors web's
+    /// `api.generateFromBlueprint()` → `POST /ugc/blueprints/:id/generate`.
     func generateFromBlueprint(
         id: String,
         productImageUrl: String,
         productName: String?,
-        productDescription: String?
+        productDescription: String?,
+        script: String? = nil,
+        tweaks: String? = nil,
+        captionPreset: String? = nil
     ) async throws -> UGCJob {
         var body: [String: Any] = ["productImageUrl": productImageUrl]
         if let n = productName, !n.isEmpty { body["productName"] = n }
         if let d = productDescription, !d.isEmpty { body["productDescription"] = d }
+        if let s = script, !s.isEmpty { body["script"] = s }
+        if let t = tweaks, !t.isEmpty { body["tweaks"] = t }
+        if let c = captionPreset, !c.isEmpty { body["captionPreset"] = c }
         let resp: APIResponse<UGCJob> = try await api.post(
             path: "/ugc/blueprints/\(id)/generate",
             body: body
         )
         guard let job = resp.data else { throw APIError.noData }
         return job
+    }
+
+    /// Draft a script for a blueprint's modal, in that blueprint's voice.
+    /// Returns "" for silent product-shot blueprints.
+    func generateBlueprintScript(
+        id: String,
+        productName: String?,
+        productDescription: String?
+    ) async throws -> String {
+        var body: [String: Any] = [:]
+        if let n = productName, !n.isEmpty { body["productName"] = n }
+        if let d = productDescription, !d.isEmpty { body["productDescription"] = d }
+        struct ScriptPayload: Codable { let script: String }
+        let resp: APIResponse<ScriptPayload> = try await api.post(
+            path: "/ugc/blueprints/\(id)/script",
+            body: body
+        )
+        return resp.data?.script ?? ""
     }
 
     // MARK: - AI script (unified)

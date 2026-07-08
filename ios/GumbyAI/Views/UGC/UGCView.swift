@@ -161,10 +161,12 @@ struct UGCView: View {
     // MARK: - Handoff
 
     private func handoffToChat(with template: UGCTemplate) {
-        // Seed the studio form with this creator fixed (mirrors web's
-        // `useTemplate`) and navigate to the Studio tab. `pickTemplate`
-        // clears any in-flight generation and advances to `.studio`.
-        chatVM.pickTemplate(template)
+        // Route into the unified template flow (same as the studio gallery):
+        // open the input modal for this creator. We're on the welcome step,
+        // so WebStudioWelcomeView's `.sheet(item: $chatVM.activeTemplate)`
+        // presents it once we switch to the Studio tab.
+        chatVM.newConversation()
+        chatVM.activeTemplate = .from(template: template)
         selectedDestination = .chat
     }
 }

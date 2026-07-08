@@ -29,8 +29,10 @@ struct WebStudioWelcomeView: View {
     // runs in the cover's `onDismiss` AFTER teardown so the AVPlayer-backed
     // LoopingVideoView never gets torn down concurrently with the funnel
     // step change (which used to crash and/or swallow the navigation).
-    @State private var previewTemplate: UGCTemplate?
-    @State private var pendingHandoff: UGCTemplate?
+    // When the preview cover dismisses with a pending target, we promote it
+    // to the input modal in `onDismiss` — AFTER the AVPlayer-backed
+    // LoopingVideoView finishes tearing down, so the two never overlap.
+    @State private var pendingModalTarget: TemplateTarget?
 
     var body: some View {
         // GeometryReader gives us the viewport height so the first "page"
@@ -53,29 +55,28 @@ struct WebStudioWelcomeView: View {
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .background(WebTheme.Color.canvas)
-        // Full-screen preview for the templates strip. Picking happens
-        // in `onDismiss` so the cover (and its LoopingVideoView) finishes
-        // tearing down before the funnel step changes — same pattern the
-        // Creators tab uses.
-        .fullScreenCover(item: $previewTemplate, onDismiss: {
-            if let tpl = pendingHandoff {
-                pendingHandoff = nil
-                chatVM.pickTemplate(tpl)
+        // Step 1: preview the chosen template's clip + "Use as template".
+        // Promotion to the input modal runs in `onDismiss` so the cover (and
+        // its LoopingVideoView) finishes tearing down before the sheet opens.
+        .fullScreenCover(item: $chatVM.previewTarget, onDismiss: {
+            if let target = pendingModalTarget {
+                pendingModalTarget = nil
+                chatVM.activeTemplate = target
             }
-        }) { template in
-            UGCTemplatePreviewSheet(
-                template: template,
-                onClose: { previewTemplate = nil },
+        }) { target in
+            WebTemplatePreviewSheet(
+                target: target,
+                onClose: { chatVM.previewTarget = nil },
                 onUse: {
-                    pendingHandoff = template
-                    previewTemplate = nil
+                    pendingModalTarget = target
+                    chatVM.previewTarget = nil
                 }
             )
         }
-        // One-tap blueprint sheet — pick a viral template, drop one product
-        // photo, generate. Mirrors web's BlueprintModal on /studio.
-        .sheet(item: $chatVM.activeBlueprint) { bp in
-            WebBlueprintModal(blueprint: bp)
+        // Step 2: the unified input modal (photo, name, line, script,
+        // tweaks, captions) — used for every template, blueprint or creator.
+        .sheet(item: $chatVM.activeTemplate) { target in
+            WebTemplateModal(target: target)
                 .environmentObject(chatVM)
         }
     }
@@ -250,17 +251,15 @@ struct WebStudioWelcomeView: View {
                 ForEach(0..<4, id: \.self) { _ in skeletonCard }
             } else {
                 ForEach(items.prefix(visibleGalleryCount)) { item in
+                    // Every card opens the same preview → input-modal flow.
                     switch item {
                     case .blueprint(let bp):
                         WebBlueprintCard(blueprint: bp) {
-                            chatVM.activeBlueprint = bp
+                            chatVM.previewTarget = .from(blueprint: bp)
                         }
                     case .creator(let tpl):
                         WebTemplateCard(template: tpl) {
-                            // Open the preview instead of going straight to
-                            // the studio form — lets the user watch the
-                            // looping creator clip before committing.
-                            previewTemplate = tpl
+                            chatVM.previewTarget = .from(template: tpl)
                         }
                     }
                 }
