@@ -46,6 +46,10 @@ export function LoopingVideo({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Keep the latest callback in a ref so an inline arrow (new identity each
+  // render) doesn't re-run the play effect on every parent render.
+  const onAutoMutedRef = useRef(onAutoMuted);
+  onAutoMutedRef.current = onAutoMuted;
   // Mounts the <video> the first time the card approaches the viewport,
   // and never unmounts it after (avoids re-fetching on every scroll pass).
   const [everNear, setEverNear] = useState(!autoplay);
@@ -83,7 +87,7 @@ export function LoopingVideo({
           // the clip still plays; tell the parent so its speaker icon is honest.
           if (!v.muted) {
             v.muted = true;
-            onAutoMuted?.();
+            onAutoMutedRef.current?.();
             v.play().catch(() => {});
           }
         });
@@ -93,7 +97,7 @@ export function LoopingVideo({
       return () => v.removeEventListener('loadedmetadata', tryPlay);
     }
     v.pause();
-  }, [visible, autoplay, everNear, onAutoMuted]);
+  }, [visible, autoplay, everNear]);
 
   return (
     <div
