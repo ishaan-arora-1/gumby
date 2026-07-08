@@ -474,6 +474,10 @@ private struct AuthLoginView: View {
             case .github:
                 // Wire GitHub OAuth, then `await authService.handleGitHubSignIn(idToken:)`.
                 break
+            case .email:
+                // Email/password has its own dedicated form below — this
+                // social-button path is never invoked for it.
+                break
             }
         } label: {
             HStack(spacing: 10) {
