@@ -679,6 +679,33 @@ async function writeBlueprintScript(blueprint, { productName, productDescription
   return blueprints.compileFallbackScript(blueprint, productName);
 }
 
+/**
+ * Draft a script for a blueprint's modal "Generate" button, in that
+ * blueprint's specific voice. Silent product-shot blueprints return an
+ * empty script (they don't speak). The user can then edit it before
+ * generating; passing that edited text back to /generate uses it verbatim.
+ */
+router.post('/blueprints/:id/script', aiLimiter, async (req, res) => {
+  const blueprint = blueprints.getBlueprint(req.params.id);
+  if (!blueprint) {
+    return res.status(404).json({ success: false, error: 'Template not found' });
+  }
+  if (!blueprint.creatorSpeaks) {
+    return res.json({ success: true, data: { script: '' } });
+  }
+  const { productName, productDescription } = req.body || {};
+  try {
+    const script = await writeBlueprintScript(blueprint, {
+      productName: typeof productName === 'string' ? productName.trim().slice(0, 120) : '',
+      productDescription: typeof productDescription === 'string' ? productDescription.trim().slice(0, 500) : '',
+    });
+    return res.json({ success: true, data: { script } });
+  } catch (err) {
+    console.error('UGC blueprint script error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to generate script' });
+  }
+});
+
 router.post('/blueprints/:id/generate', aiLimiter, async (req, res) => {
   const userId = req.user.id;
   const blueprint = blueprints.getBlueprint(req.params.id);
@@ -686,7 +713,19 @@ router.post('/blueprints/:id/generate', aiLimiter, async (req, res) => {
     return res.status(404).json({ success: false, error: 'Template not found' });
   }
 
-  const { productImageUrl, productName, productDescription, script } = req.body || {};
+  const {
+    productImageUrl,
+    productName,
+    productDescription,
+    script,
+    // Optional free-text "tweaks" — e.g. "have her wave at the start". We
+    // append this to the compiled scene prompt so the locked format stays
+    // intact but the user can nudge the action.
+    tweaks,
+    // Optional caption preset override (the modal's style picker). Falls
+    // back to the blueprint's own default when omitted.
+    captionPreset,
+  } = req.body || {};
   const productImageUrlSafe =
     typeof productImageUrl === 'string' && /^https?:\/\//i.test(productImageUrl.trim())
       ? productImageUrl.trim()
@@ -699,6 +738,10 @@ router.post('/blueprints/:id/generate', aiLimiter, async (req, res) => {
   }
   const productNameSafe = typeof productName === 'string' ? productName.trim().slice(0, 120) : '';
   const productDescSafe = typeof productDescription === 'string' ? productDescription.trim().slice(0, 500) : '';
+  const tweaksSafe = typeof tweaks === 'string' ? tweaks.trim().slice(0, 400) : '';
+  const captionPresetSafe = typeof captionPreset === 'string' && captionPreset.length
+    ? captionPreset.slice(0, 32)
+    : null;
 
   try {
     // ---- Credit preflight (same policy as /generate: check now, debit
@@ -732,10 +775,21 @@ router.post('/blueprints/:id/generate', aiLimiter, async (req, res) => {
           });
     }
 
-    const prompt = blueprints.compilePrompt(blueprint, {
+    let prompt = blueprints.compilePrompt(blueprint, {
       productName: productNameSafe,
       productDescription: productDescSafe,
     });
+    // Fold the user's tweaks into the scene prompt (both stages read it).
+    if (tweaksSafe) {
+      prompt = `${prompt} Additional direction: ${tweaksSafe}`.slice(0, 3800);
+    }
+
+    // Captions: honor the modal's picker when the blueprint talks. Silent
+    // product-shot blueprints never get captions.
+    const captionsEnabled = blueprint.creatorSpeaks && !!(captionPresetSafe || blueprint.captionPreset);
+    const effectiveCaptionPreset = blueprint.creatorSpeaks
+      ? (captionPresetSafe || blueprint.captionPreset)
+      : null;
 
     const job = {
       id: uuidv4(),
@@ -758,8 +812,8 @@ router.post('/blueprints/:id/generate', aiLimiter, async (req, res) => {
         attachments: [{ url: productImageUrlSafe, role: 'product' }],
         aspect_ratio: blueprint.aspectRatio,
         creator_speaks: blueprint.creatorSpeaks,
-        captions_enabled: blueprint.creatorSpeaks && !!blueprint.captionPreset,
-        caption_preset: blueprint.captionPreset,
+        captions_enabled: captionsEnabled,
+        caption_preset: effectiveCaptionPreset,
       },
     };
 

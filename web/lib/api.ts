@@ -198,21 +198,33 @@ export const api = {
     request<{ success: boolean; data: import('./types').Blueprint[] }>(
       '/ugc/blueprints'
     ),
-  // One call does everything: the blueprint locks the scene/motion/captions,
-  // the server writes the script in the blueprint's voice. Only the product
-  // photo is required.
+  // One call does everything: the blueprint locks the scene/motion. The
+  // modal can additionally pass an edited `script` (talking templates), a
+  // free-text `tweaks` nudge, and a `captionPreset` override.
   generateFromBlueprint: (
     id: string,
     body: {
       productImageUrl: string;
       productName?: string;
       productDescription?: string;
+      script?: string;
+      tweaks?: string;
+      captionPreset?: string;
     }
   ) =>
     request<{ success: boolean; data: any }>(`/ugc/blueprints/${id}/generate`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  // Draft a script for a blueprint's modal, in that blueprint's voice.
+  generateBlueprintScript: (
+    id: string,
+    body: { productName?: string; productDescription?: string }
+  ) =>
+    request<{ success: boolean; data: { script: string } }>(
+      `/ugc/blueprints/${id}/script`,
+      { method: 'POST', body: JSON.stringify(body) }
+    ),
 
   // ---- UGC Script / Prompt ----
   generateScript: (body: {

@@ -5,12 +5,26 @@ import { api } from '@/lib/api';
 import type { Blueprint, UGCTemplate } from '@/lib/types';
 import { TemplateCard } from '@/components/studio/TemplateCard';
 import { BlueprintCard } from '@/components/studio/BlueprintCard';
+import {
+  type TemplateTarget,
+  targetFromBlueprint,
+  targetFromCreator,
+} from '@/lib/templateTarget';
 
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<UGCTemplate[]>([]);
   const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+  // Every card hands a normalized target to /studio, which opens the
+  // shared preview → input-modal flow. One key, one flow, both kinds.
+  const openInStudio = (target: TemplateTarget) => {
+    try {
+      sessionStorage.setItem('blinkugc:pendingTarget', JSON.stringify(target));
+    } catch {}
+    router.push('/studio');
+  };
 
   useEffect(() => {
     Promise.allSettled([
@@ -46,15 +60,7 @@ export default function TemplatesPage() {
                 <BlueprintCard
                   key={b.id}
                   blueprint={b}
-                  onUse={(bp) => {
-                    try {
-                      sessionStorage.setItem(
-                        'blinkugc:pendingBlueprint',
-                        JSON.stringify(bp)
-                      );
-                    } catch {}
-                    router.push('/studio');
-                  }}
+                  onUse={(bp) => openInStudio(targetFromBlueprint(bp))}
                 />
               ))}
         </div>
@@ -80,20 +86,7 @@ export default function TemplatesPage() {
               <TemplateCard
                 key={t.id}
                 template={t}
-                onUse={(tpl) => {
-                  // Hand the chosen creator off to the Studio page the same
-                  // way /history/[id]'s "Use creator" button does: stash it
-                  // in sessionStorage, which StudioPage reads on mount and
-                  // drops straight into the form. Without this, /studio
-                  // opened fresh and the selection was lost.
-                  try {
-                    sessionStorage.setItem(
-                      'blinkugc:pendingTemplate',
-                      JSON.stringify(tpl)
-                    );
-                  } catch {}
-                  router.push('/studio');
-                }}
+                onUse={(tpl) => openInStudio(targetFromCreator(tpl))}
               />
             ))}
       </div>

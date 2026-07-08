@@ -6,7 +6,13 @@ import type { Blueprint, UGCJob, UGCTemplate } from '@/lib/types';
 import { PromptComposer } from '@/components/studio/PromptComposer';
 import { TemplateCard } from '@/components/studio/TemplateCard';
 import { BlueprintCard } from '@/components/studio/BlueprintCard';
-import { BlueprintModal } from '@/components/studio/BlueprintModal';
+import { TemplatePreviewModal } from '@/components/studio/TemplatePreviewModal';
+import { TemplateModal } from '@/components/studio/TemplateModal';
+import {
+  type TemplateTarget,
+  targetFromBlueprint,
+  targetFromCreator,
+} from '@/lib/templateTarget';
 import { StudioForm, type StudioPrefill } from '@/components/studio/StudioForm';
 import { GeneratingCard } from '@/components/studio/GeneratingCard';
 import { VideoResult } from '@/components/studio/VideoResult';
@@ -21,7 +27,11 @@ export default function StudioPage() {
   const [prefill, setPrefill] = useState<StudioPrefill | null>(null);
   const [templates, setTemplates] = useState<UGCTemplate[]>([]);
   const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
-  const [activeBlueprint, setActiveBlueprint] = useState<Blueprint | null>(null);
+  // Two-step template flow: tapping a card sets `previewTarget` (video +
+  // "Use as template"); tapping Use promotes it to `activeTemplate` (the
+  // input modal). Both blueprints and featured creators use this path.
+  const [previewTarget, setPreviewTarget] = useState<TemplateTarget | null>(null);
+  const [activeTemplate, setActiveTemplate] = useState<TemplateTarget | null>(null);
   const [adJob, setAdJob] = useState<UGCJob | null>(null);
   const [error, setError] = useState<string>('');
   const [insufficient, setInsufficient] = useState<{ required: number; balance: number } | null>(null);
@@ -37,56 +47,36 @@ export default function StudioPage() {
   // the same tick before the React state flag updates.
   const generatingRef = useRef(false);
 
-  // Map a template/creator into the unified studio form: its still becomes
-  // the fixed creator image, the rest of the flow is identical to the
-  // normal unified form. Shared by the featured-templates grid below the
-  // composer AND the /templates + /history "Use creator" hand-off.
-  const useTemplate = (tpl: UGCTemplate) => {
-    const imageUrl = tpl.thumbnail_url || tpl.actor_avatar_url || '';
-    if (!imageUrl) return; // no usable still — ignore
-    setError('');
-    setPrefill({
-      creator: {
-        imageUrl,
-        name: tpl.actor_name || tpl.name,
-        sampleScript: tpl.sample_script,
-      },
-      aspectRatio: (tpl.aspect_ratio as '9:16' | '16:9' | '1:1') || '9:16',
-      duration: tpl.duration_seconds && tpl.duration_seconds >= 8 ? 10 : undefined,
-    });
-    setStep('studio');
-  };
-
-  // Load the featured creators shown below the composer on the welcome
-  // screen (same catalog as /templates).
+  // Load the gallery (featured creators + blueprints) shown below the
+  // composer on the welcome screen (same catalog as /templates).
   useEffect(() => {
     api.listTemplates(1).then((r) => setTemplates(r.data)).catch(() => {});
     api.listBlueprints().then((r) => setBlueprints(r.data)).catch(() => {});
   }, []);
 
-  // Hand-off from /templates' blueprint gallery — same sessionStorage
-  // pattern as pendingTemplate below: open the picked blueprint's modal
-  // right away.
+  // Hand-off from /templates and /history: they stash a normalized
+  // TemplateTarget and route here. We open its preview once on mount.
+  // (Legacy `pendingTemplate`/`pendingBlueprint` keys are also honored so
+  // an in-flight navigation from an older tab still works.)
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem('blinkugc:pendingBlueprint');
-      if (!raw) return;
-      sessionStorage.removeItem('blinkugc:pendingBlueprint');
-      setActiveBlueprint(JSON.parse(raw) as Blueprint);
-    } catch {}
-  }, []);
-
-  // Hand-off from /templates and /history's "Use creator" buttons. Both
-  // stash the chosen template/creator in sessionStorage and route here.
-  // We read it once on mount, drop the user straight into the studio form
-  // with that creator fixed, and clear the key so a refresh doesn't
-  // re-trigger.
-  useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem('blinkugc:pendingTemplate');
-      if (!raw) return;
-      sessionStorage.removeItem('blinkugc:pendingTemplate');
-      useTemplate(JSON.parse(raw) as UGCTemplate);
+      const rawTarget = sessionStorage.getItem('blinkugc:pendingTarget');
+      if (rawTarget) {
+        sessionStorage.removeItem('blinkugc:pendingTarget');
+        setPreviewTarget(JSON.parse(rawTarget) as TemplateTarget);
+        return;
+      }
+      const rawTpl = sessionStorage.getItem('blinkugc:pendingTemplate');
+      if (rawTpl) {
+        sessionStorage.removeItem('blinkugc:pendingTemplate');
+        setPreviewTarget(targetFromCreator(JSON.parse(rawTpl) as UGCTemplate));
+        return;
+      }
+      const rawBp = sessionStorage.getItem('blinkugc:pendingBlueprint');
+      if (rawBp) {
+        sessionStorage.removeItem('blinkugc:pendingBlueprint');
+        setPreviewTarget(targetFromBlueprint(JSON.parse(rawBp) as Blueprint));
+      }
     } catch {}
   }, []);
 
@@ -153,11 +143,11 @@ export default function StudioPage() {
     setStep('studio');
   };
 
-  // A blueprint generation was accepted (202) by the backend — the modal
+  // A template generation was accepted (202) by the backend — the modal
   // already did the POST, so this just owns the polling + step transitions,
   // landing on the exact same generating/done screens as the studio form.
-  const onBlueprintStarted = async (data: UGCJob) => {
-    setActiveBlueprint(null);
+  const onTemplateStarted = async (data: UGCJob) => {
+    setActiveTemplate(null);
     setError('');
     const myGen = ++genRef.current;
     setAdJob(data);
@@ -236,6 +226,8 @@ export default function StudioPage() {
     setPrefill(null);
     setAdJob(null);
     setError('');
+    setPreviewTarget(null);
+    setActiveTemplate(null);
   };
 
   useEffect(() => {
@@ -252,13 +244,26 @@ export default function StudioPage() {
         balance={insufficient?.balance ?? 0}
         onClose={() => setInsufficient(null)}
       />
-      {activeBlueprint && (
-        <BlueprintModal
-          blueprint={activeBlueprint}
-          onClose={() => setActiveBlueprint(null)}
-          onStarted={onBlueprintStarted}
+      {/* Step 1: preview the chosen template's clip + "Use as template". */}
+      {previewTarget && !activeTemplate && (
+        <TemplatePreviewModal
+          target={previewTarget}
+          onClose={() => setPreviewTarget(null)}
+          onUse={() => {
+            setActiveTemplate(previewTarget);
+            setPreviewTarget(null);
+          }}
+        />
+      )}
+      {/* Step 2: the unified input modal (photo, name, line, script, tweaks,
+          captions) — used for every template, blueprint or creator. */}
+      {activeTemplate && (
+        <TemplateModal
+          target={activeTemplate}
+          onClose={() => setActiveTemplate(null)}
+          onStarted={onTemplateStarted}
           onInsufficientCredits={async (required) => {
-            setActiveBlueprint(null);
+            setActiveTemplate(null);
             let balance = 0;
             try {
               balance = (await api.getCreditBalance()).data.balance;
@@ -302,8 +307,8 @@ export default function StudioPage() {
             <PromptComposer onSubmit={onComposerSubmit} loading={false} />
 
             {/* Templates — blueprints (one-photo viral formats) and featured
-                creators shuffled into one gallery. Blueprint cards open the
-                one-photo modal; creator cards open the preview → studio form. */}
+                creators woven into one gallery. Every card opens the same
+                preview → input-modal flow. */}
             <div className="mt-20 max-w-7xl mx-auto">
               <div className="flex items-end justify-between mb-5">
                 <div>
@@ -325,13 +330,13 @@ export default function StudioPage() {
                     <BlueprintCard
                       key={`bp-${item.bp.id}`}
                       blueprint={item.bp}
-                      onUse={setActiveBlueprint}
+                      onUse={(bp) => setPreviewTarget(targetFromBlueprint(bp))}
                     />
                   ) : (
                     <TemplateCard
                       key={`tpl-${item.tpl.id}`}
                       template={item.tpl}
-                      onUse={useTemplate}
+                      onUse={(tpl) => setPreviewTarget(targetFromCreator(tpl))}
                     />
                   )
                 )}
