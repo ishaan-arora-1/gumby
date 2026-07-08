@@ -165,26 +165,32 @@ final class PlayerController: ObservableObject {
         // (probably a race with the preloader handing back a partially
         // ready AVURLAsset). Observing `.AVPlayerItemDidPlayToEndTime`
         // and explicitly seeking to zero + resuming guarantees the loop
-        // regardless of whether the looper is working. When the looper
-        // *is* working, this notification fires on the templateItem (not
-        // the active duplicate), so the seek is harmless.
+        // regardless of whether the looper is working.
         //
-        // The observer is registered on `nil` object so it catches the
-        // end notification for whichever AVPlayerItem the looper is
-        // currently playing (the looper rotates between duplicates of
-        // the template item, and we don't get a handle on them).
+        // The observer is registered on `nil` object because AVPlayerLooper
+        // rotates between internal duplicates of the template item, so we
+        // never get a stable handle to filter on up front. BUT `object: nil`
+        // means this fires for EVERY AVPlayerItem in the whole app finishing
+        // playback — including other LoopingVideoViews (e.g. autoplaying
+        // grid cards still playing behind a full-screen preview). Without a
+        // check, any one of THOSE reaching its end would seek/replay THIS
+        // player too, which is exactly what caused template previews to cut
+        // off mid-clip and restart. `player.items()` returns this player's
+        // own current + looper-queued items, so we only act when the item
+        // that actually ended is one of ours.
         endOfPlaybackObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] note in
             guard let self else { return }
+            guard let endedItem = note.object as? AVPlayerItem,
+                  self.player.items().contains(endedItem) else { return }
             Task { @MainActor in
                 // Bail if this controller has been torn down — the close
                 // path on a template preview used to race this notification
                 // and crash on the AVPlayer cleanup path.
                 guard !self.torndown else { return }
-                // Only act on this player's items, not other LoopingVideoViews.
                 guard let current = self.player.currentItem else { return }
                 current.seek(to: .zero, completionHandler: nil)
                 if self.player.timeControlStatus != .playing {
