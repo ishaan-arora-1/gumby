@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private enum AuthScreen {
     case welcome
@@ -131,8 +132,17 @@ private struct AuthLoginView: View {
     @EnvironmentObject private var authService: AuthService
     var onBack: () -> Void
 
+    /// Email/password is the primary path (works for accounts made on the
+    /// website too); the magic link stays as a passwordless fallback.
+    enum EmailMode { case login, signUp }
+
     @State private var email: String = ""
+    @State private var password: String = ""
+    @State private var name: String = ""
+    @State private var mode: EmailMode = .login
     @State private var didSendEmailLink = false
+    /// A non-error status line (e.g. "check your email to confirm").
+    @State private var infoMessage: String?
 
     private let horizontalInset: CGFloat = 24
     private let controlCornerRadius: CGFloat = 8
@@ -206,6 +216,14 @@ private struct AuthLoginView: View {
                             .padding(.top, 10)
                     }
 
+                    if let info = infoMessage {
+                        Text(info)
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundColor(AppConstants.authLoginSecondaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 10)
+                    }
+
                     if authService.isLoading {
                         ProgressView()
                             .tint(.white)
@@ -227,7 +245,9 @@ private struct AuthLoginView: View {
         }
         .onChange(of: email) { _, _ in
             didSendEmailLink = false
+            infoMessage = nil
         }
+        .onChange(of: password) { _, _ in infoMessage = nil }
         // Don't carry a stale error in from a previous session/launch.
         // Without this, a user could open Login and see "invalid token"
         // or a leftover network error before they've tapped anything.
@@ -252,52 +272,181 @@ private struct AuthLoginView: View {
 
     private var emailSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Email")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white)
+            if mode == .signUp {
+                fieldLabel("Name")
+                styledField(
+                    placeholder: "Name (optional)",
+                    text: $name,
+                    textContentType: .name,
+                    keyboard: .default,
+                    autocapitalize: .words
+                )
+            }
 
-            TextField(
-                "",
+            fieldLabel("Email")
+            styledField(
+                placeholder: "Email",
                 text: $email,
-                prompt: Text("Email").foregroundColor(AppConstants.authLoginSecondaryText)
+                textContentType: .emailAddress,
+                keyboard: .emailAddress,
+                autocapitalize: .never
             )
-            .textContentType(.emailAddress)
-            .keyboardType(.emailAddress)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .font(.system(size: 16, weight: .regular))
-            .foregroundColor(.white)
-            .padding(.horizontal, 12)
-            .frame(height: socialHeight)
-            .background(AppConstants.authSocialButtonFill)
-            .clipShape(RoundedRectangle(cornerRadius: controlCornerRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: controlCornerRadius, style: .continuous)
-                    .stroke(AppConstants.authSocialButtonStroke, lineWidth: 1)
+            .padding(.bottom, 4)
+
+            fieldLabel("Password")
+            styledSecureField(
+                placeholder: mode == .signUp ? "Password (8+ chars)" : "Password",
+                text: $password,
+                isNew: mode == .signUp
             )
 
-            Button(action: submitEmail) {
-                Text("Continue")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(AppConstants.authPrimaryCTALabel)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: continueHeight)
-                    .background(AppConstants.authPrimaryCTAFill)
-                    .clipShape(RoundedRectangle(cornerRadius: controlCornerRadius, style: .continuous))
+            Button(action: submitPassword) {
+                Group {
+                    if authService.isLoading {
+                        ProgressView().tint(AppConstants.authPrimaryCTALabel)
+                    } else {
+                        Text(mode == .login ? "Log in" : "Create account")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(AppConstants.authPrimaryCTALabel)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: continueHeight)
+                .background(AppConstants.authPrimaryCTAFill)
+                .clipShape(RoundedRectangle(cornerRadius: controlCornerRadius, style: .continuous))
             }
             .buttonStyle(.plain)
             .padding(.top, 20)
+            .disabled(!canSubmitPassword || authService.isLoading)
+            .opacity(canSubmitPassword ? 1 : 0.45)
+
+            // Toggle between Log in / Sign up.
+            HStack(spacing: 4) {
+                Text(mode == .login ? "New here?" : "Already have an account?")
+                    .foregroundColor(AppConstants.authLoginSecondaryText)
+                Button(mode == .login ? "Create an account" : "Log in") {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        mode = (mode == .login ? .signUp : .login)
+                    }
+                    authService.errorMessage = nil
+                    infoMessage = nil
+                }
+                .foregroundColor(.white)
+                .fontWeight(.semibold)
+            }
+            .font(.system(size: 13))
+            .frame(maxWidth: .infinity)
+            .padding(.top, 16)
+
+            // Passwordless fallback — the original magic-link flow.
+            Button(action: submitMagicLink) {
+                Text("Email me a sign-in link instead")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundColor(AppConstants.authLoginSecondaryText)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 14)
             .disabled(emailTrimmed.isEmpty || authService.isLoading)
-            .opacity(emailTrimmed.isEmpty ? 0.45 : 1)
         }
+    }
+
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(.white)
+    }
+
+    private func styledField(
+        placeholder: String,
+        text: Binding<String>,
+        textContentType: UITextContentType?,
+        keyboard: UIKeyboardType,
+        autocapitalize: TextInputAutocapitalization
+    ) -> some View {
+        TextField(
+            "",
+            text: text,
+            prompt: Text(placeholder).foregroundColor(AppConstants.authLoginSecondaryText)
+        )
+        .textContentType(textContentType)
+        .keyboardType(keyboard)
+        .textInputAutocapitalization(autocapitalize)
+        .autocorrectionDisabled()
+        .font(.system(size: 16, weight: .regular))
+        .foregroundColor(.white)
+        .padding(.horizontal, 12)
+        .frame(height: socialHeight)
+        .background(AppConstants.authSocialButtonFill)
+        .clipShape(RoundedRectangle(cornerRadius: controlCornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: controlCornerRadius, style: .continuous)
+                .stroke(AppConstants.authSocialButtonStroke, lineWidth: 1)
+        )
+    }
+
+    private func styledSecureField(
+        placeholder: String,
+        text: Binding<String>,
+        isNew: Bool
+    ) -> some View {
+        SecureField(
+            "",
+            text: text,
+            prompt: Text(placeholder).foregroundColor(AppConstants.authLoginSecondaryText)
+        )
+        .textContentType(isNew ? .newPassword : .password)
+        .submitLabel(.go)
+        .onSubmit { submitPassword() }
+        .font(.system(size: 16, weight: .regular))
+        .foregroundColor(.white)
+        .padding(.horizontal, 12)
+        .frame(height: socialHeight)
+        .background(AppConstants.authSocialButtonFill)
+        .clipShape(RoundedRectangle(cornerRadius: controlCornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: controlCornerRadius, style: .continuous)
+                .stroke(AppConstants.authSocialButtonStroke, lineWidth: 1)
+        )
     }
 
     private var emailTrimmed: String {
         email.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func submitEmail() {
+    private var canSubmitPassword: Bool {
+        guard emailTrimmed.contains("@") else { return false }
+        return mode == .login ? !password.isEmpty : password.count >= 8
+    }
+
+    private func submitPassword() {
+        guard canSubmitPassword, !authService.isLoading else { return }
         didSendEmailLink = false
+        infoMessage = nil
+        authService.errorMessage = nil
+        Task {
+            switch mode {
+            case .login:
+                await authService.signInWithEmailPassword(email: emailTrimmed, password: password)
+            case .signUp:
+                let result = await authService.signUpWithEmailPassword(
+                    email: emailTrimmed,
+                    password: password,
+                    name: name
+                )
+                if result == .needsEmailConfirmation {
+                    infoMessage = "Check your email to confirm your account, then log in."
+                    mode = .login
+                }
+                // .signedIn dismisses this screen automatically via the
+                // AuthService `isAuthenticated` flag observed by ContentView.
+            }
+        }
+    }
+
+    private func submitMagicLink() {
+        didSendEmailLink = false
+        infoMessage = nil
         authService.errorMessage = nil
         Task {
             await authService.sendEmailSignInLink(email: emailTrimmed)

@@ -376,6 +376,168 @@ class AuthService: ObservableObject {
         }
     }
 
+    // MARK: - Email + password (parity with the website)
+
+    /// Result of an email/password sign-up. When Supabase has email
+    /// confirmation enabled, sign-up returns no session — the user must
+    /// click a link in their inbox before they can sign in. The web client
+    /// surfaces this same `needsConfirmation` distinction.
+    enum EmailSignUpResult {
+        case signedIn
+        case needsEmailConfirmation
+    }
+
+    /// Sign in with an existing email + password. Mirrors the website's
+    /// `supabase.auth.signInWithPassword` (`grant_type=password`).
+    func signInWithEmailPassword(email: String, password: String) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.contains("@") else {
+            errorMessage = "Enter a valid email address."
+            return
+        }
+        guard !password.isEmpty else {
+            errorMessage = "Enter your password."
+            return
+        }
+
+        guard let url = URL(string: "\(AppConstants.supabaseURL)/auth/v1/token?grant_type=password") else {
+            errorMessage = "Invalid Supabase URL"
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(AppConstants.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(AppConstants.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: [
+                "email": trimmed,
+                "password": password,
+            ])
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                errorMessage = "Sign-in failed. Please try again."
+                return
+            }
+            guard (200...299).contains(http.statusCode) else {
+                errorMessage = friendlyAuthError(data: data, fallback: "Email or password isn't right.")
+                return
+            }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  json["access_token"] is String else {
+                errorMessage = "Invalid auth response"
+                return
+            }
+            await finalizeSupabaseSession(json, provider: "email", fullName: nil)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Create a new account with email + password. Mirrors the website's
+    /// `supabase.auth.signUp`. If Supabase auto-confirms, the response
+    /// carries a session and the user is signed in immediately; otherwise
+    /// they must confirm via email first.
+    @discardableResult
+    func signUpWithEmailPassword(email: String, password: String, name: String?) async -> EmailSignUpResult? {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.contains("@") else {
+            errorMessage = "Enter a valid email address."
+            return nil
+        }
+        guard password.count >= 8 else {
+            errorMessage = "Password must be at least 8 characters."
+            return nil
+        }
+
+        guard let url = URL(string: "\(AppConstants.supabaseURL)/auth/v1/signup") else {
+            errorMessage = "Invalid Supabase URL"
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(AppConstants.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(AppConstants.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+
+        do {
+            let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            var body: [String: Any] = ["email": trimmed, "password": password]
+            if !trimmedName.isEmpty {
+                // Matches the web's `options.data.full_name`, so the profile
+                // name is identical however the user signed up.
+                body["data"] = ["full_name": trimmedName]
+            }
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                errorMessage = "Sign-up failed. Please try again."
+                return nil
+            }
+            guard (200...299).contains(http.statusCode) else {
+                errorMessage = friendlyAuthError(data: data, fallback: "Could not create your account.")
+                return nil
+            }
+
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            // Auto-confirm on → session tokens are present → sign straight in.
+            if let json, json["access_token"] is String {
+                let comps = PersonNameComponents.from(fullName: trimmedName)
+                await finalizeSupabaseSession(json, provider: "email", fullName: comps)
+                return .signedIn
+            }
+            // Confirmation required — no session yet.
+            return .needsEmailConfirmation
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Store the tokens + user from a Supabase session JSON and mark the
+    /// user signed in, then best-effort sync with our backend. Shared by
+    /// the email/password flows (the OAuth/id_token flows predate this and
+    /// keep their own inline copy to avoid churn on working code).
+    private func finalizeSupabaseSession(
+        _ json: [String: Any],
+        provider: String,
+        fullName: PersonNameComponents?
+    ) async {
+        guard let accessToken = json["access_token"] as? String else { return }
+        self._token = accessToken
+        KeychainHelper.shared.save(key: "auth_token", value: accessToken)
+        if let refreshToken = json["refresh_token"] as? String {
+            KeychainHelper.shared.save(key: "refresh_token", value: refreshToken)
+        }
+        self.currentUser = userFromSupabaseResponse(json, fullName: fullName)
+        self.isAuthenticated = true
+        self.errorMessage = nil
+        recordLastUsedProvider(provider)
+        await syncWithBackend(accessToken, fullName: fullName)
+    }
+
+    /// Pull the friendliest message out of a GoTrue error body.
+    private func friendlyAuthError(data: Data, fallback: String) -> String {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return fallback
+        }
+        return (obj["error_description"] as? String)
+            ?? (obj["msg"] as? String)
+            ?? (obj["message"] as? String)
+            ?? (obj["error"] as? String)
+            ?? fallback
+    }
+
     private func signInWithSupabase(
         provider: String,
         idToken: String,
@@ -637,6 +799,22 @@ enum AuthProvider: String {
     case apple
     case google
     case github
+    case email
+}
+
+private extension PersonNameComponents {
+    /// Build components from a single "First Last" display name so the
+    /// email sign-up path can feed the same `userFromSupabaseResponse`
+    /// name logic the Apple path uses.
+    static func from(fullName: String) -> PersonNameComponents? {
+        let trimmed = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        var comps = PersonNameComponents()
+        let parts = trimmed.split(separator: " ", maxSplits: 1).map(String.init)
+        comps.givenName = parts.first
+        if parts.count > 1 { comps.familyName = parts[1] }
+        return comps
+    }
 }
 
 private final class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
