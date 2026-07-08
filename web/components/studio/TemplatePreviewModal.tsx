@@ -17,7 +17,10 @@ interface Props {
  * "Use as template" hands off to the input modal.
  */
 export function TemplatePreviewModal({ target, onClose, onUse }: Props) {
-  const [muted, setMuted] = useState(true);
+  // Audio ON by default — the user opened this to see and hear the template.
+  // If the browser blocks unmuted autoplay, LoopingVideo falls back to muted
+  // and calls onAutoMuted so the speaker icon stays truthful.
+  const [muted, setMuted] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -65,6 +68,7 @@ export function TemplatePreviewModal({ target, onClose, onUse }: Props) {
               className="w-full h-full"
               muted={muted}
               autoplay
+              onAutoMuted={() => setMuted(true)}
             />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-center px-6 bg-elevated">

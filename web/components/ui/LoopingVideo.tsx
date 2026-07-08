@@ -11,6 +11,12 @@ interface Props {
   autoplay?: boolean;
   cover?: boolean;
   onClick?: () => void;
+  /**
+   * Called when we wanted to play with sound but the browser blocked
+   * unmuted autoplay, so we fell back to muted playback. Lets the parent
+   * sync its own mute UI (e.g. the speaker icon) with reality.
+   */
+  onAutoMuted?: () => void;
 }
 
 /**
@@ -36,6 +42,7 @@ export function LoopingVideo({
   autoplay = true,
   cover = true,
   onClick,
+  onAutoMuted,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -70,13 +77,23 @@ export function LoopingVideo({
     const v = videoRef.current;
     if (!v) return;
     if (visible && autoplay) {
-      const tryPlay = () => v.play().catch(() => {});
+      const tryPlay = () => {
+        v.play().catch(() => {
+          // Unmuted autoplay blocked by the browser → fall back to muted so
+          // the clip still plays; tell the parent so its speaker icon is honest.
+          if (!v.muted) {
+            v.muted = true;
+            onAutoMuted?.();
+            v.play().catch(() => {});
+          }
+        });
+      };
       tryPlay();
       v.addEventListener('loadedmetadata', tryPlay);
       return () => v.removeEventListener('loadedmetadata', tryPlay);
     }
     v.pause();
-  }, [visible, autoplay, everNear]);
+  }, [visible, autoplay, everNear, onAutoMuted]);
 
   return (
     <div

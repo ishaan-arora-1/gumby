@@ -9,7 +9,10 @@ struct WebTemplatePreviewSheet: View {
     let onClose: () -> Void
     let onUse: () -> Void
 
-    @State private var muted = true
+    // Audio ON by default — the user opened this to see (and hear) the
+    // template. `.onAppear` switches the session to .playback so it plays
+    // even when the phone's ring/silent switch is on.
+    @State private var muted = false
 
     var body: some View {
         ZStack {
@@ -44,6 +47,10 @@ struct WebTemplatePreviewSheet: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            // Play with sound over the ring/silent switch from the start.
+            AudioSessionManager.enablePlaybackOverSilentSwitch()
+        }
     }
 
     private var videoCard: some View {
