@@ -571,6 +571,8 @@ struct WebAdDoneView: View {
         .padding(.horizontal, 14)
         .onAppear {
             if let s = videoURL, let url = URL(string: s) {
+                // Play the finished ad with sound even on silent.
+                AudioSessionManager.enablePlaybackOverSilentSwitch()
                 let p = AVPlayer(url: url)
                 p.isMuted = false
                 p.play()

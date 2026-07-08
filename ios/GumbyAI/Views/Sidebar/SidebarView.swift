@@ -85,8 +85,8 @@ struct SidebarView: View {
                         action: { goTo(.chat, resetFresh: true) }
                     )
                     navRow(
-                        label: "Creators",
-                        systemImage: "person.2",
+                        label: "Templates",
+                        systemImage: "square.grid.2x2",
                         isActive: selectedDestination == .ugc,
                         action: { goTo(.ugc) }
                     )

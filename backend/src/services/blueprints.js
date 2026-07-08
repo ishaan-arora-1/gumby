@@ -337,22 +337,31 @@ function getBlueprint(id) {
  * Public catalog shape — everything the clients need to render the gallery
  * and price the generation, and nothing else. The prompt recipes stay
  * server-side.
+ *
+ * A blueprint is only exposed once it has a rendered preview video — a card
+ * with no clip reads as "broken/not loading" to users. This is self-healing:
+ * render the missing preview (scripts/generate-blueprint-previews.js) + sync
+ * (scripts/sync-blueprint-previews.js) and the template reappears automatically
+ * on both web and iOS with no further code change.
  */
 function publicBlueprints() {
-  return BLUEPRINTS.map((b) => ({
-    id: b.id,
-    name: b.name,
-    tagline: b.tagline,
-    format: b.format,
-    has_creator: b.hasCreator,
-    creator_speaks: b.creatorSpeaks,
-    duration_seconds: b.durationSeconds,
-    aspect_ratio: b.aspectRatio,
-    accent: b.accent,
-    sort_order: b.sortOrder,
-    preview_video_url: b.previewVideoUrl,
-    preview_poster_url: b.previewPosterUrl,
-  })).sort((a, b) => a.sort_order - b.sort_order);
+  return BLUEPRINTS
+    .filter((b) => !!b.previewVideoUrl)
+    .map((b) => ({
+      id: b.id,
+      name: b.name,
+      tagline: b.tagline,
+      format: b.format,
+      has_creator: b.hasCreator,
+      creator_speaks: b.creatorSpeaks,
+      duration_seconds: b.durationSeconds,
+      aspect_ratio: b.aspectRatio,
+      accent: b.accent,
+      sort_order: b.sortOrder,
+      preview_video_url: b.previewVideoUrl,
+      preview_poster_url: b.previewPosterUrl,
+    }))
+    .sort((a, b) => a.sort_order - b.sort_order);
 }
 
 /**

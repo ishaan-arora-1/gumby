@@ -198,7 +198,15 @@ final class PlayerController: ObservableObject {
         }
     }
 
-    func setMuted(_ muted: Bool) { player.isMuted = muted }
+    func setMuted(_ muted: Bool) {
+        // Unmuting: switch the app's audio session to .playback so sound
+        // plays even when the phone's ring/silent switch is on — the same
+        // behavior as TikTok / Instagram / YouTube. The default (ambient)
+        // session is silenced by the hardware switch, which is exactly the
+        // limitation the user hit.
+        if !muted { AudioSessionManager.enablePlaybackOverSilentSwitch() }
+        player.isMuted = muted
+    }
 
     func setActive(_ active: Bool) {
         if active { player.play() } else { player.pause() }

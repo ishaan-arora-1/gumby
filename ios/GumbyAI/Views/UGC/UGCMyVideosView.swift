@@ -343,6 +343,8 @@ struct UGCVideoPlayerSheet: View {
     private func setupPlayerIfReady() {
         guard player == nil,
               let url = liveJob.outputVideoURL.flatMap(URL.init(string:)) else { return }
+        // Sound plays even when the phone is on silent.
+        AudioSessionManager.enablePlaybackOverSilentSwitch()
         let p = AVPlayer(url: url)
         p.isMuted = false
         p.play()

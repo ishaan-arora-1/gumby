@@ -1,24 +1,21 @@
 import SwiftUI
 
-/// Top-level "Creators" screen.
-///
-/// Previously this had an Explore / Library tab picker and a grid/feed
-/// layout toggle. We've collapsed it down to a single History-style
-/// 2-column grid of templates — no tabs, no toggles, just a scroll of
-/// 9:16 looping creator clips. Tapping a tile opens a web-style
-/// preview sheet with a "Use as template" CTA that hands off to the
-/// chat funnel (same handoff the old flow used).
+/// Top-level "Templates" screen — the SAME unified gallery the studio home
+/// shows (blueprints + featured creators, mixed in the shared fixed order).
+/// Tapping any tile opens the preview sheet, and "Use as template" hands off
+/// to the studio's input modal — identical to the studio flow.
 struct UGCView: View {
     @EnvironmentObject var sidebarVM: SidebarViewModel
     @EnvironmentObject var ugcVM: UGCViewModel
     @EnvironmentObject var chatVM: ChatViewModel
     @Binding var selectedDestination: NavigationDestination
 
-    @State private var previewTemplate: UGCTemplate?
-    /// Set when the user taps "Use as template" inside the preview cover.
-    /// We dismiss the cover first and run the actual handoff in the
-    /// cover's `onDismiss` — see the `.fullScreenCover` below.
-    @State private var pendingHandoff: UGCTemplate?
+    /// Local preview state (not chatVM's, so it can't collide with the
+    /// studio welcome view's own preview cover when both are mounted).
+    @State private var localPreview: TemplateTarget?
+    /// Set on "Use as template"; the handoff runs in the cover's onDismiss
+    /// once the AVPlayer-backed preview is fully torn down.
+    @State private var pendingModalTarget: TemplateTarget?
 
     var body: some View {
         ZStack {
@@ -30,12 +27,10 @@ struct UGCView: View {
             }
         }
         .task {
-            // `force: true` so we always fetch fresh signed URLs — stale
-            // in-memory templates were a frequent source of "video stuck
-            // on loading" reports. The HTTP layer is also no-store now.
-            await ugcVM.loadTemplates(force: true)
+            await chatVM.ensureTemplatesLoaded()
+            await chatVM.ensureBlueprintsLoaded()
         }
-        .fullScreenCover(item: $previewTemplate, onDismiss: {
+        .fullScreenCover(item: $localPreview, onDismiss: {
             // The cover (and its AVPlayer-backed LoopingVideoView) is now
             // fully torn down. Only NOW do we switch the top-level
             // destination to .chat. Doing the handoff here — instead of
@@ -47,20 +42,20 @@ struct UGCView: View {
             //   2. the AVPlayer cleanup crash that happened when the
             //      cover dismissed and the destination switched in the
             //      same pass.
-            if let template = pendingHandoff {
-                pendingHandoff = nil
-                handoffToChat(with: template)
+            if let target = pendingModalTarget {
+                pendingModalTarget = nil
+                handoffToChat(with: target)
             }
-        }) { template in
-            UGCTemplatePreviewSheet(
-                template: template,
-                onClose: { previewTemplate = nil },
+        }) { target in
+            WebTemplatePreviewSheet(
+                target: target,
+                onClose: { localPreview = nil },
                 onUse: {
                     // Record the choice and dismiss the cover. The actual
                     // handoff runs in `onDismiss` above, once teardown is
                     // complete.
-                    pendingHandoff = template
-                    previewTemplate = nil
+                    pendingModalTarget = target
+                    localPreview = nil
                 }
             )
         }
@@ -70,7 +65,7 @@ struct UGCView: View {
 
     private var header: some View {
         ZStack {
-            Text("Creators")
+            Text("Templates")
                 .font(.gumby(20, weight: .semiBold))
                 .foregroundStyle(AppConstants.textPrimary)
 
@@ -118,55 +113,47 @@ struct UGCView: View {
 
     @ViewBuilder
     private var grid: some View {
-        if ugcVM.isLoadingTemplates && ugcVM.templates.isEmpty {
+        // Exact same gallery as the studio home: blueprints + featured
+        // creators, mixed in the shared fixed order.
+        let items = chatVM.studioGallery
+        if items.isEmpty {
             ProgressView()
                 .tint(.white)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if ugcVM.templates.isEmpty {
-            emptyState
         } else {
             ScrollView {
                 LazyVGrid(columns: gridColumns, spacing: 8) {
-                    ForEach(ugcVM.templates) { template in
-                        UGCTemplateCard(template: template) {
-                            previewTemplate = template
+                    ForEach(items) { item in
+                        switch item {
+                        case .blueprint(let bp):
+                            WebBlueprintCard(blueprint: bp) {
+                                localPreview = .from(blueprint: bp)
+                            }
+                        case .creator(let tpl):
+                            WebTemplateCard(template: tpl) {
+                                localPreview = .from(template: tpl)
+                            }
                         }
                     }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 12)
             }
-            .refreshable { await ugcVM.loadTemplates(force: true) }
-        }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 14) {
-            Spacer()
-            Image(systemName: "person.crop.rectangle.stack")
-                .font(.system(size: 48))
-                .foregroundStyle(AppConstants.accentGradient)
-            Text("No creators yet")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(.white)
-            Text("New AI creators land here as we add them.")
-                .font(.system(size: 14))
-                .foregroundColor(AppConstants.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-            Spacer()
+            .refreshable {
+                await chatVM.loadTemplates(force: true)
+                await chatVM.ensureBlueprintsLoaded()
+            }
         }
     }
 
     // MARK: - Handoff
 
-    private func handoffToChat(with template: UGCTemplate) {
-        // Route into the unified template flow (same as the studio gallery):
-        // open the input modal for this creator. We're on the welcome step,
-        // so WebStudioWelcomeView's `.sheet(item: $chatVM.activeTemplate)`
-        // presents it once we switch to the Studio tab.
+    private func handoffToChat(with target: TemplateTarget) {
+        // Open the unified input modal on the Studio tab — same modal the
+        // studio gallery uses. newConversation() puts us on the welcome
+        // step so WebStudioWelcomeView presents the sheet.
         chatVM.newConversation()
-        chatVM.activeTemplate = .from(template: template)
+        chatVM.activeTemplate = target
         selectedDestination = .chat
     }
 }
