@@ -89,14 +89,48 @@ class ChatViewModel: ObservableObject {
             }
             return UInt32(bitPattern: h)
         }
+
+        /// Priority key — blueprint id, or a creator's lowercased actor name.
+        /// Matches web's `templatePriorityKey`.
+        var priorityKey: String {
+            switch self {
+            case .blueprint(let bp): return bp.id
+            case .creator(let tpl): return tpl.actorName.trimmingCharacters(in: .whitespaces).lowercased()
+            }
+        }
     }
 
-    /// Blueprints + featured creators woven together in a FIXED order
-    /// (hash-sorted, mirrors web's `galleryItems` on /studio).
+    /// Curated front-of-grid order (mirror of web's TEMPLATE_PRIORITY).
+    /// Blueprints by id; creators by lowercased actor name.
+    static let templatePriority: [String] = [
+        "podcast-plug",    // 1  Podcast Clip
+        "ava",             // 2  MENA / outfit check → Ava "Clothing Try-On"
+        "fit-check",       // 3  Fit Check
+        "handheld-hype",   // 4  Handheld Hype
+        "unboxing-asmr",   // 5  ASMR Unboxing
+        "kiara",           // 6  Kiara "Wardrobe styling"
+        "golden-hour-pov", // 7  Golden Hour POV
+        "riya",            // 8  Riya
+        "anika",           //    Anika
+        "neev",            //    Niamh → Neev "Fashion drop reveal"
+    ]
+
+    private static func templateRank(_ key: String) -> Int {
+        Self.templatePriority.firstIndex(of: key) ?? Int.max
+    }
+
+    /// Blueprints + featured creators woven together in a FIXED order:
+    /// curated priority first, then the stable hash order for the rest.
+    /// Mirrors web's `galleryItems` on /studio.
     var studioGallery: [StudioGalleryItem] {
         let items = blueprints.map(StudioGalleryItem.blueprint)
             + templates.map(StudioGalleryItem.creator)
-        return items.sorted { $0.mixKey < $1.mixKey }
+        return items.sorted { a, b in
+            let ra = Self.templateRank(a.priorityKey)
+            let rb = Self.templateRank(b.priorityKey)
+            if ra != rb { return ra < rb }
+            return a.mixKey < b.mixKey
+        }
     }
 
     // MARK: - Studio form (unified)

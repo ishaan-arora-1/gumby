@@ -60,3 +60,36 @@ export function targetFromCreator(t: UGCTemplate): TemplateTarget {
 }
 
 export const creditsForDuration = (s: number) => (s >= 13 ? 150 : s >= 8 ? 100 : 50);
+
+/**
+ * Curated front-of-grid order for the mixed template gallery, shared by web
+ * and iOS. Blueprints are keyed by their id; featured creators by their
+ * lowercased actor name (that's how the product refers to them, and it
+ * survives DB re-seeds better than a UUID). Anything not listed keeps its
+ * existing stable (hash) order after these.
+ */
+export const TEMPLATE_PRIORITY: string[] = [
+  'podcast-plug',    // 1  Podcast Clip
+  'ava',             // 2  MENA / the outfit check → Ava "Clothing Try-On"
+  'fit-check',       // 3  Fit Check
+  'handheld-hype',   // 4  Handheld Hype
+  'unboxing-asmr',   // 5  ASMR Unboxing
+  'kiara',           // 6  Kiara "Wardrobe styling"
+  'golden-hour-pov', // 7  Golden Hour POV
+  'riya',            // 8  Riya
+  'anika',           //    Anika
+  'neev',            //    Niamh → Neev "Fashion drop reveal"
+];
+
+export function templatePriorityKey(
+  kind: 'blueprint' | 'creator',
+  id: string,
+  actorName?: string
+): string {
+  return kind === 'creator' ? (actorName || '').trim().toLowerCase() : id;
+}
+
+export function templateRank(key: string): number {
+  const i = TEMPLATE_PRIORITY.indexOf(key);
+  return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+}

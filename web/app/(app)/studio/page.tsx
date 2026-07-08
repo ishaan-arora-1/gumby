@@ -12,6 +12,8 @@ import {
   type TemplateTarget,
   targetFromBlueprint,
   targetFromCreator,
+  templatePriorityKey,
+  templateRank,
 } from '@/lib/templateTarget';
 import { StudioForm, type StudioPrefill } from '@/components/studio/StudioForm';
 import { GeneratingCard } from '@/components/studio/GeneratingCard';
@@ -97,11 +99,19 @@ export default function StudioPage() {
       for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
       return h >>> 0;
     };
-    items.sort(
-      (a, b) =>
-        mixHash(a.kind === 'blueprint' ? a.bp.id : a.tpl.id) -
-        mixHash(b.kind === 'blueprint' ? b.bp.id : b.tpl.id)
-    );
+    const keyOf = (it: GalleryItem) =>
+      it.kind === 'blueprint'
+        ? templatePriorityKey('blueprint', it.bp.id)
+        : templatePriorityKey('creator', it.tpl.id, it.tpl.actor_name);
+    const idOf = (it: GalleryItem) => (it.kind === 'blueprint' ? it.bp.id : it.tpl.id);
+    // Curated priority first (in list order); everything else keeps its
+    // stable hash order after.
+    items.sort((a, b) => {
+      const ra = templateRank(keyOf(a));
+      const rb = templateRank(keyOf(b));
+      if (ra !== rb) return ra - rb;
+      return mixHash(idOf(a)) - mixHash(idOf(b));
+    });
     return items;
   }, [blueprints, templates]);
 
