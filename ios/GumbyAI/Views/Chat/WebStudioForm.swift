@@ -197,8 +197,16 @@ struct WebStudioForm: View {
     // MARK: - Format (duration + aspect)
 
     private var formatSection: some View {
+        // Stacked, not side-by-side: the Duration control (each pill carries
+        // its credit cost, e.g. "15s · 150") plus the Aspect control together
+        // are wider than a single row on any current iPhone — an HStack
+        // never wraps, so the two used to overflow past the screen edge.
+        // Web's equivalent uses `flex flex-wrap` to drop Aspect onto its own
+        // line when space is tight; stacking unconditionally is the robust
+        // SwiftUI equivalent (no custom flow-layout needed) and costs
+        // nothing since this whole form already scrolls vertically.
         WebStudioSection(title: "Format", hint: "Duration and aspect ratio for the rendered clip.") {
-            HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("DURATION").webSectionLabel()
                     HStack(spacing: 0) {
