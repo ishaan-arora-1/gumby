@@ -37,10 +37,32 @@ struct WebUITextView: UIViewRepresentable {
         tv.font = Self.resolvedFont(fontName, fontSize)
         tv.textContainerInset = contentInset
         tv.textContainer.lineFragmentPadding = 0
+        // Explicit (though it's UITextView's default) — the text container
+        // must always reflow to the view's actual width, never grow wider
+        // to fit a long unbroken line of text.
+        tv.textContainer.widthTracksTextView = true
         tv.isScrollEnabled = isScrollEnabled
         tv.keyboardDismissMode = .interactive
         tv.text = text
         return tv
+    }
+
+    /// Without this, an auto-growing (`isScrollEnabled = false`) UITextView
+    /// bridged via UIViewRepresentable has no explicit instruction to cap
+    /// its width to what SwiftUI proposed — it's left to intrinsicContentSize
+    /// negotiation, which for a UIKit text view is a known-fragile pattern
+    /// (the reported width can lag a layout pass behind the assigned frame,
+    /// letting a long single "word" — e.g. a URL or unbroken run of
+    /// characters typed into the prompt/script box — report as wider than
+    /// the screen instead of wrapping, pushing the studio form's whole
+    /// scroll content wider than the device and clipping content on the
+    /// right edge). Forcing the reported width to exactly the proposed
+    /// width, every layout pass, makes that structurally impossible: this
+    /// view can never be wider than its parent gives it, only taller.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        guard let width = proposal.width, width.isFinite else { return nil }
+        let fitting = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: max(fitting.height, 1))
     }
 
     func updateUIView(_ uiView: UITextView, context: Context) {

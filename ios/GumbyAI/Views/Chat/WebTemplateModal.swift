@@ -34,7 +34,7 @@ struct WebTemplateModal: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 22) {
                 header
                 photoDrop
                 WebModalField(text: $productName, placeholder: "Product name (recommended)")
@@ -52,15 +52,19 @@ struct WebTemplateModal: View {
                         .foregroundColor(Color(hex: "FF453A"))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                generateButton
-                Text("\(target.durationSeconds)s vertical video · \(talking ? (captionsEnabled ? "captions included" : "no captions") : "silent product shot")")
-                    .font(WebTheme.Font.body(11))
-                    .foregroundColor(.white.opacity(0.35))
-                    .frame(maxWidth: .infinity)
-                    .multilineTextAlignment(.center)
+                VStack(spacing: 12) {
+                    generateButton
+                    Text("\(target.durationSeconds)s vertical video · \(talking ? (captionsEnabled ? "captions included" : "no captions") : "silent product shot")")
+                        .font(WebTheme.Font.body(11))
+                        .foregroundColor(.white.opacity(0.35))
+                        .frame(maxWidth: .infinity)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, 4)
             }
             .padding(.horizontal, 18)
-            .padding(.bottom, 28)
+            .padding(.top, 4)
+            .padding(.bottom, 32)
         }
         .background(Color(hex: "101014").ignoresSafeArea())
         .presentationDetents([.large])
@@ -75,7 +79,7 @@ struct WebTemplateModal: View {
     // MARK: Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 5) {
                 Image(systemName: target.kind == .creator ? "person.fill" : "cube.box.fill")
                     .font(.system(size: 9, weight: .semibold))
@@ -90,13 +94,13 @@ struct WebTemplateModal: View {
                 .tracking(-0.3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 20)
+        .padding(.top, 22)
     }
 
     // MARK: Product photo
 
     private var photoDrop: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("YOUR PRODUCT PHOTO").webSectionLabel()
             PhotosPicker(selection: $pickerItem, matching: .images) {
                 ZStack {
@@ -136,7 +140,7 @@ struct WebTemplateModal: View {
     // MARK: Script
 
     private var scriptSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("SCRIPT").webSectionLabel()
                 Spacer()
@@ -170,7 +174,7 @@ struct WebTemplateModal: View {
     // MARK: Tweaks
 
     private var tweaksSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 4) {
                 Text("TWEAKS").webSectionLabel()
                 Text("· optional").font(WebTheme.Font.body(11)).foregroundColor(.white.opacity(0.3))
@@ -186,7 +190,7 @@ struct WebTemplateModal: View {
     // MARK: Captions
 
     private var captionSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("CAPTIONS").webSectionLabel()
                 Spacer()

@@ -482,6 +482,10 @@ struct WebTextEditor: View {
             )
             .frame(minHeight: minHeight)
         }
+        // Explicit full-width claim so the proposal reaching WebUITextView
+        // is always a real, finite width (never ambiguous) for it to lock
+        // its own size to — see sizeThatFits in WebUITextView.
+        .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous)
                 .fill(WebTheme.Color.composerInner)

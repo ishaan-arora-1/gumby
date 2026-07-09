@@ -200,10 +200,10 @@ export function TemplateModal({ target, onClose, onStarted, onInsufficientCredit
           </button>
         </div>
 
-        <div className="px-6 pb-6 pt-4 space-y-4">
+        <div className="px-6 pb-8 pt-5 space-y-6">
           {/* Product photo — the only required input */}
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-2.5">
               Your product photo
             </div>
             <button
@@ -250,7 +250,7 @@ export function TemplateModal({ target, onClose, onStarted, onInsufficientCredit
 
           {/* Script — generate + edit (talking templates only) */}
           {talking && (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-semibold uppercase tracking-wider text-white/50">
                   Script
@@ -276,7 +276,7 @@ export function TemplateModal({ target, onClose, onStarted, onInsufficientCredit
           )}
 
           {/* Tweaks — free-text nudge, all templates */}
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <div className="text-xs font-semibold uppercase tracking-wider text-white/50">
               Tweaks <span className="text-white/30 normal-case font-normal">· optional</span>
             </div>
@@ -290,7 +290,7 @@ export function TemplateModal({ target, onClose, onStarted, onInsufficientCredit
 
           {/* Captions on/off + style (talking templates only) */}
           {talking && (
-            <div className="space-y-3">
+            <div className="space-y-3.5">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-semibold uppercase tracking-wider text-white/50">
                   Captions
@@ -336,7 +336,7 @@ export function TemplateModal({ target, onClose, onStarted, onInsufficientCredit
             type="button"
             onClick={generate}
             disabled={!remoteUrl || uploading || submitting}
-            className="w-full h-12 rounded-btn bg-white text-black font-semibold text-[15px] flex items-center justify-center gap-2 hover:bg-white/90 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition"
+            className="w-full h-12 rounded-btn bg-white text-black font-semibold text-[15px] flex items-center justify-center gap-2 hover:bg-white/90 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition mt-2"
           >
             {submitting ? (
               <div className="w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />
