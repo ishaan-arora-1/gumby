@@ -115,12 +115,24 @@ struct WebUITextView: UIViewRepresentable {
 
         func textViewDidBeginEditing(_ textView: UITextView) {
             guard let focus = parent.focus, focus.wrappedValue == false else { return }
-            DispatchQueue.main.async { focus.wrappedValue = true }
+            // Synchronous, not `DispatchQueue.main.async` — this callback
+            // fires from genuine UIKit event handling (a tap, or our own
+            // already-deferred becomeFirstResponder() call in
+            // updateUIView), never mid-SwiftUI-render, so it's safe to
+            // mutate here directly. Deferring it used to open a race: the
+            // very first keystroke fires textViewDidChange SYNCHRONOUSLY,
+            // which mutates the bound text and triggers a SwiftUI
+            // re-render that can call updateUIView BEFORE the queued
+            // `focus.wrappedValue = true` from tapping in had actually
+            // run. That update then read a stale `wantFocus == false`
+            // while the view genuinely was first responder, and resigned
+            // it — closing the keyboard right after the first character.
+            focus.wrappedValue = true
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
             guard let focus = parent.focus, focus.wrappedValue == true else { return }
-            DispatchQueue.main.async { focus.wrappedValue = false }
+            focus.wrappedValue = false
         }
     }
 }
