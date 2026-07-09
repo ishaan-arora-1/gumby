@@ -178,7 +178,12 @@ struct WebPromptComposer: View {
                     .allowsHitTesting(false)
             }
             WebUITextView(text: $chatVM.composerPrompt)
-                .frame(height: 70)
+                // Same fix as the studio form's text boxes: `sizeThatFits`
+                // reports this view's true (small) ideal height for short
+                // text, and `.frame(height:)` without an explicit alignment
+                // centers that undersized content in the fixed 70pt box
+                // instead of anchoring it to the top.
+                .frame(height: 70, alignment: .top)
         }
     }
 

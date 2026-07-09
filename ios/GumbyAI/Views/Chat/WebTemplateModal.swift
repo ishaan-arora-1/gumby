@@ -331,7 +331,10 @@ private struct WebTemplateTextEditor<F: Hashable>: View {
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .frame(minHeight: minHeight)
+                // Same `.frame(minHeight:)`-defaults-to-center-alignment
+                // pitfall as the studio form's text boxes — pin to the top
+                // so short text doesn't render vertically centered.
+                .frame(minHeight: minHeight, alignment: .top)
         }
         .background(RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous).fill(Color.white.opacity(0.04)))
         .overlay(RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous).stroke(Color.white.opacity(0.1), lineWidth: 1))

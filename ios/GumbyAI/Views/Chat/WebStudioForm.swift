@@ -463,7 +463,13 @@ struct WebTextEditor: View {
                 isScrollEnabled: false,
                 focus: focused
             )
-            .frame(minHeight: minHeight)
+            // `sizeThatFits` reports this view's true (small, for short
+            // text) ideal height; `.frame(minHeight:)` then expands it to
+            // the floor. Without `alignment: .top` that expansion defaults
+            // to centering the undersized text view in the extra space —
+            // exactly why short text was rendering vertically centered
+            // instead of anchored to the top of the box.
+            .frame(minHeight: minHeight, alignment: .top)
         }
         // Explicit full-width claim so the proposal reaching WebUITextView
         // is always a real, finite width (never ambiguous) for it to lock
