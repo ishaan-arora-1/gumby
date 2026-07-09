@@ -265,14 +265,7 @@ export function StudioForm({ prefill, onSubmit, loading }: Props) {
       )}
 
       {/* PROMPT + REFERENCES — the single, unified input */}
-      <Section
-        title="Your product ad"
-        hint={
-          creator
-            ? 'Upload your product and describe what this creator should do.'
-            : 'Upload your product and describe the ad: the creator, the setting, the action.'
-        }
-      >
+      <Section title="Your product ad">
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -345,7 +338,7 @@ export function StudioForm({ prefill, onSubmit, loading }: Props) {
       </Section>
 
       {/* DURATION + ASPECT */}
-      <Section title="Format" hint="Duration and aspect ratio for the rendered clip.">
+      <Section title="Format">
         <div className="flex flex-wrap gap-4">
           <div>
             <div className="text-[11px] uppercase tracking-[0.15em] text-white/45 mb-2">
@@ -424,9 +417,6 @@ export function StudioForm({ prefill, onSubmit, loading }: Props) {
                   {genScript ? 'Writing…' : 'Generate with AI'}
                 </button>
               </div>
-              <div className="text-xs text-white/45 -mt-1">
-                {duration}s of speech — keep it tight.
-              </div>
               <textarea
                 value={script}
                 onChange={(e) => setScript(e.target.value)}
@@ -439,15 +429,8 @@ export function StudioForm({ prefill, onSubmit, loading }: Props) {
             {/* Captions */}
             <div className="space-y-2 pt-1 border-t border-white/[0.06]">
               <div className="flex items-center justify-between pt-3">
-                <div>
-                  <div className="text-[11px] uppercase tracking-[0.15em] text-white/45">
-                    Captions
-                  </div>
-                  <div className="text-xs text-white/45 mt-1">
-                    {captionsEnabled
-                      ? 'Pick the look — captions burn into the Reels safe zone.'
-                      : 'Clean video with no captions on screen.'}
-                  </div>
+                <div className="text-[11px] uppercase tracking-[0.15em] text-white/45">
+                  Captions
                 </div>
                 <Toggle
                   on={captionsEnabled}

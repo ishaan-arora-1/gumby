@@ -86,12 +86,7 @@ struct WebStudioForm: View {
     // MARK: - Product ad (prompt + references)
 
     private var productSection: some View {
-        WebStudioSection(
-            title: "Your product ad",
-            hint: chatVM.formCreatorImageUrl != nil
-                ? "Upload your product and describe what this creator should do."
-                : "Upload your product and describe the ad: the creator, the setting, the action."
-        ) {
+        WebStudioSection(title: "Your product ad") {
             VStack(alignment: .leading, spacing: 12) {
                 WebTextEditor(
                     text: $chatVM.formPrompt,
@@ -205,7 +200,7 @@ struct WebStudioForm: View {
         // line when space is tight; stacking unconditionally is the robust
         // SwiftUI equivalent (no custom flow-layout needed) and costs
         // nothing since this whole form already scrolls vertically.
-        WebStudioSection(title: "Format", hint: "Duration and aspect ratio for the rendered clip.") {
+        WebStudioSection(title: "Format") {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("DURATION").webSectionLabel()
@@ -288,10 +283,6 @@ struct WebStudioForm: View {
                             .disabled(chatVM.formIsGeneratingScript)
                         }
 
-                        Text("\(chatVM.formDuration)s of speech — keep it tight.")
-                            .font(WebTheme.Font.body(12))
-                            .foregroundColor(.white.opacity(0.45))
-
                         WebTextEditor(
                             text: $chatVM.formScript,
                             placeholder: "Okay so I just got this and honestly…",
@@ -310,16 +301,8 @@ struct WebStudioForm: View {
 
                     // Captions
                     VStack(alignment: .leading, spacing: 10) {
-                        HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("CAPTIONS").webSectionLabel()
-                                Text(chatVM.formCaptionsEnabled
-                                     ? "Pick the look — captions burn into the Reels safe zone."
-                                     : "Clean video with no captions on screen.")
-                                    .font(WebTheme.Font.body(12))
-                                    .foregroundColor(.white.opacity(0.45))
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
+                        HStack {
+                            Text("CAPTIONS").webSectionLabel()
                             Spacer(minLength: 12)
                             WebToggle(isOn: $chatVM.formCaptionsEnabled)
                         }
