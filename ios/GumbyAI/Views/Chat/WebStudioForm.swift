@@ -78,7 +78,7 @@ struct WebStudioForm: View {
                     .lineLimit(1)
                 Text("Your ad will star this creator. Add your product and describe the scene below.")
                     .font(WebTheme.Font.body(11))
-                    .foregroundColor(.white.opacity(0.4))
+                    .foregroundColor(.white.opacity(0.45))
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -293,8 +293,8 @@ struct WebStudioForm: View {
                         }
 
                         Text("\(chatVM.formDuration)s of speech — keep it tight.")
-                            .font(WebTheme.Font.body(11))
-                            .foregroundColor(.white.opacity(0.4))
+                            .font(WebTheme.Font.body(12))
+                            .foregroundColor(.white.opacity(0.45))
 
                         WebTextEditor(
                             text: $chatVM.formScript,
@@ -305,7 +305,7 @@ struct WebStudioForm: View {
 
                         if let err = chatVM.formScriptError {
                             Text(err)
-                                .font(WebTheme.Font.body(13))
+                                .font(WebTheme.Font.body(12))
                                 .foregroundColor(Color(hex: "FF453A"))
                         }
                     }
@@ -318,8 +318,8 @@ struct WebStudioForm: View {
                                 Text(chatVM.formCaptionsEnabled
                                      ? "Pick the look — captions burn into the Reels safe zone."
                                      : "Clean video with no captions on screen.")
-                                    .font(WebTheme.Font.body(11))
-                                    .foregroundColor(.white.opacity(0.4))
+                                    .font(WebTheme.Font.body(12))
+                                    .foregroundColor(.white.opacity(0.45))
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer(minLength: 12)
@@ -362,12 +362,12 @@ struct WebStudioForm: View {
                 if chatVM.isGenerating {
                     ProgressView().tint(.black).scaleEffect(0.85)
                     Text("Generating…")
-                        .font(WebTheme.Font.body(15, weight: .semibold))
+                        .font(WebTheme.Font.body(16, weight: .semibold))
                 } else {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                     Text("Generate — \(creditCost[chatVM.formDuration] ?? 0) credits")
-                        .font(WebTheme.Font.body(15, weight: .semibold))
+                        .font(WebTheme.Font.body(16, weight: .semibold))
                 }
             }
             .foregroundColor(.black)
@@ -414,8 +414,8 @@ struct WebStudioSection<Content: View>: View {
                     Text(title).webSectionLabel()
                     if let hint {
                         Text(hint)
-                            .font(WebTheme.Font.body(11))
-                            .foregroundColor(.white.opacity(0.4))
+                            .font(WebTheme.Font.body(12))
+                            .foregroundColor(.white.opacity(0.45))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -461,13 +461,9 @@ struct WebTextEditor: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             if text.isEmpty {
-                // Same placeholder tone as every input in the "Use as
-                // template" modal (white.opacity(0.3)) — this used to be a
-                // fixed, notably brighter gray that stood out from the rest
-                // of the now-matched palette.
                 Text(placeholder)
                     .font(WebTheme.Font.body(14))
-                    .foregroundColor(.white.opacity(0.3))
+                    .foregroundColor(WebTheme.Color.placeholder)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .allowsHitTesting(false)
