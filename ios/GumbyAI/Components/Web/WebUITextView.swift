@@ -37,6 +37,15 @@ struct WebUITextView: UIViewRepresentable {
         tv.font = Self.resolvedFont(fontName, fontSize)
         tv.textContainerInset = contentInset
         tv.textContainer.lineFragmentPadding = 0
+        // Without this, UIKit applies its own automatic content-inset
+        // adjustment (meant for a text view sitting under a real
+        // navigation/tab bar) to a view that has no such context here —
+        // it pads the top by an assumed safe-area/bar height, pushing the
+        // first line down so text renders vertically offset/centered
+        // instead of starting at the top of the box. Affects every
+        // WebUITextView instance (composer + all studio-form fields)
+        // since it's set once here, unconditional on isScrollEnabled.
+        tv.contentInsetAdjustmentBehavior = .never
         // Explicit (though it's UITextView's default) — the text container
         // must always reflow to the view's actual width, never grow wider
         // to fit a long unbroken line of text.
