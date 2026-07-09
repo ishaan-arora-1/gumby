@@ -18,11 +18,7 @@ struct WebStudioForm: View {
     private let creditCost: [Int: Int] = [5: 50, 10: 100, 15: 150]
 
     var body: some View {
-        // Sections no longer sit in individual boxed cards (see
-        // WebStudioSection) — this page's styling now matches the "Use as
-        // template" modal's flat, cardless look, so the gap between groups
-        // is bigger to keep them visually distinct without a box.
-        VStack(spacing: 28) {
+        VStack(spacing: 16) {
             if chatVM.formCreatorImageUrl != nil {
                 creatorCard
             }
@@ -84,7 +80,7 @@ struct WebStudioForm: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .webCard(fill: Color.white.opacity(0.04), border: Color.white.opacity(0.1))
+        .webCard(fill: WebTheme.Color.studio)
     }
 
     // MARK: - Product ad (prompt + references)
@@ -234,7 +230,7 @@ struct WebStudioForm: View {
                         }
                     }
                     .padding(2)
-                    .background(Capsule().fill(Color.white.opacity(0.06)))
+                    .background(Capsule().fill(WebTheme.Color.elevated))
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -310,6 +306,8 @@ struct WebStudioForm: View {
                         }
                     }
 
+                    Divider().overlay(WebTheme.Color.borderSubtle)
+
                     // Captions
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(alignment: .top) {
@@ -348,10 +346,6 @@ struct WebStudioForm: View {
 
     // MARK: - Generate
 
-    // Same white-fill / black-text treatment as the "Use as template"
-    // modal's Generate button (that page's styling is what this page now
-    // matches), including folding the credit count into the label itself
-    // instead of a separate pill.
     private var generateButton: some View {
         Button {
             promptFocused = false
@@ -360,22 +354,29 @@ struct WebStudioForm: View {
         } label: {
             HStack(spacing: 8) {
                 if chatVM.isGenerating {
-                    ProgressView().tint(.black).scaleEffect(0.85)
                     Text("Generating…")
                         .font(WebTheme.Font.body(16, weight: .semibold))
                 } else {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 14, weight: .semibold))
-                    Text("Generate — \(creditCost[chatVM.formDuration] ?? 0) credits")
+                    Text("Generate")
                         .font(WebTheme.Font.body(16, weight: .semibold))
+                    Text("\(creditCost[chatVM.formDuration] ?? 0) credits")
+                        .font(WebTheme.Font.body(12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.white.opacity(0.1)))
                 }
             }
-            .foregroundColor(.black)
+            .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .frame(height: 56)
             .background(
                 RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous)
-                    .fill(Color.white)
+                    .fill(Color.black)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous)
+                    .stroke(WebTheme.Color.border, lineWidth: 1)
             )
             .opacity(chatVM.isGenerating ? 0.4 : 1)
         }
@@ -405,13 +406,12 @@ struct WebStudioSection<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        // No boxed card — flat on the page background with a small
-        // uppercase label, same visual language as every field group in
-        // the "Use as template" modal (this page's styling now matches it).
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).webSectionLabel()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(WebTheme.Font.body(14, weight: .semibold))
+                        .foregroundColor(.white)
                     if let hint {
                         Text(hint)
                             .font(WebTheme.Font.body(12))
@@ -424,7 +424,9 @@ struct WebStudioSection<Content: View>: View {
             }
             content()
         }
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .webCard(fill: WebTheme.Color.studio)
     }
 }
 
@@ -484,16 +486,13 @@ struct WebTextEditor: View {
         // is always a real, finite width (never ambiguous) for it to lock
         // its own size to — see sizeThatFits in WebUITextView.
         .frame(maxWidth: .infinity)
-        // Same subtle fill/border as every input in the "Use as template"
-        // modal (this page's styling now matches it), instead of the
-        // darker composer-style fill this used previously.
         .background(
             RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous)
-                .fill(Color.white.opacity(0.04))
+                .fill(WebTheme.Color.composerInner)
         )
         .overlay(
             RoundedRectangle(cornerRadius: WebTheme.Radius.btn, style: .continuous)
-                .stroke(focused.wrappedValue ? WebTheme.Color.accent2.opacity(0.5) : Color.white.opacity(0.1),
+                .stroke(focused.wrappedValue ? WebTheme.Color.accent2.opacity(0.5) : WebTheme.Color.borderSubtle,
                         lineWidth: 1)
         )
     }
