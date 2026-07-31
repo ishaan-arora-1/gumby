@@ -210,13 +210,13 @@ struct WebPromptComposer: View {
             }
 
             WebSegmentedPill(
-                options: ["9:16", "1:1", "16:9"],
+                options: ["9:16", "16:9"],
                 selection: $chatVM.composerAspectRatio,
                 label: { $0 }
             )
 
             WebSegmentedPill(
-                options: [5, 10, 15],
+                options: [5, 10],
                 selection: $chatVM.composerDuration,
                 label: { "\($0)s" }
             )

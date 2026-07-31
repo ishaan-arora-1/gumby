@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The Studio tab — a SwiftUI mirror of `web/app/(app)/studio/page.tsx`.
 ///
@@ -31,13 +32,7 @@ struct ChatView: View {
                 }
             }
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            UIApplication.shared.sendAction(
-                #selector(UIResponder.resignFirstResponder),
-                to: nil, from: nil, for: nil
-            )
-        }
+        .background(KeyboardDismissBackground())
         .sheet(isPresented: $chatVM.showPaywall) {
             PaywallView(contextMessage: chatVM.paywallContext)
         }
@@ -120,4 +115,51 @@ struct ChatView: View {
         .environmentObject(ChatViewModel())
         .environmentObject(SidebarViewModel())
         .environmentObject(AuthService.shared)
+}
+
+// MARK: - Tap-anywhere-to-dismiss-keyboard background
+
+/// A transparent, screen-filling tap catcher that resigns first responder,
+/// used instead of a plain `.onTapGesture` so it can ignore taps that land
+/// inside a `UIViewRepresentable`-backed text view (e.g. `WebUITextView`,
+/// used by the studio form's "Your product ad" / script boxes).
+///
+/// SwiftUI's gesture system only knows how to yield to *SwiftUI's own*
+/// interactive views (Button, TextField, …) — it has no visibility into
+/// gesture recognizers living inside an opaque UIViewRepresentable subview.
+/// A plain ancestor `.onTapGesture` here recognized the very same touch
+/// used to focus a WebUITextView field and called `resignFirstResponder()`
+/// on it, closing the keyboard right after the user's first keystroke.
+private struct KeyboardDismissBackground: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap))
+        tap.cancelsTouchesInView = false
+        tap.delegate = context.coordinator
+        view.addGestureRecognizer(tap)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        @objc func handleTap() {
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder),
+                to: nil, from: nil, for: nil
+            )
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            var view: UIView? = touch.view
+            while let v = view {
+                if v is UITextView || v is UITextField { return false }
+                view = v.superview
+            }
+            return true
+        }
+    }
 }

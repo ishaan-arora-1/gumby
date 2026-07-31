@@ -27,14 +27,13 @@ const { v4: uuidv4 } = require('uuid');
 const supabase = require('../config/supabase');
 const { fal, isFalEnabled } = require('../config/fal');
 const {
-  KLING_IMAGE_TO_VIDEO,
   IMAGE_SUBJECT_SWAP,
   IMAGE_GENERATE,
 } = require('../config/falModels');
+const { genai, isGenaiEnabled, OMNI_VIDEO_MODEL } = require('../config/googleGenai');
 const { captionVideo } = require('./captioning');
 const { ffmpegPath } = require('../config/ffmpeg');
 const credits = require('./credits');
-const { classifyRoles } = require('./attachmentClassifier');
 
 const UGC_BUCKET = 'ugc-videos';
 
@@ -82,6 +81,24 @@ async function mirrorRemote(url, jobId, kind) {
     ? (ext === 'png' ? 'image/png' : 'image/jpeg')
     : 'video/mp4';
   return uploadBufferToBucket(buffer, ct, ext, `jobs/${jobId}/${kind}`);
+}
+
+// Best-effort first-frame poster for a finished clip. Returns a JPEG buffer,
+// or null if ffmpeg is missing / fails — the thumbnail is non-critical (the
+// clients fall back to the video itself). Needed because there's no longer a
+// seed still to use as the history/library thumbnail.
+function extractPosterFrame(videoPath, outPath) {
+  return new Promise((resolve) => {
+    const proc = spawn(ffmpegPath, [
+      '-y', '-ss', '0.5', '-i', videoPath, '-frames:v', '1',
+      '-vf', "scale='min(1080,iw)':-2:flags=lanczos", '-q:v', '4', outPath,
+    ], { stdio: 'ignore' });
+    proc.on('error', () => resolve(null));
+    proc.on('close', (code) => {
+      if (code !== 0) return resolve(null);
+      try { resolve(fs.readFileSync(outPath)); } catch { resolve(null); }
+    });
+  });
 }
 
 function describeFalError(err) {
@@ -156,6 +173,142 @@ async function falSubscribeWithRetry(model, input, label, opts = {}) {
   throw wrapped;
 }
 
+// A transient FAL failure is one where the render itself is fine but the
+// gateway momentarily couldn't talk to us: 5xx (incl. the "504 Downstream
+// service unavailable" gateway error), 429 rate limits, and bare network
+// errors (no HTTP status). Anything else — 4xx validation, etc. — is a real,
+// non-retryable failure.
+function isTransientFalError(err) {
+  const status = err?.status;
+  return status === undefined || status === 429
+    || (typeof status === 'number' && status >= 500);
+}
+
+// Poll cadence + ceilings for the queue API.
+const QUEUE_POLL_INTERVAL_MS = 2500;
+const QUEUE_MAX_POLLS = 360;                 // ~15 min hard ceiling
+const QUEUE_MAX_CONSECUTIVE_ERRORS = 8;      // transient poll/result errors tolerated
+
+/**
+ * Run a FAL model via the explicit QUEUE API instead of `fal.subscribe`.
+ *
+ * Why this exists: `fal.subscribe` couples submit + poll + result-fetch into
+ * one opaque call, and our retry wrapper around it RE-SUBMITS on any 5xx.
+ * That caused the real bug we hit in production: FAL finished a Kling render
+ * (and billed our FAL account), but its gateway returned
+ * "504 Downstream service unavailable" while delivering the result. The
+ * subscribe call threw, the job was marked `failed`, the user saw the 504 —
+ * and a retry would have re-run (and re-billed) a brand-new render instead of
+ * picking up the one that already finished.
+ *
+ * The queue API decouples those steps:
+ *   1. submit ONCE → request_id  (the only call that starts/bills a render)
+ *   2. persist the request_id (onRequestId) so a redeploy can recover it
+ *   3. poll status; a transient 504/5xx here re-polls the SAME request —
+ *      it never resubmits, so we don't lose or double-bill the render
+ *   4. on COMPLETED, fetch the result, tolerating transient delivery errors
+ *      (this is the exact step that used to 504 after the render had run)
+ */
+async function falQueueWithRetry(model, input, label, opts = {}) {
+  const { onProgress, onRequestId } = opts;
+
+  // --- 1. Submit once. Resubmit ONLY if the submit itself never landed. ---
+  const submitMaxAttempts = 3;
+  let submitted, submitErr;
+  for (let attempt = 1; attempt <= submitMaxAttempts; attempt++) {
+    try {
+      submitted = await fal.queue.submit(model, { input });
+      break;
+    } catch (err) {
+      submitErr = err;
+      console.error(
+        `[${label}] fal queue submit attempt ${attempt}/${submitMaxAttempts} failed:`,
+        describeFalError(err)
+      );
+      if (!isTransientFalError(err) || attempt === submitMaxAttempts) break;
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
+  }
+  const requestId = submitted?.request_id;
+  if (!requestId) {
+    const wrapped = new Error(describeFalError(submitErr || new Error('fal submit failed')));
+    wrapped.cause = submitErr;
+    throw wrapped;
+  }
+  console.log(`[${label}] fal queue request_id=${requestId}`);
+  if (onRequestId) { try { await onRequestId(requestId); } catch {} }
+
+  // --- 2. Smooth progress heartbeat (same feel as falSubscribeWithRetry). ---
+  let heartbeat = null;
+  let lastReported = 0;
+  if (onProgress) {
+    try { onProgress(0.05); } catch {}
+    lastReported = 0.05;
+    const startedAt = Date.now();
+    heartbeat = setInterval(() => {
+      const elapsed = (Date.now() - startedAt) / 1000;
+      const floor = Math.min(0.9, Math.tanh(elapsed / 60) * 0.9);
+      if (floor > lastReported) {
+        lastReported = floor;
+        try { onProgress(floor); } catch {}
+      }
+    }, 1500);
+  }
+
+  try {
+    // --- 3. Poll for completion; transient errors re-poll the SAME request. ---
+    let consecutiveErrors = 0;
+    for (let poll = 0; poll < QUEUE_MAX_POLLS; poll++) {
+      await new Promise((r) => setTimeout(r, QUEUE_POLL_INTERVAL_MS));
+      let status;
+      try {
+        status = await fal.queue.status(model, { requestId, logs: false });
+        consecutiveErrors = 0;
+      } catch (err) {
+        if (isTransientFalError(err) && ++consecutiveErrors <= QUEUE_MAX_CONSECUTIVE_ERRORS) {
+          console.warn(
+            `[${label}] transient status poll error ` +
+            `(${consecutiveErrors}/${QUEUE_MAX_CONSECUTIVE_ERRORS}): ` +
+            `${describeFalError(err)} — re-polling same request ${requestId}`
+          );
+          continue;
+        }
+        const wrapped = new Error(describeFalError(err));
+        wrapped.cause = err;
+        throw wrapped;
+      }
+
+      if (status?.status !== 'COMPLETED') continue;
+
+      // --- 4. Render done — fetch result, tolerating transient delivery 504s. ---
+      let resultErrors = 0;
+      for (;;) {
+        try {
+          const result = await fal.queue.result(model, { requestId });
+          if (onProgress) { try { onProgress(1); } catch {} }
+          return result;
+        } catch (err) {
+          if (isTransientFalError(err) && ++resultErrors <= QUEUE_MAX_CONSECUTIVE_ERRORS) {
+            console.warn(
+              `[${label}] transient result-fetch error ` +
+              `(${resultErrors}/${QUEUE_MAX_CONSECUTIVE_ERRORS}): ` +
+              `${describeFalError(err)} — retrying fetch for ${requestId}`
+            );
+            await new Promise((r) => setTimeout(r, QUEUE_POLL_INTERVAL_MS));
+            continue;
+          }
+          const wrapped = new Error(describeFalError(err));
+          wrapped.cause = err;
+          throw wrapped;
+        }
+      }
+    }
+    throw new Error(`${label}: timed out waiting for fal queue request ${requestId}`);
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Step 1 — Nano Banana seed image
 // ---------------------------------------------------------------------------
@@ -179,7 +332,7 @@ function roleDirective(role, idx) {
   const n = idx + 1;
   switch (role) {
     case 'creator':
-      return `Image ${n} is the CREATOR — the person/model to feature on camera. Keep their face, body type, hair, and the clothing they are wearing EXACTLY as shown. Do not swap them for a different person and do not restyle their outfit.`;
+      return `Image ${n} is the CREATOR — the EXACT, specific real person to feature on camera. Reproduce this individual IDENTICALLY: keep their face, facial structure, skin tone, ETHNICITY, eye shape and color, hair, and body type EXACTLY as shown in the reference. Do NOT change their ethnicity or skin color in any way — in particular do not make them look more South Asian or Indian than the reference, and do not shift them toward any other ethnicity. Keep the clothing they are wearing as shown. Do not swap them for a different person and do not restyle their outfit. Preserving this person's identity exactly takes priority over any generic styling.`;
     case 'product':
       return `Image ${n} is a PRODUCT to feature. Preserve it PIXEL-FAITHFULLY: shape, color, label text, fabric pattern, branding, gemstone placement — all match the reference exactly. Do not redesign, recolor, restyle, or warp it. If a person is shown wearing/holding it, ignore that person and extract only the product.`;
     case 'background':
@@ -206,26 +359,34 @@ function roleDirective(role, idx) {
 const NO_CAMERA_GUARD =
   'IMPORTANT: do NOT place any physical camera, recording device, DSLR, camcorder, tripod, or filming equipment in the image. If the request mentions being "close to the camera" or "close to the frame", interpret that purely as a tight close-up framing of the subject — never as a camera object in the scene.';
 
+// Steer the DEFAULT appearance of a freshly-synthesized on-camera person.
+// Without this, the image model (Nano Banana Pro) defaults to a South Asian /
+// Indian look when the request doesn't mention ethnicity. This makes the
+// unspecified default a mainstream American appearance, while explicitly
+// yielding to any ethnicity/nationality the user DID ask for. Only used when
+// there is no creator reference image to preserve (never overrides a real
+// template creator's identity).
+const DEFAULT_APPEARANCE_GUARD =
+  'ETHNICITY: If — and only if — the request does NOT explicitly specify the on-camera person\'s ethnicity, nationality, or race, make them a good-looking, everyday American with a mainstream White/Caucasian American appearance — NOT South Asian and NOT Indian. Keep whatever gender the request implies (a handsome American man or an attractive American woman). If the request DOES explicitly name an ethnicity or nationality, follow that exactly and ignore this default.';
+
 function buildSeedPrompt(userPrompt, attachments) {
   const trimmed = (userPrompt || '').trim();
   const parts = [];
   if (!attachments.length) {
     parts.push(
-      'Generate a single photorealistic still image as described below.',
+      'Generate a single photorealistic still image.',
       `USER REQUEST: ${trimmed}`,
-      'Vertical phone-video composition. Natural lighting, sharp focus.',
-      'The on-camera person, if any, is a naturally good-looking everyday adult — relatable, approachable, healthy. Authentic vibe, like a real camera photo of a real person.',
-      NO_CAMERA_GUARD,
     );
     return parts.join('\n\n');
   }
+  // With reference photos we still have to tell Nano Banana what each image
+  // is (product to preserve, creator to keep, etc.) or it can't composite
+  // them correctly — that's the one thing that isn't just "extra description".
   parts.push(
     `Generate a single photorealistic still image using the ${attachments.length} reference image(s) below, combined per the user's request.`,
     `USER REQUEST: ${trimmed}`,
     'Each input image has a specific role — follow these exactly:',
     attachments.map((a, i) => `- ${roleDirective(a.role, i)}`).join('\n'),
-    'Vertical phone-video composition. Natural lighting, sharp focus, photorealistic — looks like a real camera photo of real subjects.',
-    NO_CAMERA_GUARD,
   );
   return parts.join('\n\n');
 }
@@ -263,6 +424,42 @@ async function composeSeedImage({ attachments, userPrompt, aspectRatio, onProgre
   const images = result?.data?.images || result?.images || [];
   const url = images[0]?.url;
   if (!url) throw new Error('Seed image edit returned no URL');
+  return url;
+}
+
+// ---------------------------------------------------------------------------
+// Template seed compositing (product swap)
+// ---------------------------------------------------------------------------
+
+// Compositing instruction for the template seed frame. Deliberately
+// CREATOR-AGNOSTIC — it never asserts a person is present, so the same prompt
+// works for creator templates AND plain product-shot templates. It only says:
+// swap in the user's product, keep everything else identical.
+const TEMPLATE_SEED_SWAP_PROMPT = [
+  'Image 1 is a reference scene. The remaining image(s) show a new product.',
+  'Replace the product shown in the reference scene with the new product. Preserve the new product exactly as shown — its shape, color, label text, and branding.',
+  'Keep everything else in the scene identical: the same people (if any), the same setting, lighting, camera framing, and composition. Change nothing but the product.',
+  'If no product is present in the reference scene, add the new product into the scene naturally.',
+].join(' ');
+
+/**
+ * Build the single seed frame for a TEMPLATE job: take the template's own
+ * reference frame and swap the user's product into it via Nano Banana, keeping
+ * the template's creator (if any), setting, framing, and lighting intact. That
+ * one still is what Omni then animates — so the video keeps the template's look
+ * but shows the user's product. Returns a remote fal URL (caller mirrors it).
+ */
+async function composeTemplateSeed({ sceneUrl, productUrls, aspectRatio, onProgress }) {
+  const result = await falSubscribeWithRetry(IMAGE_SUBJECT_SWAP, {
+    prompt: TEMPLATE_SEED_SWAP_PROMPT,
+    image_urls: [sceneUrl, ...productUrls],
+    aspect_ratio: nanoAspectFor(aspectRatio),
+    num_images: 1,
+    resolution: '2K',
+  }, 'template-seed', { onProgress });
+  const images = result?.data?.images || result?.images || [];
+  const url = images[0]?.url;
+  if (!url) throw new Error('Template seed compositing returned no URL');
   return url;
 }
 
@@ -313,54 +510,154 @@ function klingNegativePrompt(creatorSpeaks) {
 }
 
 /**
- * Build the Kling prompt. The user's free-form prompt is the primary
- * action directive — it describes what should happen on screen. When the
- * creator speaks, the script is embedded with explicit lip-sync
- * instructions so Kling's inline audio (`generate_audio: true`) renders
- * the speech and the mouth tracks it in one shot.
+ * Build the video prompt sent to Omni Flash. Nothing but the user's own input:
+ * their free-form prompt, then (only when a script exists) the script itself,
+ * labelled neutrally as the script — NOT "the creator says", since the prompt
+ * may ask for a voiceover with no on-camera creator. When the script is turned
+ * off, nothing about a script is added. No per-image directives — the reference
+ * images are handed to Omni as-is and the model figures out what each one is.
  */
-function buildKlingPrompt({ userPrompt, script, creatorSpeaks }) {
+function buildKlingPrompt({ userPrompt, script }) {
   const trimmedPrompt = (userPrompt || '').trim();
   const trimmedScript = (script || '').trim();
-  // Lead with the user's prompt verbatim — exactly like calling Kling
-  // directly. We don't wrap it in framing boilerplate ("one continuous
-  // shot", "talking-head", etc.) anymore, because those lines biased the
-  // model toward a single static take and washed out multi-shot requests.
-  // If the user writes "multi shot video", Kling sees that as the leading
-  // instruction and delivers it.
   const parts = [];
   if (trimmedPrompt) parts.push(trimmedPrompt);
-  if (creatorSpeaks && trimmedScript) {
-    parts.push(
-      'The creator speaks the following script aloud in a normal, natural, conversational voice, like a real everyday person casually showing the product. Their voice is audible in the final video and their lip movements MUST be perfectly synchronized with every word they say:',
-      `"${trimmedScript}"`,
-      'Delivery: natural human voice modulation, with the normal rise and fall of everyday speech (not flat, not monotone), and a small natural pause after each sentence or line. Keep those pauses brief and normal like ordinary speech, never long, exaggerated, or awkward.',
-      'Tone: relaxed and normal. NOT hyped, NOT overly excited, NOT jolly or salesy. They are simply showing the product, not advertising it.',
-      'Their mouth shapes match each word, the audio is the creator\'s own voice speaking these exact lines, and the lip-sync is tight throughout. No silent video, no mismatched mouth movement.',
-    );
-  } else if (!creatorSpeaks) {
-    parts.push(
-      'The creator does NOT speak and does NOT talk at any point — their mouth stays closed and relaxed throughout. No spoken voiceover.',
-    );
-  }
+  if (trimmedScript) parts.push(`The script is: "${trimmedScript}"`);
   return parts.join(' ').slice(0, 1800);
 }
 
-async function generateVideoFromImage({
-  seedImageUrl, prompt, durationSec, aspectRatio, creatorSpeaks, onProgress,
+// Omni Flash duration is a STRING on the video response_format, and it MUST
+// carry the "s" suffix — verified against the live API: "5" is rejected
+// (400 Invalid input at 'response_format'), "5s" is accepted. The model is
+// hard-capped at 10s; our tiers are 5/10/15 so a 15s request clamps to 10.
+function omniDurationStr(seconds) {
+  const n = Number(seconds) || 10;
+  const clamped = Math.max(3, Math.min(10, n >= 13 ? 10 : n));
+  return `${clamped}s`;
+}
+
+// Omni Flash only supports 16:9 and 9:16. Our UI also allows 1:1, which we map
+// to the vertical 9:16 UGC default.
+function omniAspectFor(aspectRatio) {
+  return aspectRatio === '16:9' ? '16:9' : '9:16';
+}
+
+/**
+ * Generate the final clip DIRECTLY via **Gemini Omni Flash** on Google's
+ * Interactions API (the new `@google/genai` SDK) — there is no separate image
+ * generation / seed-compositing pass anymore. The reference images (creator,
+ * product, background, style — however many) go straight into the video model:
+ *   - 0 images  → text-to-video (input is just the text prompt).
+ *   - N images  → reference-to-video (each image is an inline base64 part; the
+ *                 model works out what each one is — no per-image directives).
+ *
+ * Notes:
+ *   - Omni takes images as INLINE base64 (not URLs), so each reference is
+ *     downloaded and re-encoded.
+ *   - No `generate_audio` flag: Omni produces audio natively, steered by the
+ *     prompt. The spoken script is embedded in `prompt` by buildKlingPrompt.
+ *   - The call is synchronous (background/store/stream all false); a retry
+ *     re-runs the generation, so we only retry transient 5xx/429/network
+ *     errors, never hard 4xx validation.
+ *
+ * Returns a signed Supabase URL (we upload the returned bytes) so the rest of
+ * the pipeline — download-for-captioning, final upload — is unchanged.
+ */
+async function generateVideoWithOmni({
+  images = [], prompt, durationSec, aspectRatio, onProgress,
 }) {
-  const result = await falSubscribeWithRetry(KLING_IMAGE_TO_VIDEO, {
-    prompt,
-    image_url: seedImageUrl,
-    duration: klingDurationEnum(durationSec),
-    aspect_ratio: aspectRatio,
-    generate_audio: creatorSpeaks,
-    negative_prompt: klingNegativePrompt(creatorSpeaks),
-    cfg_scale: 0.5,
-  }, 'kling-i2v', { onProgress });
-  const url = result?.data?.video?.url || result?.video?.url;
-  if (!url) throw new Error('Kling image-to-video returned no URL');
-  return url;
+  if (!isGenaiEnabled()) {
+    throw new Error('GEMINI_API_KEY missing — required for Omni Flash video generation');
+  }
+
+  // Download + base64-encode each reference image (Omni takes inline bytes,
+  // not URLs). They're passed in order, matching the "Image N" references the
+  // prompt makes.
+  const imageParts = [];
+  for (const img of images) {
+    const { buffer, contentType } = await downloadToBuffer(img.url);
+    const mime = contentType.includes('png') ? 'image/png'
+      : contentType.includes('webp') ? 'image/webp'
+      : 'image/jpeg';
+    imageParts.push({ type: 'image', data: buffer.toString('base64'), mime_type: mime });
+  }
+  const input = [...imageParts, { type: 'text', text: prompt }];
+
+  // Smooth progress heartbeat while the synchronous generation runs, so the
+  // client's progress bar keeps moving — same feel as the FAL wrapper.
+  let heartbeat = null;
+  let lastReported = 0;
+  if (onProgress) {
+    try { onProgress(0.05); } catch {}
+    lastReported = 0.05;
+    const startedAt = Date.now();
+    heartbeat = setInterval(() => {
+      const elapsed = (Date.now() - startedAt) / 1000;
+      const floor = Math.min(0.9, Math.tanh(elapsed / 60) * 0.9);
+      if (floor > lastReported) {
+        lastReported = floor;
+        try { onProgress(floor); } catch {}
+      }
+    }, 1500);
+  }
+
+  try {
+    const maxAttempts = 2;
+    let lastErr;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const interaction = await genai.interactions.create({
+          model: OMNI_VIDEO_MODEL,
+          background: false,
+          store: false,
+          stream: false,
+          input,
+          response_format: {
+            type: 'video',
+            aspect_ratio: omniAspectFor(aspectRatio),
+            delivery: 'inline',
+            duration: omniDurationStr(durationSec),
+          },
+        });
+
+        // `output_video` is the SDK convenience field: a VideoContent with
+        // either inline base64 `data` (delivery: 'inline') or a hosted `uri`.
+        const out = interaction?.output_video;
+        let videoBuf = null;
+        if (out?.data) {
+          videoBuf = Buffer.from(out.data, 'base64');
+        } else if (out?.uri) {
+          // Large clips can come back as a hosted file instead of inline —
+          // fetch the bytes directly. (If this turns out to need Files-API
+          // polling until ACTIVE, that's the place to add it.)
+          const dl = await downloadToBuffer(out.uri);
+          videoBuf = dl.buffer;
+        }
+        if (!videoBuf || videoBuf.length === 0) {
+          throw new Error('Omni Flash returned no video bytes');
+        }
+
+        // Upload into our bucket so the caller gets a stable URL it owns,
+        // exactly like the mirrored Kling/fal URL it used to receive.
+        const url = await uploadBufferToBucket(videoBuf, 'video/mp4', 'mp4', 'omni/video');
+        if (onProgress) { try { onProgress(1); } catch {} }
+        return url;
+      } catch (err) {
+        lastErr = err;
+        console.error(
+          `[omni] attempt ${attempt}/${maxAttempts} failed:`,
+          err?.message || String(err)
+        );
+        if (!isTransientFalError(err) || attempt === maxAttempts) break;
+        await new Promise((r) => setTimeout(r, 1500 * attempt));
+      }
+    }
+    const wrapped = new Error(`Omni Flash video generation failed: ${lastErr?.message || lastErr}`);
+    wrapped.cause = lastErr;
+    throw wrapped;
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -375,44 +672,24 @@ async function runUnifiedPipeline(job, jobId, chargeOpts = {}) {
   // them in `template_snapshot` to avoid a schema migration; `script` and
   // `video_duration` stay in their existing top-level columns.
   const userPrompt = (snapshot.prompt || '').trim();
-  // A KNOWN creator image, present when the user came from a template or
-  // "use this video as a template". Its role is fixed to 'creator' (not
-  // classified) and it forces the compositing path so the template's
-  // creator is preserved rather than animated as a raw still.
+  // The template's own reference frame, present when the user came from a
+  // template or "use this video as a template". Its presence is what marks a
+  // job as a TEMPLATE job (→ product-swap seed path below).
   const templateCreatorUrl = (snapshot.creator_image_url || '').trim() || null;
 
-  // The client sends plain image URLs (no roles). The backend decides each
-  // image's role here, smartly, from the prompt + the images themselves —
-  // so the user never has to tag anything. We accept a pre-tagged
-  // `attachments: [{url, role}]` shape too (older jobs / future callers).
+  // The user's supplied reference images (their product, mainly). A plain list
+  // of URLs. Accepts either `attachment_urls` (plain) or the pre-tagged
+  // `attachments: [{url}]` shape (blueprints / older callers).
   const attachmentUrls = Array.isArray(snapshot.attachment_urls)
     ? snapshot.attachment_urls.filter((u) => typeof u === 'string' && u.length > 0)
     : [];
-  let attachments = [];
+  let productUrls = [];
   if (Array.isArray(snapshot.attachments) && snapshot.attachments.length) {
-    attachments = snapshot.attachments
+    productUrls = snapshot.attachments
       .filter((a) => a && typeof a.url === 'string' && a.url.length > 0)
-      .map((a) => ({ url: a.url, role: normalizeRole(a.role) }));
-  } else if (attachmentUrls.length) {
-    // Classify each uploaded image (creator / product / background / style)
-    // so the seed step knows whether to use an image as-is or composite.
-    const roles = await classifyRoles(userPrompt, attachmentUrls);
-    attachments = attachmentUrls.map((url, i) => ({
-      url,
-      role: normalizeRole(roles[i]),
-    }));
-    console.log(`[ugc:${jobId}] classified attachments: ${attachments.map((a) => a.role).join(', ')}`);
-  }
-
-  // Prepend the template creator (if any) as the leading creator-role image
-  // so Nano Banana keeps that exact person. Tagged `fromTemplate` so the
-  // as-is shortcut below ignores it.
-  if (templateCreatorUrl) {
-    attachments = [
-      { url: templateCreatorUrl, role: 'creator', fromTemplate: true },
-      ...attachments,
-    ];
-    console.log(`[ugc:${jobId}] template creator attached (composited, identity preserved)`);
+      .map((a) => a.url);
+  } else {
+    productUrls = attachmentUrls;
   }
   const aspectRatio = snapshot.aspect_ratio || '9:16';
   const creatorSpeaks = snapshot.creator_speaks !== false;
@@ -437,63 +714,53 @@ async function runUnifiedPipeline(job, jobId, chargeOpts = {}) {
       };
     };
 
-    // ---- Step 1: resolve the seed image ----
-    //
-    // Smart shortcut: when the ONLY input is a single image the user marked
-    // as the CREATOR (and there's nothing to composite onto it — no
-    // product, no background swap, no style reference), we DON'T run Nano
-    // Banana. Regenerating would alter the model / clothes; the user wants
-    // exactly what they uploaded. So we feed their image straight to Kling
-    // as the first frame — same model, same clothes, guaranteed. This also
-    // saves a Nano Banana call + ~20s.
-    // As-is only for a single USER-uploaded creator image with nothing
-    // else. A template creator always composites (so it can be placed into
-    // the described scene with the product), never animated as a raw still.
-    const creatorImgs = attachments.filter((a) => a.role === 'creator');
-    const compositingImgs = attachments.filter((a) => a.role !== 'creator');
-    const useImageDirectly =
-      !templateCreatorUrl &&
-      creatorImgs.length === 1 &&
-      compositingImgs.length === 0 &&
-      !creatorImgs[0].fromTemplate;
-
-    let seedImageUrl;
-    if (useImageDirectly) {
-      const seedTick = await reportStage('rendering_scene', 5, 30);
-      console.log(`[ugc:${jobId}] using uploaded creator image directly (no nano banana) — same model + clothes`);
-      // Mirror into our bucket so the Kling input is a stable URL we own.
-      seedImageUrl = await mirrorRemote(creatorImgs[0].url, jobId, 'image');
-      seedTick(1);
-    } else {
+    // ---- Resolve the image(s) handed to Omni ----
+    // TEMPLATE jobs (a template reference frame is present) get a compositing
+    // pass first: Nano Banana swaps the user's product INTO the template's own
+    // frame, and Omni animates that single seed — so the video keeps the
+    // template's look (creator, if any, + setting) but shows the user's
+    // product. FREE-FORM / BLUEPRINT jobs skip compositing entirely and hand
+    // their images straight to Omni.
+    const isTemplateJob = !!templateCreatorUrl;
+    let omniImages;
+    if (isTemplateJob && productUrls.length) {
       const seedTick = await reportStage('rendering_scene', 5, 30);
       console.log(
-        `[ugc:${jobId}] composing seed via nano banana (attachments=${attachments.length} ` +
-        `[${attachments.map((a) => a.role).join(',') || 'none'}], ` +
-        `prompt="${userPrompt.slice(0, 60)}${userPrompt.length > 60 ? '…' : ''}")`
+        `[ugc:${jobId}] template seed: swapping product into template frame ` +
+        `(products=${productUrls.length})`
       );
-      const rawSeedUrl = await composeSeedImage({
-        attachments,
-        userPrompt,
+      const rawSeedUrl = await composeTemplateSeed({
+        sceneUrl: templateCreatorUrl,
+        productUrls,
         aspectRatio,
         onProgress: seedTick,
       });
-      seedImageUrl = await mirrorRemote(rawSeedUrl, jobId, 'image');
+      const seedUrl = await mirrorRemote(rawSeedUrl, jobId, 'image');
+      console.log(`[ugc:${jobId}] template seed → ${seedUrl}`);
+      omniImages = [{ url: seedUrl }];
+    } else if (isTemplateJob) {
+      // Template with no product to swap — animate the template frame as-is.
+      console.log(`[ugc:${jobId}] template with no product — animating template frame directly`);
+      omniImages = [{ url: templateCreatorUrl }];
+    } else {
+      // Free-form / blueprint — hand Omni the user's images directly.
+      omniImages = productUrls.map((url) => ({ url }));
     }
-    await updateJob(jobId, { creator_scene_image_url: seedImageUrl }).catch(() => {});
-    console.log(`[ugc:${jobId}] seed image → ${seedImageUrl}`);
 
-    // ---- Step 2: Kling image-to-video ----
-    const videoTick = await reportStage('generating_video', 32, captionsEnabled ? 90 : 96);
-    const klingPrompt = buildKlingPrompt({ userPrompt, script, creatorSpeaks });
+    // ---- Omni Flash generates the video ----
+    const videoLo = isTemplateJob && productUrls.length ? 32 : 5;
+    const videoTick = await reportStage('generating_video', videoLo, captionsEnabled ? 90 : 96);
+    const klingPrompt = buildKlingPrompt({ userPrompt, script });
     console.log(
-      `[ugc:${jobId}] kling i2v (${videoDuration}s, audio=${creatorSpeaks}, ratio=${aspectRatio})`
+      `[ugc:${jobId}] omni ` +
+      `${isTemplateJob ? 'template-seed' : (omniImages.length ? 'reference' : 'text')}-to-video ` +
+      `(${videoDuration}s, imgs=${omniImages.length}, ratio=${aspectRatio})`
     );
-    const klingVideoUrl = await generateVideoFromImage({
-      seedImageUrl,
+    const klingVideoUrl = await generateVideoWithOmni({
+      images: omniImages,
       prompt: klingPrompt,
       durationSec: videoDuration,
       aspectRatio,
-      creatorSpeaks,
       onProgress: videoTick,
     });
 
@@ -512,12 +779,22 @@ async function runUnifiedPipeline(job, jobId, chargeOpts = {}) {
       }
     }
 
-    // Stage Kling output to disk for captioning.
-    const klingLocalPath = path.join(workDir, 'kling.mp4');
+    // Stage the Omni output to disk for captioning + poster extraction.
+    const klingLocalPath = path.join(workDir, 'omni.mp4');
     {
       const { buffer } = await downloadToBuffer(klingVideoUrl);
       fs.writeFileSync(klingLocalPath, buffer);
     }
+
+    // Best-effort first-frame poster for history/library thumbnails — there's
+    // no seed still to use anymore. Non-critical: stays null on any failure.
+    let thumbnailUrl = null;
+    try {
+      const posterBuf = await extractPosterFrame(klingLocalPath, path.join(workDir, 'poster.jpg'));
+      if (posterBuf) {
+        thumbnailUrl = await uploadBufferToBucket(posterBuf, 'image/jpeg', 'jpg', `jobs/${jobId}/thumb`);
+      }
+    } catch {}
 
     // ---- Step 3: Optional captions ----
     let videoBytesToUpload = fs.readFileSync(klingLocalPath);
@@ -555,7 +832,7 @@ async function runUnifiedPipeline(job, jobId, chargeOpts = {}) {
       status: 'completed',
       progress: 100,
       output_video_url: finalVideoUrl,
-      output_thumbnail_url: seedImageUrl,
+      output_thumbnail_url: thumbnailUrl,
       completed_at: new Date().toISOString(),
     };
     if (captionError) {

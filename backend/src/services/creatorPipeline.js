@@ -136,7 +136,11 @@ async function generateTextToVideo(prompt, durationSeconds, aspectRatio) {
   // person who'd film a real UGC clip on their phone. Healthy, relatable,
   // not styled by a beauty agency.
   const realnessSuffix =
-    ' The person is a naturally good-looking everyday adult — relatable, approachable, healthy, the kind of person you would actually see filming UGC on their phone. NOT a professional model, NOT a fashion ad, NOT a beauty campaign. Casual everyday clothing, candid natural expression, shot like a vertical phone video.';
+    ' The person is a naturally good-looking everyday adult — relatable, approachable, healthy, the kind of person you would actually see filming UGC on their phone. NOT a professional model, NOT a fashion ad, NOT a beauty campaign. Casual everyday clothing, candid natural expression, shot like a vertical phone video.' +
+    // Default the ethnicity when the prompt doesn't specify one: Kling
+    // otherwise drifts toward a South Asian / Indian look. Yields to any
+    // ethnicity/nationality the prompt explicitly describes.
+    ' If — and only if — this prompt does not explicitly specify the person\'s ethnicity, nationality, or race, make them a good-looking, everyday American with a mainstream White/Caucasian American appearance — NOT South Asian and NOT Indian — keeping whatever gender the prompt implies. If the prompt does explicitly name an ethnicity or nationality, follow that exactly instead.';
   const composedPrompt = `${prompt.trim()} ${realnessSuffix}`.slice(0, 1500);
 
   const input = {

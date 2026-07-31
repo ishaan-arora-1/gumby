@@ -541,7 +541,7 @@ class ChatViewModel: ObservableObject {
         formCreatorName = tpl.actorName.isEmpty ? tpl.name : tpl.actorName
         formPrompt = ""
         formAttachments = []
-        formAspectRatio = ["9:16", "16:9", "1:1"].contains(tpl.aspectRatio) ? tpl.aspectRatio : "9:16"
+        formAspectRatio = ["9:16", "16:9"].contains(tpl.aspectRatio) ? tpl.aspectRatio : "9:16"
         formDuration = 10
         formCreatorSpeaks = true
         formScript = tpl.sampleScript     // templates ship a sample script

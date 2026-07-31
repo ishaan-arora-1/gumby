@@ -9,7 +9,7 @@ import { hasUnconfirmedImages, markImagesConfirmed } from '@/lib/imageRights';
 
 // Credit cost per video duration — mirrors COST_PER_VIDEO in the backend
 // (backend/src/services/credits.js). 5s = 50, 10s = 100, 15s = 150.
-const CREDIT_COST: Record<5 | 10 | 15, number> = { 5: 50, 10: 100, 15: 150 };
+const CREDIT_COST: Record<5 | 10, number> = { 5: 50, 10: 100 };
 
 // Match the composer's cap so the studio form behaves identically.
 const MAX_ATTACHMENTS = 5;
@@ -17,8 +17,8 @@ const MAX_ATTACHMENTS = 5;
 export interface StudioPrefill {
   prompt?: string;
   attachmentUrls?: string[];
-  duration?: 5 | 10 | 15;
-  aspectRatio?: '9:16' | '16:9' | '1:1';
+  duration?: 5 | 10;
+  aspectRatio?: '9:16' | '16:9';
   // Set when the user arrived from a template / "use as template". The
   // creator is fixed to this person; the user adds product images + prompt
   // exactly like the normal flow.
@@ -82,10 +82,10 @@ export function StudioForm({ prefill, onSubmit, loading }: Props) {
 
   // Aspect ratio and duration carry over from the composer; the user
   // can still tweak them here.
-  const [aspectRatio, setAspectRatio] = useState<'9:16' | '16:9' | '1:1'>(
+  const [aspectRatio, setAspectRatio] = useState<'9:16' | '16:9'>(
     prefill?.aspectRatio ?? '9:16'
   );
-  const [duration, setDuration] = useState<5 | 10 | 15>(prefill?.duration ?? 10);
+  const [duration, setDuration] = useState<5 | 10>(prefill?.duration ?? 10);
 
   // Talking creator (default ON): the creator speaks a script on camera
   // and Kling renders the audio + lip-sync inline. When off, the creator
@@ -345,7 +345,7 @@ export function StudioForm({ prefill, onSubmit, loading }: Props) {
               Duration
             </div>
             <div className="flex bg-elevated rounded-pill p-0.5 text-sm w-fit">
-              {([5, 10, 15] as const).map((d) => (
+              {([5, 10] as const).map((d) => (
                 <button
                   key={d}
                   type="button"
@@ -367,7 +367,7 @@ export function StudioForm({ prefill, onSubmit, loading }: Props) {
               Aspect
             </div>
             <div className="flex bg-elevated rounded-pill p-0.5 text-sm w-fit">
-              {(['9:16', '1:1', '16:9'] as const).map((a) => (
+              {(['9:16', '16:9'] as const).map((a) => (
                 <button
                   key={a}
                   type="button"

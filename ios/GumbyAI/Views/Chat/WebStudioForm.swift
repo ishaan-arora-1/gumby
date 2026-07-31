@@ -15,7 +15,7 @@ struct WebStudioForm: View {
     @FocusState private var promptFocused: Bool
     @FocusState private var scriptFocused: Bool
 
-    private let creditCost: [Int: Int] = [5: 50, 10: 100, 15: 150]
+    private let creditCost: [Int: Int] = [5: 50, 10: 100]
 
     var body: some View {
         VStack(spacing: 16) {
@@ -205,7 +205,7 @@ struct WebStudioForm: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("DURATION").webSectionLabel()
                     HStack(spacing: 0) {
-                        ForEach([5, 10, 15], id: \.self) { d in
+                        ForEach([5, 10], id: \.self) { d in
                             Button {
                                 chatVM.formDuration = d
                             } label: {
@@ -231,7 +231,7 @@ struct WebStudioForm: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("ASPECT").webSectionLabel()
                     WebSegmentedPill(
-                        options: ["9:16", "1:1", "16:9"],
+                        options: ["9:16", "16:9"],
                         selection: $chatVM.formAspectRatio,
                         label: { $0 },
                         height: 30,
@@ -331,6 +331,15 @@ struct WebStudioForm: View {
 
     private var generateButton: some View {
         Button {
+            // Dismiss the keyboard app-wide rather than via @FocusState:
+            // WebUITextView no longer bridges @FocusState → resignFirstResponder
+            // (that reactive path dismissed the keyboard on every keystroke),
+            // so flipping promptFocused/scriptFocused here would no longer close
+            // it. This resigns whichever field is first responder directly.
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder),
+                to: nil, from: nil, for: nil
+            )
             promptFocused = false
             scriptFocused = false
             chatVM.attemptGenerate(showRights: { showRights = true })

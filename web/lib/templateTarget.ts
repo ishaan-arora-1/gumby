@@ -13,7 +13,7 @@ export interface TemplateTarget {
   /** Show the script + captions inputs? Silent product-shot blueprints = false. */
   talking: boolean;
   durationSeconds: number;
-  aspectRatio: '9:16' | '16:9' | '1:1';
+  aspectRatio: '9:16' | '16:9';
   /** Looping preview clip shown before "Use as template". */
   videoUrl?: string | null;
   posterUrl?: string | null;
@@ -24,8 +24,8 @@ export interface TemplateTarget {
   setting?: string;
 }
 
-function normalizeAspect(a?: string): '9:16' | '16:9' | '1:1' {
-  return a === '16:9' || a === '1:1' ? a : '9:16';
+function normalizeAspect(a?: string): '9:16' | '16:9' {
+  return a === '16:9' ? a : '9:16';
 }
 
 export function targetFromBlueprint(b: Blueprint): TemplateTarget {

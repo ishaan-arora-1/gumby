@@ -134,8 +134,8 @@ export default function StudioPage() {
   const onComposerSubmit = (
     prompt: string,
     opts: {
-      aspectRatio: '9:16' | '1:1' | '16:9';
-      durationSeconds: 5 | 10 | 15;
+      aspectRatio: '9:16' | '16:9';
+      durationSeconds: 5 | 10;
       attachmentUrls: string[];
     }
   ) => {

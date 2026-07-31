@@ -25,7 +25,7 @@ const STEPS = [
     icon: Download,
     n: '04',
     title: 'Post everywhere',
-    body: 'Export 9:16, 1:1, or 16:9. Drop straight into TikTok, Reels, Shorts, ads, anywhere you sell.',
+    body: 'Export 9:16 or 16:9. Drop straight into TikTok, Reels, Shorts, ads, anywhere you sell.',
   },
 ];
 

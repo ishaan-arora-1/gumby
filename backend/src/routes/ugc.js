@@ -480,7 +480,8 @@ router.post('/generate', aiLimiter, async (req, res) => {
       ? creatorImageUrl.trim()
       : null;
 
-  const aspectRatioSafe = ['9:16', '16:9', '1:1'].includes(aspectRatio)
+  // Omni Flash supports only 9:16 and 16:9 (no 1:1) — anything else → 9:16.
+  const aspectRatioSafe = ['9:16', '16:9'].includes(aspectRatio)
     ? aspectRatio
     : '9:16';
   const wantsCaptions = wantsSpeech && captionsEnabled !== false;
@@ -490,9 +491,11 @@ router.post('/generate', aiLimiter, async (req, res) => {
   // Snap the requested length to one of the three supported buckets
   // (5 / 10 / 15s). Kling v3 Pro accepts any 3-15s, but the product exposes
   // these three and prices them per bucket. Default to 10 when unspecified.
+  // Omni Flash caps at 10s, so 15 is no longer offered. Clamp anything ≥8
+  // (including any legacy 15s request from an old client) down to 10, so we
+  // never charge the 15s credit tier for a video that renders at 10s.
   const rawDuration = Number(videoDuration);
-  const videoDurationSafe = rawDuration >= 13 ? 15
-    : rawDuration >= 8 ? 10
+  const videoDurationSafe = rawDuration >= 8 ? 10
     : rawDuration > 0 ? 5
     : 10;
 

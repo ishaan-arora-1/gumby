@@ -147,7 +147,7 @@ export function TemplateModal({ target, onClose, onStarted, onInsufficientCredit
           creatorImageUrl: target.creatorImageUrl || undefined,
           script: script.trim(),
           creatorSpeaks: true,
-          videoDuration: target.durationSeconds as 5 | 10 | 15,
+          videoDuration: target.durationSeconds as 5 | 10,
           aspectRatio: target.aspectRatio,
           captionsEnabled,
           captionPreset: captionsEnabled ? captionPresetId : undefined,

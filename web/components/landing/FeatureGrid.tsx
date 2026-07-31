@@ -29,7 +29,7 @@ const FEATURES = [
   },
   {
     icon: Maximize2,
-    title: '9:16, 1:1, 16:9',
+    title: '9:16, 16:9',
     body: 'One generation, every aspect ratio. Repurpose to every channel without re-shooting.',
     span: 'md:col-span-2',
   },

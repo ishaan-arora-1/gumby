@@ -87,16 +87,25 @@ struct WebUITextView: UIViewRepresentable {
 
         if !isScrollEnabled { uiView.invalidateIntrinsicContentSize() }
 
-        // Bridge @FocusState → first responder (deferred to avoid mutating
-        // state mid-update).
-        if let focus = focus {
-            let wantFocus = focus.wrappedValue
-            if wantFocus, !uiView.isFirstResponder {
-                DispatchQueue.main.async { uiView.becomeFirstResponder() }
-            } else if !wantFocus, uiView.isFirstResponder {
-                DispatchQueue.main.async { uiView.resignFirstResponder() }
-            }
-        }
+        // NO @FocusState → first-responder bridge here, on purpose.
+        //
+        // The text binding is a @Published on ChatViewModel, so every
+        // keystroke fires objectWillChange and re-runs updateUIView. The
+        // `focus` FocusState these fields use has no `.focused()` modifier on
+        // any real SwiftUI view — it's only handed into this
+        // UIViewRepresentable, which SwiftUI does not treat as a focus target
+        // — so SwiftUI resets it back to `false` on that keystroke-driven
+        // re-render. A bridge that called `resignFirstResponder()` whenever the
+        // flag read false would therefore dismiss the keyboard the instant you
+        // typed the first character. First-responder state is owned entirely by
+        // UIKit here: tapping the field focuses it, and dismissal goes through
+        // an explicit app-wide `resignFirstResponder` action (the tap-outside
+        // background and the Generate button), never through this reactive
+        // update path.
+        //
+        // `focus` is still written FROM the delegate callbacks below so the
+        // focus-driven border highlight keeps working — it's an output of this
+        // view's real state, never an input that can fight it.
     }
 
     private static func resolvedFont(_ name: String, _ size: CGFloat) -> UIFont {

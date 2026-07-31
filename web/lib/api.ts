@@ -262,8 +262,8 @@ export const api = {
     creatorImageUrl?: string;
     script?: string;
     creatorSpeaks?: boolean;
-    videoDuration?: 5 | 10 | 15;
-    aspectRatio?: '9:16' | '16:9' | '1:1';
+    videoDuration?: 5 | 10;
+    aspectRatio?: '9:16' | '16:9';
     captionsEnabled?: boolean;
     captionPreset?: string;
   }) =>
@@ -293,7 +293,7 @@ export const api = {
   // ---- Creator (silent text-to-video) ----
   generateCreator: (body: {
     prompt: string;
-    aspectRatio?: '9:16' | '16:9' | '1:1';
+    aspectRatio?: '9:16' | '16:9';
     durationSeconds?: 5 | 10;
   }) =>
     request<{ success: boolean; data: any }>('/ugc/creator/generate', {

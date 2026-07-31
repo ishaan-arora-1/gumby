@@ -20,7 +20,17 @@ module.exports = {
   // Kling Video v3 Pro — image-to-video with built-in audio + lip-sync.
   // We always pass `generate_audio: true` and embed the script in the prompt
   // so Kling renders the speaking model in one shot.
+  // NOTE: currently NOT the active animate step — we're trialing Gemini Omni
+  // Flash (OMNI_IMAGE_TO_VIDEO) in its place. Kept here so reverting the
+  // pipeline back to Kling is a one-line change.
   KLING_IMAGE_TO_VIDEO: 'fal-ai/kling-video/v3/pro/image-to-video',
+
+  // Gemini Omni Flash — image-to-video, fal-hosted variant. NOT currently
+  // used: we call Omni Flash DIRECTLY on Google's Interactions API instead
+  // (see config/googleGenai.js + ugcPipeline.generateVideoFromImage), which
+  // exposes duration control and avoids fal's markup. Kept here only as a
+  // reference to the alternative fal route.
+  OMNI_IMAGE_TO_VIDEO: 'google/gemini-omni-flash/image-to-video',
 
   // Kling Video v3 Pro — text-to-video fallback when there's no seed image.
   KLING_TEXT_TO_VIDEO: 'fal-ai/kling-video/v3/pro/text-to-video',
